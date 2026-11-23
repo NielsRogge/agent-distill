@@ -22,8 +22,11 @@ model, in the Pi harness (`pi@1.6.0`). The design is in [docs/DESIGN.md](../../d
   - **Metrics, recorded only:** page size, basic accessibility, and whether the agent previewed before submitting.
   - **Reward and pass:** `reward = gate(page_ok, page_quality)`. An episode passes at an overall score of at least
     7/10 on a page that is not broken.
-- **Judge:** Qwen3.8-27B on the HF router (`judge = "qwen3.8-27b"`). Gemini 4 Neon replaces it once its credits
-  are topped up and it is calibrated against human labels.
+- **Judges:**
+  - **Gemini 4 Hydrogen** through the Gemini API is the default (`judge = "gemini-4-hydrogen"`). Its key is read
+    only by the judge client.
+  - **Qwen3.8-27B** on the HF router is the second judge (`--judge qwen3.8-27b`).
+  - Both are calibrated against human labels before any GRPO spend.
 
 ## Running it
 
@@ -55,5 +58,5 @@ most expensive router provider's prices.
 - **Output limit:** every cut-off episode was the model reasoning past the 32k output limit before its first tool
   call. Teachers now get 65k tokens.
 - **Previewing:** every page that passed had been previewed before it was submitted.
-- **Judge resolution:** the judge gave 7 of the 8 pages it scored 8/10, so it barely discriminates. Calibrating
-  it against human labels is the next step.
+- **Judge resolution:** the judge (Qwen3.8-27B at the time) gave 7 of the 8 pages it scored 8/10, so it barely
+  discriminates. Calibrating it against human labels is the next step.

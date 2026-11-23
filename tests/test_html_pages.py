@@ -52,7 +52,7 @@ def score(monkeypatch, page: PageReport, judge: FakeJudge, events=(), answer="<h
 
 
 def test_task_shape():
-    assert TASK.answer == FileAnswer("index.html") and TASK.judge == "qwen3.8-27b" and TASK.extras == ("browser",)
+    assert TASK.answer == FileAnswer("index.html") and TASK.judge == "gemini-4-hydrogen" and TASK.extras == ("browser",)
     assert "./preview" in TASK.system_prompt_for("pi", "1.6.0", "submit_tool")
     assert "Tide Clock" in TASK.render_prompt(ROW)
 

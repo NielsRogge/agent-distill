@@ -45,7 +45,7 @@ task = Task(
     setup=setup,
     network=False,
     limits=Limits(timeout=900, max_tool_calls=30),
-    judge="qwen3.8-27b",  # until Gemini 4 Neon has credits and is calibrated (DESIGN.md §10)
+    judge="gemini-4-hydrogen",  # the user's choice (2026-11-23); Qwen3.8-27B is the second judge
     extras=("browser",),
     # Chromium for `preview` and the gates, at the version the pinned Playwright drives.
     job_setup=["uvx --from playwright==1.65.2 playwright install --with-deps chromium >/dev/null"],
