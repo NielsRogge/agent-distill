@@ -96,7 +96,7 @@ stages = ["traces", "sft", "merge", "probe", "grpo", "eval", "publish"]
 [hub]
 namespace = "nielsr"
 bill_to = "huggingface"            # X-HF-Bill-To for Inference Providers, --namespace for Jobs
-collection = "nielsr/paper-url-agent-frontier-to-small-distillation-6b01c8378db0ff55d524014e"
+collection = "nielsr/agent-distill-6b0445568a39b1d979c52e31"
 
 [budget]                           # see §8
 traces_usd = 150
@@ -382,7 +382,7 @@ instead.
 
 **Hub settings.**
 
-- `[hub]` holds `namespace`, `bill_to` and an optional `collection`. Every repo the tool creates is added to
+- `[hub]` holds `namespace`, `bill_to` and an optional `collection` (the examples use the agent-distill collection). Every repo the tool creates is added to
   the collection with a note naming its role (teacher traces, SFT adapter, GRPO adapter, evaluation, …).
   Nothing is hardcoded to `nielsr` or `huggingface`; the examples set those values.
 - **Visibility:**
