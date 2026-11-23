@@ -1,9 +1,9 @@
 """The tool definitions a harness sends to the model, for rendering SFT examples exactly as the student will see
 them at inference time (DESIGN.md §6).
 
-`tools/<harness>-<version>.json` holds the definitions captured from the harness (url-extraction captured both
-OpenCode versions from a live server). Only the tools the task's tool kinds enable are kept; a structured-output
-submit tool gets the task's answer schema.
+`tools/<harness>-<version>.json` holds the definitions captured from the harness: url-extraction captured both
+OpenCode versions from a live server, and Pi's come from a Pi session's system message. Only the tools the task's
+tool kinds enable are kept; a structured-output submit tool gets the task's answer schema.
 """
 
 from __future__ import annotations
@@ -30,7 +30,9 @@ def tool_schemas(harness: str, version: str, task: Task, allowed: set[str]) -> l
     for tool in tools:
         name = tool["function"]["name"]
         if name.lower() in SUBMIT_TOOLS:
-            if schema is None:
+            if schema is None:  # a file answer: Pi's argument-free submit as captured
+                if not tool["function"]["parameters"].get("properties"):
+                    result.append(tool)
                 continue
             tool = copy.deepcopy(tool)
             tool["function"]["parameters"] = {k: v for k, v in schema.items() if k not in {"title", "description"}}
@@ -53,4 +55,8 @@ def harness_tools(harness_id: str, task: Task) -> list[dict[str, Any]]:
                 return {tool for kind in kinds for tool in KIND_TOOLS.get(kind, ())}
 
         return tool_schemas(name, version, task, allowed_tools(task.tools))
+    if name == "pi":
+        from agent_distill.harnesses.pi import KIND_TOOLS as PI_TOOLS
+
+        return tool_schemas(name, version, task, {tool for kind in task.tools for tool in PI_TOOLS.get(kind, ())})
     raise NotImplementedError(f"no tool definitions for {harness_id}")

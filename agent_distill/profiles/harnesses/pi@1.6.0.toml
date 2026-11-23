@@ -1,0 +1,12 @@
+# Pi 1.6.0 (`@earendil-works/pi-coding-agent`). One process per episode, in JSON mode, with agent-distill's
+# extension (the `submit` tool, the exact tool-call limit, a credential-free `bash`). Pi and its dependency tree
+# install from the lockfile in agent_distill/harnesses/pi/pi@1.6.0 (`npm ci` checks every package's integrity);
+# Node is the pinned official tarball below.
+name = "pi"
+version = "1.6.0"
+adapter = "agent_distill.harnesses.pi:Pi"
+answer_mode = "submit_tool"
+
+[download]  # Node 22.23.5 (Pi needs >= 22.19); sha256 from nodejs.org/dist/v22.23.5/SHASUMS256.txt
+url = "https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-{arch}.tar.gz"
+sha256 = { x64 = "c54118104acc524633b5abe106bbf44a53126ec8b4e5fa105cb92b5d7de8a1a1", arm64 = "8bd3dc69eee8f3f226315a80d7d1d4faccf217a4c8fae500168ac2e38f3bdba3" }

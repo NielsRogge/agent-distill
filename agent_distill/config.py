@@ -68,6 +68,9 @@ class Teacher:
     opencode_model: str = ""  # OpenCode PROVIDER/MODEL (default: huggingface/<model>[:provider])
     opencode_model_entry: dict[str, Any] = field(default_factory=dict)
     capabilities: list[str] = field(default_factory=list)  # e.g. ["image_input"]
+    # What harnesses that declare the model themselves (Pi) are told; OpenCode uses `opencode_model_entry`.
+    context: int = 131072
+    max_output_tokens: int = 32768
     price: Price = field(default_factory=Price)
     notes: str = ""
     traces: TraceSettings = field(default_factory=TraceSettings)
