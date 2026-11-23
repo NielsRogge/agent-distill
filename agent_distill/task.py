@@ -60,6 +60,10 @@ class Task:
     system_prompts: dict[str, str | Path] = field(default_factory=dict)
     # Shell commands every job of this task runs first (tools the agent's prompt relies on, e.g. the `hf` CLI).
     job_setup: list[str] = field(default_factory=list)
+    # The judge profile its judge rubrics use unless a run picks another (`--judge`), e.g. "qwen3.8-27b".
+    judge: str = ""
+    # agent-distill extras the task's episode stages need beyond `hub`, e.g. ("browser",) for the `preview` tool.
+    extras: tuple[str, ...] = ()
 
     def render_prompt(self, row: Row) -> str:
         if callable(self.prompt):

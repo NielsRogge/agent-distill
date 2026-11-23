@@ -219,7 +219,21 @@ def _build(cls: type, data: dict[str, Any], where: str) -> Any:
     return cls(**kwargs)
 
 
-KINDS = {"teachers": Teacher, "students": Student, "harnesses": HarnessProfile}
+@dataclass
+class JudgeProfile:
+    """A judge model (DESIGN.md §10): the Gemini API or an OpenAI-compatible model on the HF router."""
+
+    name: str
+    model: str
+    api: str = "router"  # router | gemini
+    key_env: str = ""  # default: HF_TOKEN (router) / GEMINI_API_KEY (gemini)
+    capabilities: list[str] = field(default_factory=list)  # e.g. ["image_input"]
+    max_tokens: int = 1024
+    price: Price = field(default_factory=Price)
+    notes: str = ""
+
+
+KINDS = {"teachers": Teacher, "students": Student, "harnesses": HarnessProfile, "judges": JudgeProfile}
 
 
 def profile_dirs(kind: str, extra: list[Path] | None = None) -> list[Path]:

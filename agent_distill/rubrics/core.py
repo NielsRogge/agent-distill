@@ -308,7 +308,8 @@ async def _safe(rubric: Rubric, context: Mapping[str, Any]) -> tuple[float | Non
         return value, metrics, None
     except Exception as exc:  # a broken rubric scores 0, loudly, instead of killing a run
         logger.warning("rubric %s failed: %s: %s", rubric.name, type(exc).__name__, exc)
-        return 0.0, {}, f"{type(exc).__name__}: {exc}"
+        # A judge that fails (no credits, no score in its reply) says nothing about the episode: unscorable.
+        return (None if rubric.kind == "judge" else 0.0), {}, f"{type(exc).__name__}: {exc}"
 
 
 def episode_context(episode: Any, row: Mapping[str, Any], **extra: Any) -> dict[str, Any]:

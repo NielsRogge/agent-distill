@@ -61,6 +61,11 @@ def make_run(config: RunConfig) -> Run:
     return Run(config, task, task_dir if task_dir.is_dir() else task_dir.parent, name, namespace)
 
 
+def episode_extras(run: Run) -> str:
+    """The wheel extras of stages that run episodes: `hub` plus the task's own (e.g. `browser`)."""
+    return ",".join(dict.fromkeys(["hub", *run.task.extras]))
+
+
 def profile_files(run: Run) -> dict[str, Path]:
     """The student, harness and teacher profile files a job needs (staged under profiles/<kind>/)."""
     files = {}
@@ -188,7 +193,7 @@ def served_job(
     command = "\n".join(
         [
             jobs.prelude(run.repo("code"), rev, run.task.job_setup),
-            jobs.python_module("agent_distill.stages.eval", full, deps=deps),
+            jobs.python_module("agent_distill.stages.eval", full, deps=deps, extras=episode_extras(run)),
             f"echo {stage.upper()}_DONE",
         ]
     )
@@ -241,7 +246,7 @@ def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minu
     command = "\n".join(
         [
             jobs.prelude(run.repo("code"), rev, run.task.job_setup),
-            jobs.python_module("agent_distill.stages.traces", full),
+            jobs.python_module("agent_distill.stages.traces", full, extras=episode_extras(run)),
             f"echo {stage.upper()}_DONE",
         ]
     )
@@ -421,7 +426,7 @@ def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
     command = "\n".join(
         [
             jobs.prelude(run.repo("code"), rev, run.task.job_setup),
-            jobs.python_module("agent_distill.stages.grpo", args, deps=deps),
+            jobs.python_module("agent_distill.stages.grpo", args, deps=deps, extras=episode_extras(run)),
             "echo GRPO_DONE",
         ]
     )

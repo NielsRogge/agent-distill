@@ -27,6 +27,7 @@ from pathlib import Path
 from agent_distill.config import load_profile
 from agent_distill.harnesses.base import load_harness, teacher_endpoint
 from agent_distill.records import RecordWriter, read_jsonl, summarize_records
+from agent_distill.rubrics.judge import make_judge_runner
 from agent_distill.stages.common import Plan, progress, resume_from_hub, run_episodes
 from agent_distill.stages.eval import checkpoint, publish, select_rows
 from agent_distill.task import Limits, load_task
@@ -56,6 +57,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("/traces"))
     parser.add_argument("--prefix", default="", help="File prefix (default: <label>/<split>[-<shard>])")
     parser.add_argument("--output-repo", default="")
+    parser.add_argument("--judge", help="Judge profile for judge rubrics (default: the task's; '' for none)")
     parser.add_argument("--upload-every", type=float, default=10.0,
                         help="Minutes between checkpoint uploads to --output-repo (0: only at the end)")  # fmt: skip
     parser.add_argument("--rerun-cut-short", type=int, default=2,
@@ -100,6 +102,12 @@ def main(argv: list[str] | None = None) -> None:
         budget_usd=args.budget_usd,
         price=price,
         rerun_cut_short=args.rerun_cut_short,
+        judge=make_judge_runner(
+            task.judge if args.judge is None else args.judge,
+            cache_dir=args.output_dir,
+            bill_to=args.bill_to,
+            profiles=args.profiles,
+        ),
         extra={"split": args.split, "teacher": teacher.name},
     )
     endpoint = teacher_endpoint(teacher, profile, args.bill_to)

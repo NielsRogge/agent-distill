@@ -1,0 +1,6 @@
+# Gemini 4 Carbon: the cheaper Gemini 4 judge, used instead of Neon only by an explicit run setting.
+name = "gemini-4-carbon"
+model = "gemini-4-carbon"
+api = "gemini"
+key_env = "GEMINI_API_KEY"
+capabilities = ["image_input"]

@@ -32,6 +32,7 @@ from typing import Any
 from agent_distill.config import Student, load_profile
 from agent_distill.harnesses.base import Endpoint, load_harness
 from agent_distill.records import RecordWriter, read_jsonl, summarize_records
+from agent_distill.rubrics.judge import make_judge_runner
 from agent_distill.stages.common import Checkpoint, Plan, resume_from_hub, run_episodes, shard
 from agent_distill.task import Limits, Task, load_task
 
@@ -256,6 +257,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("/eval"))
     parser.add_argument("--prefix", default="", help="File prefix, e.g. 'base/test' (default: <label>/<split>)")
     parser.add_argument("--output-repo", default="", help="Dataset to publish to (private); '' keeps files local")
+    parser.add_argument("--judge", help="Judge profile for judge rubrics (default: the task's; '' for none)")
+    parser.add_argument("--bill-to", default="", help="HF organization billed for a router judge")
     parser.add_argument("--upload-every", type=float, default=10.0,
                         help="Minutes between checkpoint uploads to --output-repo (0: only at the end)")  # fmt: skip
     parser.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "agent-distill-cache")
@@ -304,6 +307,8 @@ def main(argv: list[str] | None = None) -> None:
                             max_output_tokens=serve.max_output_tokens)  # fmt: skip
         targets.append((args.adapter_label, endpoint))
 
+    judge_name = task.judge if args.judge is None else args.judge
+    judge = make_judge_runner(judge_name, cache_dir=args.output_dir, bill_to=args.bill_to, profiles=args.profiles)
     server = None
     if not args.no_serve:
         command = vllm_command(student, args.model, adapter_path, args.vllm_binary, temperature=args.temperature)
@@ -318,7 +323,7 @@ def main(argv: list[str] | None = None) -> None:
                 resume_from_hub(args.output_repo, args.output_dir, prefix)
             writer = RecordWriter(args.output_dir, prefix)
             extra = {"split": args.split, "served_model": args.model if label == args.label else args.adapter}
-            plan = Plan(label=label, attempts=args.attempts, extra=extra)
+            plan = Plan(label=label, attempts=args.attempts, extra=extra, judge=judge)
             asyncio.run(
                 run_episodes(
                     harness,

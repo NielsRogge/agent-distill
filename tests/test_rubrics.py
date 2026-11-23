@@ -170,13 +170,23 @@ def test_judge_scaling_images_and_cache(tmp_path):
     assert rubrics.score(context(judge=fresh)).scores["visual"] == pytest.approx(0.75) and fresh.calls == 0
 
 
-def test_judge_unparseable_reply_scores_zero_with_error():
+def test_judge_unparseable_reply_is_unscorable_with_error():
     @judge("x")
     def j():
         return {}
 
     result = RubricSet([j]).score(context(judge=JudgeRunner(FakeClient("no number here"))))
-    assert result.scores["j"] == 0.0 and "no score" in result.errors["j"]
+    assert result.scores["j"] is None and result.reward is None and "no score" in result.errors["j"]
+
+
+def test_judge_criteria_become_metrics():
+    @judge("x", scale=(1, 10), criteria=("creativity", "polish"))
+    def j():
+        return {}
+
+    reply = "creativity: 10\npolish = 4\nSCORE: 7"
+    result = RubricSet([j]).score(context(judge=JudgeRunner(FakeClient(reply))))
+    assert result.scores["j"] == 6 / 9 and result.metrics == {"j/creativity": 1.0, "j/polish": 3 / 9}
 
 
 def test_from_callable_accepts_tinker_reward_fn():

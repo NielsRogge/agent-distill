@@ -34,6 +34,7 @@ class Plan:
     budget_usd: float = 0.0
     price: tuple[float, float] | None = None  # USD per 1M input/output tokens, when the harness reports no cost
     rerun_cut_short: int = 0  # reruns per row of episodes cut short by a timeout or provider error (traces)
+    judge: Any = None  # the JudgeRunner judge rubrics use (`rubrics.judge.make_judge_runner`)
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -169,7 +170,7 @@ async def _run_once(
                         tokens_in, tokens_out = episode.usage.get("input", 0), episode.usage.get("output", 0)
                         episode.usage["cost"] = (tokens_in * price_in + tokens_out * price_out) / 1e6
                         episode.usage["cost_estimated"] = True
-                    context = episode_context(episode, row, limits=limits, task=task)
+                    context = episode_context(episode, row, limits=limits, task=task, judge=plan.judge)
                     result = await task.rubrics.ascore(context, mode="eval")
                     writer.write(episode, result, harness.native_trace(episode), label=plan.label, attempt=attempt,
                                  cut_short=cut, **plan.extra)  # fmt: skip

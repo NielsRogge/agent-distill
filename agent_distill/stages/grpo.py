@@ -213,7 +213,7 @@ class HarnessCaptureSession:
         harness, task = factory.harness, factory.task
         async with harness.session([endpoint], cache=factory.cache, task=task) as runner:
             self.episode = await harness.run_episode(runner, task, self.row, endpoint, factory.limits)
-        context = episode_context(self.episode, self.row, limits=factory.limits, task=task)
+        context = episode_context(self.episode, self.row, limits=factory.limits, task=task, judge=factory.judge)
         self.result = await task.rubrics.ascore(context, mode="train")
 
 
@@ -237,8 +237,12 @@ class HarnessCaptureFactory:
         max_model_calls: int = 24,
         max_model_len: int = 65536,
         max_output_tokens: int = 1024,
+        judge: str = "",
+        bill_to: str = "",
     ) -> None:
         self.task_dir, self.harness_name, self.profiles = task_dir, harness, profiles
+        self.judge_name, self.bill_to = judge, bill_to
+        self._judge: Any = None
         self.rows = rows
         self.llm_url = llm_url.rstrip("/")
         self.model = model
@@ -256,7 +260,8 @@ class HarnessCaptureFactory:
 
     def __getstate__(self) -> dict[str, Any]:
         state = dict(self.__dict__)
-        state.update(_task=None, _harness=None, _prompts=None, _capture=None, _capture_url=None, _lock=None)
+        state.update(_task=None, _harness=None, _prompts=None, _capture=None, _capture_url=None, _lock=None,
+                     _judge=None)  # fmt: skip
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
@@ -279,6 +284,18 @@ class HarnessCaptureFactory:
 
             self._harness = load_harness(load_profile("harnesses", self.harness_name, [Path(p) for p in self.profiles]))
         return self._harness
+
+    @property
+    def judge(self) -> Any:
+        """The judge runner of the reward's judge rubrics (verdicts cached next to the rollout cache)."""
+        with self._lock:
+            if self._judge is None and (self.judge_name or self.task.judge):
+                from agent_distill.rubrics.judge import make_judge_runner
+
+                profiles = [Path(p) for p in self.profiles]
+                name = self.judge_name or self.task.judge
+                self._judge = make_judge_runner(name, cache_dir=self.cache, bill_to=self.bill_to, profiles=profiles)
+            return self._judge
 
     @property
     def limits(self) -> Any:
@@ -482,6 +499,8 @@ def factory_kwargs(args: argparse.Namespace, student: Any, rows: list[dict[str, 
         "max_model_calls": args.max_model_calls,
         "max_model_len": student.serve.max_model_len,
         "max_output_tokens": args.max_completion_length,
+        "judge": args.judge,
+        "bill_to": args.bill_to,
     }
 
 
@@ -847,6 +866,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--vllm-version", default=VLLM_VERSION)
     parser.add_argument("--vllm-extra-args", default="")
     parser.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "agent-distill-cache")
+    parser.add_argument("--judge", default="", help="Judge profile of the reward's judge rubrics (default: the task's)")
+    parser.add_argument("--bill-to", default="", help="HF organization billed for a router judge")
     parser.add_argument("--scratch-dir", default=None)
     parser.add_argument("--output-dir", default="/grpo")
     parser.add_argument("--hub-model-id", default="")
