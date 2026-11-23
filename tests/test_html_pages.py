@@ -117,3 +117,21 @@ def test_preview_on_real_pages(tmp_path):
     broken = asyncio.run(inspect_page(bad)).gates()
     assert not broken["self_contained"] and not broken["no_errors"] and not broken["no_overflow"]
     assert not broken["not_blank"]
+
+
+def test_jobs_pass_the_gemini_judge_key_as_a_secret():
+    from pathlib import Path
+
+    from agent_distill import pipeline
+    from agent_distill.config import load_run
+    from agent_distill.credentials import strip_credentials
+
+    run = pipeline.make_run(load_run(Path("examples/html-pages/run-teacher-baseline.toml"), {}))
+    (job,) = pipeline.eval_jobs(run, "R")
+    assert job.secret_envs == ("GEMINI_API_KEY",) and "GEMINI_API_KEY" not in job.command
+    assert "--judge gemini-4-hydrogen" in job.command and "profiles/judges" not in job.command
+    assert "profiles/judges/gemini-4-hydrogen.toml" in pipeline.profile_files(run)
+    other = pipeline.make_run(load_run(Path("examples/html-pages/run-teacher-baseline.toml"), {"judge": "qwen3.8-27b"}))
+    assert pipeline.eval_jobs(other, "R")[0].secret_envs == ()
+    env = {"MY_JUDGE_API_KEY": "x", "GEMINI_API_KEY": "y", "PATH": "/bin", "CI_TOKEN": "z"}
+    assert strip_credentials(env) == {"PATH": "/bin"}

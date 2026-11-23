@@ -70,6 +70,16 @@ def judge_name(run: Run) -> str:
     return run.task.judge if run.config.judge is None else run.config.judge
 
 
+def judge_secrets(run: Run) -> tuple[str, ...]:
+    """The judge's key variable when it is not the HF token every job already has (e.g. GEMINI_API_KEY)."""
+    name = judge_name(run)
+    if not name:
+        return ()
+    profile = load_profile("judges", name, run.config.profile_paths)
+    key = profile.key_env or ("GEMINI_API_KEY" if profile.api == "gemini" else "HF_TOKEN")
+    return () if key == "HF_TOKEN" else (key,)
+
+
 def judge_args(run: Run, *, bill_to: bool = True) -> list[str]:
     """`--judge` (always explicit in jobs) and, for a judge, `--bill-to` (router judges bill like teachers)."""
     name = judge_name(run)
@@ -221,6 +231,7 @@ def served_job(
         (run.config.probe.timeout or student.probe.timeout) if stage == "probe" else serve.timeout,
         command,
         expected_minutes=expected_minutes,
+        secret_envs=judge_secrets(run),
     )
 
 
@@ -267,7 +278,14 @@ def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minu
         ]
     )
     return jobs.Job(
-        stage, name[:90], UV_IMAGE, teacher.traces.flavor, teacher.traces.timeout, command, expected_minutes=minutes
+        stage,
+        name[:90],
+        UV_IMAGE,
+        teacher.traces.flavor,
+        teacher.traces.timeout,
+        command,
+        expected_minutes=minutes,
+        secret_envs=judge_secrets(run),
     )
 
 
@@ -457,6 +475,7 @@ def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
             timeout,
             command,
             expected_minutes=jobs.timeout_minutes(timeout) * 0.75,
+            secret_envs=judge_secrets(run),
         )
     ]
 

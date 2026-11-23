@@ -29,9 +29,17 @@ def redact_credentials(text: str) -> str:
     return CREDENTIAL_RE.sub(lambda match: match.group(0)[:3] + "***REDACTED***", text)
 
 
+CREDENTIAL_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
+
+
+def is_credential_var(name: str) -> bool:
+    return name in CREDENTIAL_ENV_VARS or name.upper().endswith(CREDENTIAL_SUFFIXES)
+
+
 def strip_credentials(env: dict[str, str]) -> dict[str, str]:
-    """A copy of `env` without credential variables (for agent processes)."""
-    return {key: value for key, value in env.items() if key not in CREDENTIAL_ENV_VARS}
+    """A copy of `env` without credential variables (for agent processes): the known names, and any name ending in
+    `_API_KEY`, `_TOKEN`, `_SECRET` or `_PASSWORD` (e.g. a judge profile's own `key_env`)."""
+    return {key: value for key, value in env.items() if not is_credential_var(key)}
 
 
 def record_line(record: dict[str, Any]) -> str:

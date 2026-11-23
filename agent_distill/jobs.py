@@ -8,6 +8,7 @@ Jobs run in the `[hub] bill_to` namespace with the caller's token as the only se
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -30,6 +31,9 @@ class Job:
     timeout: str  # e.g. "4h"
     command: str
     env: dict[str, str] = field(default_factory=dict)
+    # Environment variables passed from the launcher's environment as job secrets, besides HF_TOKEN (e.g. a Gemini
+    # judge's GEMINI_API_KEY). Names only; values are read at launch and never printed.
+    secret_envs: tuple[str, ...] = ()
     expected_minutes: float = 0.0  # for the cost estimate (the timeout bounds the worst case)
 
 
@@ -143,7 +147,8 @@ def estimate(jobs: list[Job], prices: dict[str, float] | None = None) -> dict[st
 def describe(jobs: list[Job], namespace: str) -> None:
     for job in jobs:
         print(f"\n[dry-run] job {job.name}: image={job.image} flavor={job.flavor} timeout={job.timeout} "
-              f"namespace={namespace or '(your account)'} env={job.env} secrets=HF_TOKEN")  # fmt: skip
+              f"namespace={namespace or '(your account)'} env={job.env} "
+              f"secrets={','.join(('HF_TOKEN', *job.secret_envs))}")  # fmt: skip
         print(job.command)
 
 
@@ -153,11 +158,15 @@ def launch(jobs: list[Job], namespace: str) -> list[str]:
     api, token = HfApi(), get_token()
     if not token:
         raise SystemExit("no Hugging Face token (set HF_TOKEN or run `hf auth login`)")
+    missing = sorted({name for job in jobs for name in job.secret_envs if not os.environ.get(name)})
+    if missing:
+        raise SystemExit(f"jobs need secrets missing from this environment: {', '.join(missing)}")
     ids = []
     for job in jobs:
         kwargs: dict[str, Any] = {"namespace": namespace} if namespace else {}
+        secrets = {"HF_TOKEN": token, **{name: os.environ[name] for name in job.secret_envs}}
         info = api.run_job(image=job.image, command=["bash", "-c", job.command], env=job.env or None,
-                           secrets={"HF_TOKEN": token}, flavor=job.flavor, timeout=job.timeout, name=job.name,
+                           secrets=secrets, flavor=job.flavor, timeout=job.timeout, name=job.name,
                            **kwargs)  # fmt: skip
         print(f"launched {job.name}: {info.id} ({info.url})", flush=True)
         ids.append(info.id)
