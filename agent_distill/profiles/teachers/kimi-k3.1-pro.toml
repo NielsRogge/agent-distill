@@ -1,0 +1,6 @@
+# Kimi-K3.1-Pro through HF Inference Providers (served by Together). Teacher of the url-extraction Qwen3.5-9B student.
+# Accepts image input on the router.
+name = "kimi-k3.1-pro"
+model = "moonshotai/Kimi-K3.1-Pro"
+capabilities = ["image_input"]
+notes = "~$0.10 per paper on paper-urls; 815 accepted train traces (nielsr/paper-url-opencode-traces-kimi)"

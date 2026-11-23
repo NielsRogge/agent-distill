@@ -1,0 +1,31 @@
+# Paper URL extraction in OpenCode 1.2.4, the harness every published url-extraction result ran in.
+# Parity tier 2 (DESIGN.md §9): re-evaluate the Qwen3.5-9B base and the url-extraction GRPO model (Kimi-K3.1-Pro
+# traces) on test with the evaluation settings of url-extraction (180 s, 15 tool calls, concurrency 8, first 50
+# fully scoreable rows):
+#
+#   distill run examples/paper-urls/run.toml --stages eval --dry-run
+task = "."
+teacher = "kimi-k3.1-pro"
+student = "qwen3.5-9b"
+harness = "opencode@1.2.4"
+name = "qwen35-9b-paper-urls-parity-opencode-124"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/paper-url-agent-frontier-to-small-distillation-6b01c8378db0ff55d524014e"
+
+[eval]
+splits = ["test"]
+limit = 50
+concurrency = 8
+timeout = 180
+max_tool_calls = 15
+
+[eval.models]
+base = "Qwen/Qwen3.5-9B"
+grpo = "nielsr/qwen35-9b-url-agent-grpo-merged-kimi"
+
+[budget]
+gpu_usd = 50

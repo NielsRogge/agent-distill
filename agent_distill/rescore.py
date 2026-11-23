@@ -47,6 +47,10 @@ def load_rows(task: Task, datasets: Iterable[str] | None = None, revision: str |
 
 
 def record_to_episode(record: dict[str, Any], task: Task, row_id: str) -> Episode:
+    if record.get("version") == 2 and "harness" in record:
+        from agent_distill.records import episode_from_record_v2
+
+        return episode_from_record_v2(record, task.answer)
     if "opencode_messages" in record or "tool_events" in record:
         from agent_distill.harnesses.opencode_v1_reader import episode_from_record
 
@@ -65,7 +69,7 @@ def rescore(
     limits = limits or task.limits
     out: list[Rescored] = []
     for record in records:
-        row_id = task.row_id(record)
+        row_id = str(record["row_id"]) if record.get("version") == 2 else task.row_id(record)
         row = rows.get(row_id)
         if row is None:
             raise KeyError(f"no label row for {row_id!r}")
@@ -79,7 +83,8 @@ def summarize(items: list[Rescored]) -> dict[str, dict[str, Any]]:
     """Per model label: episodes, pass rate, mean reward, mean of each rubric score, sums of rubric metrics."""
     groups: dict[str, list[Rescored]] = defaultdict(list)
     for item in items:
-        groups[str(item.record.get("evaluation_model") or "teacher")].append(item)
+        record = item.record
+        groups[str(record.get("label") or record.get("evaluation_model") or "teacher")].append(item)
     summary: dict[str, dict[str, Any]] = {}
     for label, group in sorted(groups.items()):
         rewards = [item.result.reward for item in group if item.result.reward is not None]

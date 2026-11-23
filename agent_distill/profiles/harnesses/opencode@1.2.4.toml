@@ -1,0 +1,10 @@
+# OpenCode 1.2.4: the version url-extraction pins. Native structured output (`format: json_schema`), per-request
+# system prompt and tools, `/session/{id}/message` blocks until the turn ends.
+name = "opencode"
+version = "1.2.4"
+adapter = "agent_distill.harnesses.opencode_v1:OpenCodeV1"
+answer_mode = "native"
+
+[download]
+url = "https://github.com/anomalyco/opencode/releases/download/v{version}/opencode-linux-{arch}.tar.gz"
+sha256 = { x64 = "eade814552a46fc253a890eb18e789852f93832bd78e7060bb08e91c30a0d23f", arm64 = "541e79f9ccd868767f25d9a395525e38c4b495d661af150a3a86a52360c4e0f6" }

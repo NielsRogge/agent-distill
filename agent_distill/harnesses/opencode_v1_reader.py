@@ -33,6 +33,8 @@ TOOL_KINDS: dict[str, str] = {
     "apply_patch": "edit",
     "write": "write",
     "structuredoutput": "submit",
+    # OpenCode 2.x names
+    "patch": "edit",
 }
 
 

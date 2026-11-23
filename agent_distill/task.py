@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.machinery
 import importlib.util
+import json
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -53,6 +54,11 @@ class Task:
     network: bool = True
     limits: Limits = field(default_factory=Limits)
     version: str = "1"
+    # Harness-specific system prompts, keyed by "name@version", "name@major" or "name" (most specific wins), e.g.
+    # {"opencode@2": Path("system_prompt_v2.txt")}. `{schema}` is replaced by the answer's JSON schema.
+    system_prompts: dict[str, str | Path] = field(default_factory=dict)
+    # Shell commands every job of this task runs first (tools the agent's prompt relies on, e.g. the `hf` CLI).
+    job_setup: list[str] = field(default_factory=list)
 
     def render_prompt(self, row: Row) -> str:
         if callable(self.prompt):
@@ -60,11 +66,52 @@ class Task:
         return self.prompt.format(**row)
 
     def system_prompt_text(self) -> str | None:
-        if self.system_prompt is None:
+        return _text(self.system_prompt)
+
+    def answer_schema(self) -> dict[str, Any] | None:
+        """The answer's JSON schema (None for file answers), without the model docstring."""
+        if isinstance(self.answer, FileAnswer) or not hasattr(self.answer, "model_json_schema"):
             return None
-        if isinstance(self.system_prompt, Path):
-            return self.system_prompt.read_text().strip()
-        return self.system_prompt
+        return self.answer.model_json_schema()
+
+    def system_prompt_for(self, harness: str, version: str, answer_mode: str) -> str | None:
+        """The system prompt a harness sends.
+
+        A harness-specific prompt (`system_prompts`) wins. Otherwise the task's prompt, plus, for harnesses that
+        receive the answer as a JSON-only final message (`final_json`), the answer contract with the schema.
+        """
+        major = version.split(".")[0]
+        for key in (f"{harness}@{version}", f"{harness}@{major}", harness):
+            if key in self.system_prompts:
+                return self._with_schema(_text(self.system_prompts[key]) or "")
+        prompt = self.system_prompt_text()
+        schema = self.answer_schema()
+        if answer_mode == "final_json" and schema is not None:
+            contract = FINAL_JSON_CONTRACT.replace("{schema}", _schema_json(schema))
+            return f"{prompt}\n\n{contract}" if prompt else contract
+        return prompt
+
+    def _with_schema(self, text: str) -> str:
+        schema = self.answer_schema()
+        return text.replace("{schema}", _schema_json(schema)) if schema is not None else text
+
+
+FINAL_JSON_CONTRACT = (
+    "When you are done, reply with only one JSON object and no other text. "
+    "It is validated against this JSON Schema: {schema}"
+)
+
+
+def _schema_json(schema: dict[str, Any]) -> str:
+    return json.dumps({key: value for key, value in schema.items() if key != "description"}, separators=(",", ":"))
+
+
+def _text(value: str | Path | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, Path):
+        return value.read_text().strip()
+    return value
 
 
 def _task_package(folder: Path) -> str:

@@ -1,0 +1,11 @@
+# OpenCode 2.3.2 (`@opencode/cli`; the GitHub release tarball holds the same binary as the npm package, which carries
+# SLSA provenance). `/api/` routes behind a generated server password, a config agent instead of per-request
+# system prompt and tools, no structured output: the answer is a JSON-only final message (`final_json`).
+name = "opencode"
+version = "2.3.2"
+adapter = "agent_distill.harnesses.opencode_v2:OpenCodeV2"
+answer_mode = "final_json"
+
+[download]
+url = "https://github.com/anomalyco/opencode/releases/download/v{version}/opencode-linux-{arch}.tar.gz"
+sha256 = { x64 = "563b5d663637226b6e3bb4bb6803281bc39b0d2cd88db06d674b6420aab009b0", arm64 = "9d10185acdb72336e086e699ca363a6065f410fd3c1caed0dc8046e95ac06ccb" }
