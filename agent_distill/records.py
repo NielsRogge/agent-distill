@@ -114,7 +114,12 @@ class RecordWriter:
         label = extra.get("label")
         if label:
             name = f"{label}_{name}"
-        write_session(_redacted_lines(lines), self.sessions / name)
+        # A rerun of a cut-short episode has the same row and attempt: number it rather than overwrite the first.
+        path, run = self.sessions / name, 1
+        while path.exists():
+            run += 1
+            path = self.sessions / name.replace(".jsonl", f"_r{run}.jsonl")
+        write_session(_redacted_lines(lines), path)
         return record
 
     def done(self, key: str = "label") -> set[tuple[str, str]]:
