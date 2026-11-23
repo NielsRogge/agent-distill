@@ -98,9 +98,11 @@ def parse(reply: str) -> list[dict[str, str]]:
 
 
 async def brainstorm(client: RouterJudge, category: str, target: int, batch: int, budget: float,
-                     rng: random.Random) -> list[dict[str, str]]:  # fmt: skip
-    """Batches for one category until `target` concepts, or until the whole run's spend reaches `budget`."""
-    concepts: list[dict[str, str]] = []
+                     rng: random.Random, initial: list[dict[str, str]],
+                     checkpoint: Path) -> list[dict[str, str]]:  # fmt: skip
+    """Batches for one category until `target` concepts, or until the whole run's spend reaches `budget`. Every
+    accepted concept is appended to `checkpoint` at once, so an interrupted run resumes from it."""
+    concepts: list[dict[str, str]] = list(initial)
     for _ in range(target // batch * 3 + 3):  # retries for empty or repetitive batches
         if len(concepts) >= target or client.usage.cost_usd >= budget:
             break
@@ -113,8 +115,16 @@ async def brainstorm(client: RouterJudge, category: str, target: int, batch: int
         except Exception as exc:  # one failed batch is retried by the loop
             print(f"  {category}: batch failed ({exc})", flush=True)
             continue
-        concepts = dedupe(concepts + [{**c, "category": category} for c in parse(reply)])
-        print(f"  {category}: {len(concepts)}/{target} (${client.usage.cost_usd:.2f})", flush=True)
+        found = parse(reply)
+        if not found:  # e.g. the reasoning used up the output budget and left no answer
+            print(f"  {category}: empty batch (reply of {len(reply)} chars)", flush=True)
+            continue
+        before = {c["title"] for c in concepts}
+        concepts = dedupe(concepts + [{**c, "category": category} for c in found])
+        with checkpoint.open("a", encoding="utf-8") as handle:
+            handle.writelines(json.dumps(c) + "\n" for c in concepts if c["title"] not in before)
+        print(f"  {category}: {len(concepts)}/{target} (+{len(concepts) - len(before)} of {len(found)}, "
+              f"${client.usage.cost_usd:.2f})", flush=True)  # fmt: skip
     return concepts[:target]
 
 
@@ -149,7 +159,16 @@ async def main_async(args: argparse.Namespace) -> None:
                          max_tokens=args.max_tokens, temperature=1.0, timeout=300, retries=2)  # fmt: skip
     rng = random.Random(args.seed)
     categories = [c for c in CATEGORIES if not args.categories or c in args.categories]
-    results = await asyncio.gather(*(brainstorm(client, category, args.per_category, args.batch, args.budget_usd, rng)
+    checkpoint = args.output.with_suffix(".partial.jsonl")
+    done = (
+        [json.loads(line) for line in checkpoint.read_text().splitlines() if line.strip()]
+        if checkpoint.exists()
+        else []
+    )
+    if done:
+        print(f"resuming from {len(done)} concepts in {checkpoint}", flush=True)
+    results = await asyncio.gather(*(brainstorm(client, category, args.per_category, args.batch, args.budget_usd, rng,
+                                                [c for c in done if c["category"] == category], checkpoint)
                                      for category in categories))  # fmt: skip
     concepts = dedupe([c for group in results for c in group])  # across categories too
     for concept in concepts:
@@ -174,7 +193,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--categories", nargs="*", help="Subset of categories")
     parser.add_argument("--validation", type=int, default=5, help="Held-out validation concepts per category")
     parser.add_argument("--test", type=int, default=10, help="Held-out test concepts per category")
-    parser.add_argument("--max-tokens", type=int, default=16384)
+    parser.add_argument("--max-tokens", type=int, default=32768, help="Room for the reasoning and the answer")
     parser.add_argument("--budget-usd", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output", type=Path, required=True)
