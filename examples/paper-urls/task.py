@@ -12,7 +12,7 @@ from typing import Any
 
 from agent_distill.task import DatasetSpec, Limits, Task
 
-from .rubrics import FIELDS, RUBRICS, fully_scoreable
+from .rubrics import FIELDS, RUBRICS, fully_scoreable, partly_scoreable
 from .schema import PaperCandidate, URLFindings, candidate_from_row
 
 HERE = Path(__file__).parent
@@ -44,6 +44,9 @@ task = Task(
         repo="nielsr/paper-url-extraction-v1",
         splits={"train": "train", "eval": ["test", "validation"]},
         filter=fully_scoreable,
+        # Traces, the probe and GRPO use every row with a verified requested label; unverified fields are never
+        # scored (url-extraction's --accept-partial, its teacher-trace default).
+        train_filter=partly_scoreable,
     ),
     system_prompt=SYSTEM_PROMPT,
     prompt=user_prompt,

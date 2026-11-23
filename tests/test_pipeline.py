@@ -97,8 +97,8 @@ def test_overrides_from_cli():
 
 
 def test_unimplemented_stages_refuse(tmp_path):
-    with pytest.raises(SystemExit, match="M3"):
-        pipeline.main([str(RUN_TOML), "--stages", "sft", "--dry-run"])
+    with pytest.raises(SystemExit, match="M3b"):
+        pipeline.main([str(RUN_TOML), "--stages", "grpo", "--dry-run"])
 
 
 def test_timeout_minutes():

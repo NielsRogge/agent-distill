@@ -29,7 +29,8 @@ class Limits:
 class DatasetSpec:
     repo: str
     splits: dict[str, str | list[str]] = field(default_factory=lambda: {"train": "train", "eval": ["test"]})
-    filter: Callable[[Row], bool] | None = None
+    filter: Callable[[Row], bool] | None = None  # evaluation rows
+    train_filter: Callable[[Row], bool] | None = None  # rows for traces, the probe and GRPO (default: `filter`)
     revision: str | None = None
 
 

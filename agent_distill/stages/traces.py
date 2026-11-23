@@ -1,0 +1,135 @@
+"""Traces stage (DESIGN.md §7): the teacher runs the task in the harness; passing episodes become SFT data.
+
+    python -m agent_distill.stages.traces --task task --harness opencode@1.2.4 --teacher glm-5.2 \
+        --split train --shard 0/3 --output-dir /traces --output-repo ORG/RUN-traces --bill-to huggingface
+
+The teacher is served by HF Inference Providers (billed to `--bill-to`); its harness process gets the HF token and
+nothing else. Rows come from the task's train filter; each row gets up to `--attempts` episodes and stops at its
+first pass. An episode is accepted exactly when the task's rubric set passes it (eval mode), the same verdict the
+evaluation and the difficulty probe use. Records, raw logs and Pi sessions go to a private dataset; spend is tracked
+from the harness's cost (or the teacher profile's prices) and the stage stops starting episodes at `--budget-usd`.
+
+With `--label teacher --purpose eval --attempts 1 --no-stop-when-passed` the same stage is the teacher's evaluation
+baseline, written next to the students' evaluations.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import tempfile
+from pathlib import Path
+
+from agent_distill.config import load_profile
+from agent_distill.harnesses.base import load_harness, teacher_endpoint
+from agent_distill.records import RecordWriter, read_jsonl, summarize_records
+from agent_distill.stages.common import Plan, progress, run_episodes
+from agent_distill.stages.eval import publish, select_rows
+from agent_distill.task import Limits, load_task
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--task", required=True, type=Path)
+    parser.add_argument("--harness", required=True)
+    parser.add_argument("--teacher", required=True, help="Teacher profile")
+    parser.add_argument("--profiles", action="append", type=Path, default=[])
+    parser.add_argument("--split", default="train")
+    parser.add_argument("--purpose", choices=("train", "eval"), default="train", help="Which task filter selects rows")
+    parser.add_argument("--start", type=int, default=0)
+    parser.add_argument("--limit", type=int)
+    parser.add_argument("--sample", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--shard", default="", help="i/n: this job's disjoint slice of the rows")
+    parser.add_argument("--attempts", type=int, help="Episodes per row (default: the teacher profile's)")
+    parser.add_argument("--stop-when-passed", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--concurrency", type=int, help="Concurrent episodes (default: the teacher profile's)")
+    parser.add_argument("--timeout", type=float, help="Episode timeout (default: the teacher profile's)")
+    parser.add_argument("--max-tool-calls", type=int, help="Default: the teacher profile's")
+    parser.add_argument("--bill-to", default="", help="HF organization billed for Inference Providers")
+    parser.add_argument("--budget-usd", type=float, default=0.0, help="Stop starting episodes at this spend (0: none)")
+    parser.add_argument("--label", default="teacher")
+    parser.add_argument("--output-dir", type=Path, default=Path("/traces"))
+    parser.add_argument("--prefix", default="", help="File prefix (default: <label>/<split>[-<shard>])")
+    parser.add_argument("--output-repo", default="")
+    parser.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "agent-distill-cache")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
+    task = load_task(args.task)
+    teacher = load_profile("teachers", args.teacher, args.profiles)
+    profile = load_profile("harnesses", args.harness, args.profiles)
+    harness = load_harness(profile)
+    settings = teacher.traces
+    limits = Limits(
+        timeout=args.timeout or settings.episode_timeout,
+        max_tool_calls=args.max_tool_calls or settings.max_tool_calls,
+    )
+    rows = select_rows(
+        task,
+        args.split,
+        start=args.start,
+        limit=args.limit,
+        purpose=args.purpose,
+        sample=args.sample,
+        seed=args.seed,
+        shard_spec=args.shard,
+    )
+    if not rows:
+        raise SystemExit(f"no rows selected from {task.dataset.repo}:{args.split}")
+    shard_suffix = f"-{args.shard.replace('/', 'of')}" if args.shard else ""
+    prefix = args.prefix or f"{args.label}/{args.split}{shard_suffix}"
+    writer = RecordWriter(args.output_dir, prefix)
+    price = (teacher.price.input, teacher.price.output) if teacher.price.input or teacher.price.output else None
+    plan = Plan(
+        label=args.label,
+        attempts=args.attempts or settings.attempts_per_row,
+        stop_when_passed=args.stop_when_passed,
+        budget_usd=args.budget_usd,
+        price=price,
+        extra={"split": args.split, "teacher": teacher.name},
+    )
+    endpoint = teacher_endpoint(teacher, profile, args.bill_to)
+    print(
+        f"{len(rows)} rows of {task.dataset.repo}:{args.split}; teacher {teacher.routed_model}; harness "
+        f"{profile.id}; billed to {args.bill_to or 'the token owner'}",
+        flush=True,
+    )
+    asyncio.run(
+        run_episodes(
+            harness,
+            task,
+            rows,
+            endpoint,
+            writer,
+            plan,
+            limits=limits,
+            concurrency=args.concurrency or settings.concurrency,
+            cache=args.cache,
+        )
+    )
+    records = read_jsonl(writer.episodes) if writer.episodes.exists() else []
+    _, passed, spent = progress(writer, args.label)
+    summary = summarize_records(records)
+    summary.update(
+        harness=profile.id,
+        teacher=teacher.model,
+        split=args.split,
+        accepted_rows=len(passed),
+        rows=len(rows),
+        spent_usd=round(spent, 4),
+        limits={"timeout": limits.timeout, "max_tool_calls": limits.max_tool_calls},
+    )
+    summary_path = args.output_dir / "summaries" / f"{prefix}.json"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+    print(f"accepted {len(passed)}/{len(rows)} rows, spent ${spent:.2f}", flush=True)
+    if args.output_repo:
+        publish(args.output_dir, args.output_repo, profile.id, task.name)
+
+
+if __name__ == "__main__":
+    main()

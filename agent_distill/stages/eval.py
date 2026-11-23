@@ -31,9 +31,8 @@ from typing import Any
 
 from agent_distill.config import Student, load_profile
 from agent_distill.harnesses.base import Endpoint, load_harness
-from agent_distill.harnesses.opencode import harness_failure
 from agent_distill.records import RecordWriter, read_jsonl, summarize_records
-from agent_distill.rubrics import episode_context
+from agent_distill.stages.common import Plan, run_episodes, shard
 from agent_distill.task import Limits, Task, load_task
 
 VLLM_PORT = 8000
@@ -45,7 +44,9 @@ ADAPTER_NAME = "adapter"
 # --------------------------------------------------------------------------------------------------
 
 
-def vllm_command(student: Student, model: str, adapter_path: str, vllm_binary: str = "vllm") -> list[str]:
+def vllm_command(
+    student: Student, model: str, adapter_path: str, vllm_binary: str = "vllm", *, temperature: float | None = None
+) -> list[str]:
     serve = student.serve
     command = [
         shutil.which(vllm_binary) or vllm_binary, "serve", model, "--host", "127.0.0.1", "--port", str(VLLM_PORT),
@@ -61,6 +62,8 @@ def vllm_command(student: Student, model: str, adapter_path: str, vllm_binary: s
     if adapter_path:
         command += ["--enable-lora", "--max-lora-rank", str(student.lora.rank),
                     "--lora-modules", f"{ADAPTER_NAME}={adapter_path}"]  # fmt: skip
+    if temperature is not None:  # the probe samples like the GRPO rollouts; harnesses send no temperature of their own
+        command += ["--override-generation-config", json.dumps({"temperature": temperature, "top_p": 1.0, "top_k": -1})]
     command += shlex.split(serve.vllm_extra_args)
     return command
 
@@ -127,13 +130,33 @@ def prepare_text_adapter(source: str, destination: Path, converter: str = "") ->
 # --------------------------------------------------------------------------------------------------
 
 
-def select_rows(task: Task, split: str, *, start: int, limit: int, row_ids: list[str] | None = None) -> list[dict]:
+def select_rows(
+    task: Task,
+    split: str,
+    *,
+    start: int = 0,
+    limit: int | None = None,
+    row_ids: list[str] | None = None,
+    purpose: str = "eval",
+    sample: int = 0,
+    seed: int = 0,
+    shard_spec: str = "",
+) -> list[dict]:
+    """Rows of a split after the task's filter for `purpose` ("eval", or "train": traces, probe, GRPO); then a
+    seeded sample, a shard, and `start`/`limit` (or explicit row ids)."""
+    import random
+
     from datasets import load_dataset
 
     spec = task.dataset
     rows = [dict(row) for row in load_dataset(spec.repo, split=split, revision=spec.revision)]
-    if spec.filter is not None:
-        rows = [row for row in rows if spec.filter(row)]
+    keep = spec.train_filter if purpose == "train" and spec.train_filter is not None else spec.filter
+    if keep is not None:
+        rows = [row for row in rows if keep(row)]
+    if sample:
+        rows = random.Random(seed).sample(sorted(rows, key=task.row_id), min(sample, len(rows)))
+    if shard_spec:
+        rows = shard(rows, shard_spec)
     if row_ids:
         wanted = set(row_ids)
         rows = [row for row in rows if task.row_id(row) in wanted]
@@ -141,76 +164,21 @@ def select_rows(task: Task, split: str, *, start: int, limit: int, row_ids: list
         if missing:
             raise ValueError(f"rows not found (or filtered out) in {spec.repo}:{split}: {sorted(missing)}")
         return rows
-    return rows[start : start + limit]
+    return rows[start : start + limit] if limit is not None else rows[start:]
 
 
-async def run_label(
-    harness: Any,
-    task: Task,
-    rows: list[dict],
-    endpoint: Endpoint,
-    label: str,
-    writer: RecordWriter,
-    *,
-    limits: Limits,
-    concurrency: int,
-    cache: Path,
-    max_restarts: int = 3,
-    extra: dict[str, Any] | None = None,
-) -> None:
-    """Run every row not yet recorded for `label`, restarting the harness after a harness failure."""
-    for restart in range(max_restarts + 1):
-        done = writer.done()
-        pending = [row for row in rows if (label, task.row_id(row)) not in done]
-        if not pending:
-            return
-        if restart:
-            print(f"[{label}] restarting the harness after a harness failure ({len(pending)} rows left)", flush=True)
-        broken = await _run_once(harness, task, pending, endpoint, label, writer, limits, concurrency, cache, extra)
-        if not broken:
-            return
-    raise RuntimeError(f"the harness kept failing for {label} after {max_restarts} restarts")
+def difficulty(records: list[dict[str, Any]], attempts: int) -> dict[str, Any]:
+    """The difficulty probe's result: rows passed on some but not all of `attempts` (the GRPO prompt pool; GRPO
+    learns nothing from rows the policy always or never solves)."""
+    from collections import defaultdict
 
-
-async def _run_once(
-    harness: Any,
-    task: Task,
-    pending: list[dict],
-    endpoint: Endpoint,
-    label: str,
-    writer: RecordWriter,
-    limits: Limits,
-    concurrency: int,
-    cache: Path,
-    extra: dict[str, Any] | None,
-) -> bool:
-    """Run `pending` on one fresh harness. Returns True when the harness broke (the rest is left for a restart)."""
-    broken = asyncio.Event()
-    semaphore = asyncio.Semaphore(concurrency)
-    async with harness.session([endpoint], cache=cache, task=task) as runner:
-
-        async def run_row(index: int, row: dict) -> None:
-            async with semaphore:
-                if broken.is_set():
-                    return
-                episode = await harness.run_episode(runner, task, row, endpoint, limits)
-                if failure := harness_failure(episode):
-                    print(f"  [{label}] {episode.row_id}: harness failure, not recorded: {failure}", flush=True)
-                    broken.set()
-                    return
-                context = episode_context(episode, row, limits=limits, task=task)
-                result = await task.rubrics.ascore(context, mode="eval")
-                writer.write(episode, result, harness.native_trace(episode), label=label, **(extra or {}))
-                print(
-                    f"[{label} {index}/{len(pending)}] {episode.row_id} passed={result.passed} "
-                    f"reward={result.reward} tools={episode.tool_calls} failure={episode.failure}",
-                    flush=True,
-                )
-
-        await asyncio.gather(*(run_row(i, row) for i, row in enumerate(pending, 1)))
-        if not broken.is_set():
-            await harness.healthy(runner)
-    return broken.is_set()
+    passes: dict[str, list[bool]] = defaultdict(list)
+    for record in records:
+        passes[str(record["row_id"])].append(bool(record.get("passed")))
+    complete = {row: values[:attempts] for row, values in passes.items() if len(values) >= attempts}
+    histogram = {str(k): sum(sum(v) == k for v in complete.values()) for k in range(attempts + 1)}
+    qualified = sorted(row for row, values in complete.items() if 0 < sum(values) < attempts)
+    return {"rows": len(complete), "attempts": attempts, "passes_histogram": histogram, "qualified": qualified}
 
 
 # --------------------------------------------------------------------------------------------------
@@ -270,6 +238,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--row-ids", default="", help="Comma-separated row ids (overrides --start/--limit)")
+    parser.add_argument("--purpose", choices=("eval", "train"), default="eval", help="Which task filter selects rows")
+    parser.add_argument("--sample", type=int, default=0, help="Seeded random sample of this many rows")
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--shard", default="", help="i/n: this job's disjoint slice of the rows")
+    parser.add_argument("--attempts", type=int, default=1, help="Episodes per row (difficulty probe: K)")
+    parser.add_argument("--temperature", type=float, help="Serve with this sampling temperature (probe)")
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--timeout", type=float, default=180)
     parser.add_argument("--max-tool-calls", type=int, default=15)
@@ -290,7 +264,15 @@ def main(argv: list[str] | None = None) -> None:
     harness = load_harness(profile)
     limits = Limits(timeout=args.timeout, max_tool_calls=args.max_tool_calls)
     rows = select_rows(
-        task, args.split, start=args.start, limit=args.limit, row_ids=[r for r in args.row_ids.split(",") if r] or None
+        task,
+        args.split,
+        start=args.start,
+        limit=args.limit,
+        row_ids=[r for r in args.row_ids.split(",") if r] or None,
+        purpose=args.purpose,
+        sample=args.sample,
+        seed=args.seed,
+        shard_spec=args.shard,
     )
     if not rows:
         raise SystemExit(f"no rows selected from {task.dataset.repo}:{args.split}")
@@ -316,7 +298,7 @@ def main(argv: list[str] | None = None) -> None:
 
     server = None
     if not args.no_serve:
-        command = vllm_command(student, args.model, adapter_path, args.vllm_binary)
+        command = vllm_command(student, args.model, adapter_path, args.vllm_binary, temperature=args.temperature)
         print(f"starting vLLM: {shlex.join(command)}", flush=True)
         server = subprocess.Popen(command, start_new_session=True)
     try:
@@ -326,18 +308,18 @@ def main(argv: list[str] | None = None) -> None:
             prefix = args.prefix or f"{label}/{args.split}"
             writer = RecordWriter(args.output_dir, prefix)
             extra = {"split": args.split, "served_model": args.model if label == args.label else args.adapter}
+            plan = Plan(label=label, attempts=args.attempts, extra=extra)
             asyncio.run(
-                run_label(
+                run_episodes(
                     harness,
                     task,
                     rows,
                     endpoint,
-                    label,
                     writer,
+                    plan,
                     limits=limits,
                     concurrency=args.concurrency,
                     cache=args.cache,
-                    extra=extra,
                 )
             )
             summary = summarize_records(read_jsonl(writer.episodes))
@@ -345,6 +327,11 @@ def main(argv: list[str] | None = None) -> None:
                            limits={"timeout": limits.timeout, "max_tool_calls": limits.max_tool_calls})  # fmt: skip
             summary_path = args.output_dir / "summaries" / f"{prefix}.json"
             summary_path.parent.mkdir(parents=True, exist_ok=True)
+            if args.attempts > 1:
+                summary["difficulty"] = difficulty(read_jsonl(writer.episodes), args.attempts)
+                qualified = args.output_dir / "difficulty" / f"{prefix}-qualified-ids.txt"
+                qualified.parent.mkdir(parents=True, exist_ok=True)
+                qualified.write_text("".join(f"{row_id}\n" for row_id in summary["difficulty"]["qualified"]))
             summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
             print(json.dumps(summary["labels"], indent=2), flush=True)
     finally:

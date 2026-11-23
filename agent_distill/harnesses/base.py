@@ -69,6 +69,22 @@ class Harness(Protocol):
         ...
 
 
+HF_ROUTER = "https://router.huggingface.co/v1"
+
+
+def teacher_endpoint(teacher: Any, harness: HarnessProfile, bill_to: str = "") -> Endpoint:
+    """A teacher served by HF Inference Providers, billed to `bill_to` (`X-HF-Bill-To`), with the `HF_TOKEN` key.
+
+    OpenCode reaches it through its built-in Hugging Face provider (`huggingface/<model>[:provider]`, with an inline
+    model entry for ids missing from its catalog); other harnesses use the router's OpenAI-compatible API.
+    """
+    headers = {"X-HF-Bill-To": bill_to} if bill_to else {}
+    native_id = teacher.opencode_id if harness.name == "opencode" else ""
+    native_entry = teacher.opencode_model_entry if harness.name == "opencode" else {}
+    return Endpoint(base_url=HF_ROUTER, model=teacher.routed_model, key_env="HF_TOKEN", name=teacher.name,
+                    headers=headers, native_id=native_id, native_entry=native_entry)  # fmt: skip
+
+
 def load_harness(profile: HarnessProfile) -> Harness:
     cls = resolve(profile.adapter)
     return cls(profile)
