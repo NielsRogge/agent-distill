@@ -36,25 +36,28 @@ class Usage:
     output_tokens: int = 0
     cost_usd: float = 0.0
 
-    def add(self, tokens_in: int, tokens_out: int, price: tuple[float, float]) -> None:
+    def add(self, tokens_in: int, tokens_out: int, price: tuple[float, float], cost: float | None = None) -> None:
+        """Tally one call; `cost` is the provider's own figure (the HF router reports it), else priced tokens."""
         self.calls += 1
         self.input_tokens += tokens_in
         self.output_tokens += tokens_out
-        self.cost_usd += (tokens_in * price[0] + tokens_out * price[1]) / 1e6
+        self.cost_usd += cost if cost is not None else (tokens_in * price[0] + tokens_out * price[1]) / 1e6
 
 
 async def _post(url: str, *, headers: dict[str, str], body: dict[str, Any], timeout: float, retries: int) -> Any:  # noqa: ASYNC109
     delay = 2.0
     for attempt in range(retries + 1):
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            # A hard deadline on the whole request: a provider can hold a connection open without sending bytes,
+            # which httpx's per-read timeout alone would wait out for every retry.
+            async with asyncio.timeout(timeout), httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(url, headers=headers, json=body)
             if response.status_code < 400:
                 return response.json()
             if response.status_code not in RETRY_STATUS or attempt == retries:
                 # never echo request headers (they carry the key); the body is the provider's error message
                 raise JudgeError(f"HTTP {response.status_code}: {response.text[:300]}")
-        except (httpx.TimeoutException, httpx.TransportError) as exc:
+        except (TimeoutError, httpx.TimeoutException, httpx.TransportError) as exc:
             if attempt == retries:
                 raise JudgeError(f"{type(exc).__name__}: {exc}") from exc
         await asyncio.sleep(delay + random.random())
@@ -95,7 +98,9 @@ class RouterJudge:
         reply = await _post(f"{self.base_url.rstrip('/')}/chat/completions", headers=headers, body=body,
                             timeout=self.timeout, retries=self.retries)  # fmt: skip
         usage = reply.get("usage") or {}
-        self.usage.add(int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0), self.price)
+        cost = usage.get("cost")
+        self.usage.add(int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0), self.price,
+                       float(cost) if isinstance(cost, int | float) else None)  # fmt: skip
         try:
             return str(reply["choices"][0]["message"]["content"] or "")
         except (KeyError, IndexError) as exc:

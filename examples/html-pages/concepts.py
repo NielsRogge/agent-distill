@@ -24,6 +24,8 @@ from typing import Any
 
 from agent_distill.rubrics.clients import RouterJudge
 
+LIMIT = asyncio.Semaphore(6)  # generation calls in flight (more made the router's providers stall)
+
 CATEGORIES = {
     "interactive toy": "a playful thing to poke, drag, draw or fiddle with",
     "game": "a small complete game with rules, a goal and feedback",
@@ -106,7 +108,8 @@ async def brainstorm(client: RouterJudge, category: str, target: int, batch: int
         prompt = PROMPT.format(category=category, description=CATEGORIES[category], count=batch,
                                avoid="; ".join(avoid) or "none yet")  # fmt: skip
         try:
-            reply = await client.complete(prompt, [])
+            async with LIMIT:
+                reply = await client.complete(prompt, [])
         except Exception as exc:  # one failed batch is retried by the loop
             print(f"  {category}: batch failed ({exc})", flush=True)
             continue
@@ -143,7 +146,7 @@ def push(rows: list[dict[str, Any]], repo: str) -> None:
 
 async def main_async(args: argparse.Namespace) -> None:
     client = RouterJudge(model=args.teacher, bill_to=args.bill_to, price=(args.price_in, args.price_out),
-                         max_tokens=args.max_tokens, temperature=1.0, timeout=600)  # fmt: skip
+                         max_tokens=args.max_tokens, temperature=1.0, timeout=300, retries=2)  # fmt: skip
     rng = random.Random(args.seed)
     categories = [c for c in CATEGORIES if not args.categories or c in args.categories]
     results = await asyncio.gather(*(brainstorm(client, category, args.per_category, args.batch, args.budget_usd, rng)
