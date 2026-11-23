@@ -138,3 +138,95 @@ def test_artifacts_cover_every_stage():
     suffixes = [repo.removeprefix("nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-") for repo, _, _ in artifacts]
     assert suffixes == ["traces", "lora", "sft-merged", "grpo-lora", "grpo-merged", "eval"]
     assert all("opencode@2.3.2" in note for _, _, note in artifacts)
+
+
+class ScriptedHarness:
+    """A harness whose episodes follow a script per row: "cut" (timeout mid-tool-call), "fail" or "pass"."""
+
+    def __init__(self, script: dict[str, list[str]]) -> None:
+        self.script = {row: list(outcomes) for row, outcomes in script.items()}
+        self.runs: list[str] = []
+
+    def session(self, endpoints, cache, task):
+        import contextlib
+
+        @contextlib.asynccontextmanager
+        async def runner():
+            yield None
+
+        return runner()
+
+    async def healthy(self, runner) -> None:
+        return None
+
+    def native_trace(self, episode):
+        return None
+
+    async def run_episode(self, runner, task, row, endpoint, limits):
+        row_id = task.row_id(row)
+        outcome = self.script[row_id].pop(0)
+        self.runs.append(f"{row_id}:{outcome}")
+        call = {"id": "c1", "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+        messages = [{"role": "user", "content": "q"}, {"role": "assistant", "content": "", "tool_calls": [call]},
+                    {"role": "tool", "tool_call_id": "c1", "content": "tool running", "is_error": True}]  # fmt: skip
+        return Episode(task="paper-urls", row_id=row_id, harness="opencode", harness_version="2.3.2", model="m",
+                       messages=messages, usage={"cost": 0.01},
+                       failure="episode timed out after 1 seconds" if outcome == "cut" else None,
+                       answer=None)  # fmt: skip
+
+
+def test_cut_short_episodes_are_rerun_without_using_an_attempt(tmp_path, monkeypatch):
+    import asyncio
+
+    from agent_distill.stages.common import cut_short, run_episodes
+    from agent_distill.task import Limits
+
+    harness = ScriptedHarness({"1": ["cut", "cut", "cut", "fail"], "2": ["cut", "pass"]})
+
+    async def ascore(episode, mode="eval"):  # the outcome of the row's latest scripted run
+        last = [run for run in harness.runs if run.startswith(f"{episode.row_id}:")][-1].endswith(":pass")
+        return RubricResult(scores={}, reward=float(last), passed=last)
+
+    monkeypatch.setattr(TASK.rubrics, "ascore", ascore)
+    monkeypatch.setattr("agent_distill.stages.common.episode_context", lambda episode, row, **kw: episode)
+    writer = RecordWriter(tmp_path, "teacher/train")
+    plan = Plan(label="teacher", attempts=1, stop_when_passed=True, rerun_cut_short=2)
+    asyncio.run(run_episodes(harness, TASK, rows("1", "2"), None, writer, plan, limits=Limits(), concurrency=2,
+                             cache=tmp_path))  # fmt: skip
+    # row 1: two cuts are rerun, the third cut uses the one attempt; row 2: one cut, then a pass
+    assert sorted(harness.runs) == ["1:cut", "1:cut", "1:cut", "2:cut", "2:pass"]
+    records = read_jsonl(writer.episodes)
+    assert sum(1 for r in records if r["cut_short"]) == 4
+    assert records[0]["cut_short"].startswith("mid-tool-call: episode timed out")
+    attempts, passed, spent = progress(writer, "teacher", rerun_cut_short=2)
+    assert attempts == {"1": 1, "2": 1} and passed == {"2"} and spent == pytest.approx(0.05)
+    assert progress(writer, "teacher")[0] == {"1": 3, "2": 2}  # without reruns every cut uses an attempt
+    tool_limit = Episode(task="t", row_id="1", harness="opencode", harness_version="2.3.2", model="m",
+                         failure="tool-call limit reached (15)")  # fmt: skip
+    assert cut_short(tool_limit) is None
+
+
+def test_checkpoint_uploads_a_consistent_copy(tmp_path):
+    import asyncio
+
+    from agent_distill.stages.common import Checkpoint
+
+    (tmp_path / "out").mkdir()
+    (tmp_path / "out" / "a.jsonl").write_text("1\n")
+    uploads: list[list[str]] = []
+
+    def upload(folder):
+        uploads.append(sorted(p.name for p in folder.iterdir()))
+
+    async def main():
+        checkpoint = Checkpoint(tmp_path / "out", upload, every_seconds=0.01)
+        checkpoint.maybe()  # too early
+        await asyncio.sleep(0.02)
+        checkpoint.maybe()
+        await checkpoint.flush()
+        checkpoint.every_seconds = 0
+        checkpoint.maybe()  # 0: only the final publish uploads
+        await checkpoint.flush()
+
+    asyncio.run(main())
+    assert uploads == [["a.jsonl"]]

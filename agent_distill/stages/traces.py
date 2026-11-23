@@ -5,9 +5,12 @@
 
 The teacher is served by HF Inference Providers (billed to `--bill-to`); its harness process gets the HF token and
 nothing else. Rows come from the task's train filter; each row gets up to `--attempts` episodes and stops at its
-first pass. An episode is accepted exactly when the task's rubric set passes it (eval mode), the same verdict the
-evaluation and the difficulty probe use. Records, raw logs and Pi sessions go to a private dataset; spend is tracked
-from the harness's cost (or the teacher profile's prices) and the stage stops starting episodes at `--budget-usd`.
+first pass. An episode cut short by the timeout or a provider error (no answer, often mid-tool-call) is kept in
+the records but rerun up to `--rerun-cut-short` times instead of using an attempt. Records are uploaded every
+`--upload-every` minutes, and a rerun of the same job resumes from them. An episode is accepted exactly when the
+task's rubric set passes it (eval mode), the same verdict the evaluation and the difficulty probe use. Records, raw
+logs and Pi sessions go to a private dataset; spend is tracked from the harness's cost (or the teacher profile's
+prices) and the stage stops starting episodes at `--budget-usd`.
 
 With `--label teacher --purpose eval --attempts 1 --no-stop-when-passed` the same stage is the teacher's evaluation
 baseline, written next to the students' evaluations.
@@ -24,8 +27,8 @@ from pathlib import Path
 from agent_distill.config import load_profile
 from agent_distill.harnesses.base import load_harness, teacher_endpoint
 from agent_distill.records import RecordWriter, read_jsonl, summarize_records
-from agent_distill.stages.common import Plan, progress, run_episodes
-from agent_distill.stages.eval import publish, select_rows
+from agent_distill.stages.common import Plan, progress, resume_from_hub, run_episodes
+from agent_distill.stages.eval import checkpoint, publish, select_rows
 from agent_distill.task import Limits, load_task
 
 
@@ -53,6 +56,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("/traces"))
     parser.add_argument("--prefix", default="", help="File prefix (default: <label>/<split>[-<shard>])")
     parser.add_argument("--output-repo", default="")
+    parser.add_argument("--upload-every", type=float, default=10.0,
+                        help="Minutes between checkpoint uploads to --output-repo (0: only at the end)")  # fmt: skip
+    parser.add_argument("--rerun-cut-short", type=int, default=2,
+                        help="Reruns per row of episodes cut short by a timeout or provider error")  # fmt: skip
     parser.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "agent-distill-cache")
     return parser.parse_args(argv)
 
@@ -82,6 +89,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(f"no rows selected from {task.dataset.repo}:{args.split}")
     shard_suffix = f"-{args.shard.replace('/', 'of')}" if args.shard else ""
     prefix = args.prefix or f"{args.label}/{args.split}{shard_suffix}"
+    if args.output_repo:
+        resume_from_hub(args.output_repo, args.output_dir, prefix)
     writer = RecordWriter(args.output_dir, prefix)
     price = (teacher.price.input, teacher.price.output) if teacher.price.input or teacher.price.output else None
     plan = Plan(
@@ -90,6 +99,7 @@ def main(argv: list[str] | None = None) -> None:
         stop_when_passed=args.stop_when_passed,
         budget_usd=args.budget_usd,
         price=price,
+        rerun_cut_short=args.rerun_cut_short,
         extra={"split": args.split, "teacher": teacher.name},
     )
     endpoint = teacher_endpoint(teacher, profile, args.bill_to)
@@ -109,10 +119,11 @@ def main(argv: list[str] | None = None) -> None:
             limits=limits,
             concurrency=args.concurrency or settings.concurrency,
             cache=args.cache,
+            checkpoint=checkpoint(args.output_dir, args.output_repo, args.upload_every, profile.id, task.name),
         )
     )
     records = read_jsonl(writer.episodes) if writer.episodes.exists() else []
-    _, passed, spent = progress(writer, args.label)
+    _, passed, spent = progress(writer, args.label, args.rerun_cut_short)
     summary = summarize_records(records)
     summary.update(
         harness=profile.id,

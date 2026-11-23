@@ -32,7 +32,7 @@ from typing import Any
 from agent_distill.config import Student, load_profile
 from agent_distill.harnesses.base import Endpoint, load_harness
 from agent_distill.records import RecordWriter, read_jsonl, summarize_records
-from agent_distill.stages.common import Plan, run_episodes, shard
+from agent_distill.stages.common import Checkpoint, Plan, resume_from_hub, run_episodes, shard
 from agent_distill.task import Limits, Task, load_task
 
 VLLM_PORT = 8000
@@ -218,6 +218,12 @@ def publish(output_dir: Path, repo: str, harness_id: str, task: str) -> None:
     print(f"published {output_dir} to {repo} (private)", flush=True)
 
 
+def checkpoint(output_dir: Path, repo: str, minutes: float, harness_id: str, task: str) -> Checkpoint | None:
+    if not repo or minutes <= 0:
+        return None
+    return Checkpoint(output_dir, lambda folder: publish(folder, repo, harness_id, task), minutes * 60)
+
+
 # --------------------------------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------------------------------
@@ -250,6 +256,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("/eval"))
     parser.add_argument("--prefix", default="", help="File prefix, e.g. 'base/test' (default: <label>/<split>)")
     parser.add_argument("--output-repo", default="", help="Dataset to publish to (private); '' keeps files local")
+    parser.add_argument("--upload-every", type=float, default=10.0,
+                        help="Minutes between checkpoint uploads to --output-repo (0: only at the end)")  # fmt: skip
     parser.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "agent-distill-cache")
     parser.add_argument("--vllm-binary", default="vllm")
     parser.add_argument("--no-serve", action="store_true", help="Use an already running vLLM on port 8000")
@@ -306,6 +314,8 @@ def main(argv: list[str] | None = None) -> None:
             wait_for_vllm(server)
         for label, endpoint in targets:
             prefix = args.prefix or f"{label}/{args.split}"
+            if args.output_repo:
+                resume_from_hub(args.output_repo, args.output_dir, prefix)
             writer = RecordWriter(args.output_dir, prefix)
             extra = {"split": args.split, "served_model": args.model if label == args.label else args.adapter}
             plan = Plan(label=label, attempts=args.attempts, extra=extra)
@@ -320,6 +330,7 @@ def main(argv: list[str] | None = None) -> None:
                     limits=limits,
                     concurrency=args.concurrency,
                     cache=args.cache,
+                    checkpoint=checkpoint(args.output_dir, args.output_repo, args.upload_every, profile.id, task.name),
                 )
             )
             summary = summarize_records(read_jsonl(writer.episodes))

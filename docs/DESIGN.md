@@ -367,6 +367,17 @@ The stage graph is the one in url-extraction's `pipeline.py`, rewritten around a
 | `publish` | Credential scan, visibility changes, collection notes, cards. | (Hub settings) |
 | `rescore` | Recomputes every record's scores from stored episodes. | a report |
 
+**Episode stages** (`traces`, `probe`, `eval`) share one episode loop. Each one:
+
+- uploads its records to its private dataset every `--upload-every` minutes, and a rerun of the same job first
+  downloads them and resumes;
+- does not record a harness failure; it restarts the harness and runs the episode again.
+
+The traces stage also reruns, up to `--rerun-cut-short` times per row, a teacher episode cut short by the timeout
+or a provider error (no answer, usually mid-tool-call). Such an episode is kept, marked `cut_short`, and its spend
+counts, but it does not use one of the row's attempts. Evaluation never reruns: a student's timeout counts against
+it.
+
 Run naming defaults to `<student>-<task>-<teacher>-<harness>`, e.g. `qwen3.5-9b-html-pages-kimi-k3.1-pro-pi`.
 
 **Code staging.** Before jobs are launched:
