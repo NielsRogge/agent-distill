@@ -70,7 +70,9 @@ class Teacher:
     capabilities: list[str] = field(default_factory=list)  # e.g. ["image_input"]
     # What harnesses that declare the model themselves (Pi) are told; OpenCode uses `opencode_model_entry`.
     context: int = 131072
-    max_output_tokens: int = 32768
+    # Frontier teachers reason before their first tool call (Pi sends no thinking setting, they think anyway); a
+    # page-writing turn needed more than 32k tokens in 4 of 12 HTML pilot episodes.
+    max_output_tokens: int = 65536
     price: Price = field(default_factory=Price)
     notes: str = ""
     traces: TraceSettings = field(default_factory=TraceSettings)

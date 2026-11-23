@@ -63,7 +63,7 @@ def test_models_json_names_the_key_never_its_value(monkeypatch):
     provider = models_json(teacher)["providers"]["agent-distill"]
     assert provider["apiKey"] == "$HF_TOKEN" and provider["headers"] == {"X-HF-Bill-To": "org"}
     assert "hf_secret" not in str(models_json(teacher))
-    assert provider["models"][0]["maxTokens"] == 32768 and provider["models"][0]["input"] == ["text"]
+    assert provider["models"][0]["maxTokens"] == 65536 and provider["models"][0]["input"] == ["text"]
     student = Endpoint("http://127.0.0.1:8000/v1", "student", max_output_tokens=2048)
     assert models_json(student)["providers"]["agent-distill"]["apiKey"] == "EMPTY"
     capture = Endpoint("http://127.0.0.1:9000/v1", "policy", api_key="capture-123")
