@@ -96,9 +96,9 @@ def test_overrides_from_cli():
                       "eval.limit": 5, "eval.models": {"a": "m1", "b": "m2+ad"}}  # fmt: skip
 
 
-def test_unimplemented_stages_refuse(tmp_path):
-    with pytest.raises(SystemExit, match="M3b"):
-        pipeline.main([str(RUN_TOML), "--stages", "grpo", "--dry-run"])
+def test_unknown_stages_refuse(tmp_path):
+    with pytest.raises(SystemExit, match="unknown stages"):
+        pipeline.main([str(RUN_TOML), "--stages", "distil", "--dry-run"])
 
 
 def test_timeout_minutes():

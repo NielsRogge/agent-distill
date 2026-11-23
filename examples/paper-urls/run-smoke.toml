@@ -1,5 +1,6 @@
 # End-to-end smoke run of the recipe on a handful of rows (DESIGN.md §14, M3): GLM-5.3 traces in OpenCode 2.3.2,
-# SFT of Qwen3.5-4B for 2 steps, merge, a tiny difficulty probe, and evaluation of base, SFT and teacher on 5 rows.
+# SFT of Qwen3.5-4B for 2 steps, merge, a tiny difficulty probe, 2 GRPO steps (+ merge), and evaluation of base, SFT,
+# GRPO and teacher on 5 rows.
 #
 #   distill run examples/paper-urls/run-smoke.toml --dry-run
 task = "."
@@ -7,7 +8,7 @@ teacher = "glm-5.3"
 student = "qwen3.5-4b"
 harness = "opencode@2.3.2"
 name = "qwen35-4b-paper-urls-glm53-opencode-232-smoke"
-stages = ["traces", "sft", "merge", "probe", "eval"]
+stages = ["traces", "sft", "merge", "probe", "grpo", "eval"]
 
 [hub]
 namespace = "nielsr"
@@ -29,11 +30,16 @@ k = 2
 shards = 1
 timeout = "1h"
 
+[grpo]
+args = ["--max-steps", "2", "--save-steps", "1", "--num-generations", "2", "--max-concurrent-rollouts", "4"]
+timeout = "2h"
+use_probe = false  # 4 probed rows may qualify none; the smoke run trains on the 8 traced rows' split instead
+
 [eval]
 splits = ["test"]
 limit = 5
 concurrency = 5
-variants = ["base", "sft", "teacher"]
+variants = ["base", "sft", "grpo", "teacher"]
 
 [budget]
 traces_usd = 2

@@ -37,6 +37,10 @@ class Endpoint:
     headers: Mapping[str, str] = field(default_factory=dict)  # e.g. {"X-HF-Bill-To": "huggingface"}
     native_id: str = ""  # harness-native model id, e.g. OpenCode's "huggingface/zai-org/GLM-5.2"
     native_entry: Mapping[str, Any] = field(default_factory=dict)  # harness-native model declaration
+    # A non-secret API key sent as-is, e.g. the OpenEnv capture session id the capture proxy reads as its key.
+    api_key: str = ""
+    # Also route the harness's auxiliary model calls (e.g. OpenCode 1.x session titles) to this endpoint.
+    small_model: bool = False
 
 
 class Harness(Protocol):

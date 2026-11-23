@@ -91,6 +91,8 @@ def provider_config(endpoints: list[Endpoint]) -> dict[str, Any]:
             )
             if endpoint.key_env:
                 entry["options"]["apiKey"] = f"{{env:{endpoint.key_env}}}"
+            elif endpoint.api_key:
+                entry["options"]["apiKey"] = endpoint.api_key
             if endpoint.headers:
                 entry["options"].setdefault("headers", {}).update(endpoint.headers)
             entry["models"][model] = {
@@ -104,7 +106,11 @@ def provider_config(endpoints: list[Endpoint]) -> dict[str, Any]:
                 entry.setdefault("options", {}).setdefault("headers", {}).update(endpoint.headers)
             if endpoint.native_entry:
                 entry.setdefault("models", {})[model] = dict(endpoint.native_entry)
-    return {"provider": providers}
+    config: dict[str, Any] = {"provider": providers}
+    small = [endpoint for endpoint in endpoints if endpoint.small_model]
+    if small:
+        config["small_model"] = "/".join(model_ref(small[0]))
+    return config
 
 
 def model_ref(endpoint: Endpoint) -> tuple[str, str]:
@@ -160,10 +166,27 @@ def _drain(stream: Any) -> None:
             pass
 
 
+# Many OpenCode servers cold-starting at once crash or stall (shared provider-package cache): start one at a time.
+_STARTUP_LOCK = threading.Lock()
+
+
+def xdg_dirs(workspace: Path) -> dict[str, str]:
+    """Per-workspace data, config and state directories (OpenCode keeps its session database there)."""
+    names = (("XDG_DATA_HOME", "data"), ("XDG_CONFIG_HOME", "config"), ("XDG_STATE_HOME", "state"))
+    return {key: str(workspace / f".opencode-{name}") for key, name in names}
+
+
 def start_server(
     executable: Path, version: str, workspace: Path, env: dict[str, str], *, startup_timeout: float = 120
 ) -> Server:
     """Start `opencode serve` on 127.0.0.1 and wait until it answers. 2.x: read the generated password."""
+    with _STARTUP_LOCK:
+        return _start_server(executable, version, workspace, env, startup_timeout=startup_timeout)
+
+
+def _start_server(
+    executable: Path, version: str, workspace: Path, env: dict[str, str], *, startup_timeout: float
+) -> Server:
     v2 = int(version.split(".")[0]) >= 2
     port = free_port()
     url = f"http://127.0.0.1:{port}"

@@ -118,9 +118,9 @@ def test_smoke_run_jobs():
     )
     assert "--model nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-sft-merged" in probe.command
     evals = pipeline.eval_jobs(run, "R")
-    assert [job.name.rsplit("-", 2)[-2] for job in evals] == ["base", "sft", "teacher"]
+    assert [job.name.rsplit("-", 2)[-2] for job in evals] == ["base", "sft", "grpo", "teacher"]
     assert "--adapter nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-lora --adapter-label sft" in evals[1].command
-    assert "--label teacher" in evals[2].command and "--no-stop-when-passed" in evals[2].command
+    assert "--label teacher" in evals[3].command and "--no-stop-when-passed" in evals[3].command
     for job in [traces, sft, merge, probe, *evals]:
         assert "HF_TOKEN" not in job.command
 

@@ -73,11 +73,6 @@ def server_config(task: Task, endpoints: list[Endpoint], version: str) -> dict[s
     return config
 
 
-def xdg_dirs(workspace: Path) -> dict[str, str]:
-    names = (("XDG_DATA_HOME", "data"), ("XDG_CONFIG_HOME", "config"), ("XDG_STATE_HOME", "state"))
-    return {key: str(workspace / f".opencode-{name}") for key, name in names}
-
-
 def server_env(task: Task, endpoints: list[Endpoint], version: str, workspace: Path) -> dict[str, str]:
     """No server password in the environment (it is generated), no ~/.claude prompts or skills, the bundled model
     catalog instead of a live models.dev fetch, per-workspace data/config/state directories."""
@@ -87,7 +82,7 @@ def server_env(task: Task, endpoints: list[Endpoint], version: str, workspace: P
             "OPENCODE_DISABLE_CLAUDE_CODE": "1",
             "OPENCODE_DISABLE_MODELS_FETCH": "1",
             "OPENCODE_CONFIG_CONTENT": json.dumps(server_config(task, endpoints, version)),
-            **xdg_dirs(workspace),
+            **opencode.xdg_dirs(workspace),
         },
     )
     for key in ("OPENCODE_PASSWORD", "OPENCODE_SERVER_PASSWORD"):

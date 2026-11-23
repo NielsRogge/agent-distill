@@ -113,8 +113,9 @@ class OpenCodeV1:
         other than the endpoints' own keys."""
         executable = await asyncio.to_thread(self.install, cache)
         workspace = tempfile.TemporaryDirectory(prefix="agent-distill-opencode-")
+        config = json.dumps(opencode.provider_config(endpoints))
         env = opencode.server_env(
-            endpoints, {"OPENCODE_CONFIG_CONTENT": json.dumps(opencode.provider_config(endpoints))}
+            endpoints, {"OPENCODE_CONFIG_CONTENT": config, **opencode.xdg_dirs(Path(workspace.name))}
         )
         server = await asyncio.to_thread(
             opencode.start_server, executable, self.version, Path(workspace.name), env, startup_timeout=30

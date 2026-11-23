@@ -5,8 +5,8 @@
     distill run examples/paper-urls/run.toml --stages publish
 
 Stages: `traces` (teacher episodes, CPU jobs), `sft`, `merge` (SFT adapter into the student), `probe` (difficulty
-probe of the merged SFT policy), `eval` (base / sft / grpo / teacher, or explicit models) and `publish`; `grpo`
-arrives in M3b. With several stages
+probe of the merged SFT policy), `grpo` (GRPO in the harness, then its merge), `eval` (base / sft / grpo / teacher,
+or explicit models) and `publish`. With several stages
 each waits for the previous one's jobs; a single stage runs detached unless `--wait`. `--dry-run` prints every job
 (image, flavor, command) and the cost estimate without staging code or launching anything. Every job's worst-case
 cost (all jobs running to their timeout) is checked against `[budget]` before launch.
@@ -27,7 +27,7 @@ from agent_distill.config import BUILTIN_PROFILES, UV_IMAGE, RunConfig, load_pro
 from agent_distill.task import Task, load_task
 
 STAGES = ("traces", "sft", "merge", "probe", "grpo", "eval", "publish")
-IMPLEMENTED = ("traces", "sft", "merge", "probe", "eval", "publish")
+IMPLEMENTED = STAGES
 # Expected minutes per episode-slot for the cost estimate (url-extraction evaluations: about 1 min per episode).
 EVAL_MINUTES_PER_EPISODE = 1.5
 VLLM_STARTUP_MINUTES = 15
@@ -89,6 +89,31 @@ SFT_DEPS = [
     "trl==1.9.2",
 ]
 MERGE_DEPS = ["accelerate==1.14.0", "peft==0.20.0", "safetensors>=0.5.0", "torch>=2.7.0", "transformers==5.14.1"]
+GRPO_DEPS = [
+    "trl[kernels]==1.18.1",
+    "openenv==0.14.0",
+    "transformers==5.23.0",
+    "torch==2.15.0",
+    "peft==0.21.3",
+    "flash-linear-attention==0.6.0",
+    "datasets>=4.0.0",
+    "aiohttp>=3.13.3",
+    "requests",
+    "safetensors>=0.4.0",
+]
+# url-extraction's GRPO recipe (student profiles append their own arguments; the last occurrence of a flag wins).
+GRPO_RECIPE = [
+    "--num-generations",
+    "8",
+    "--max-steps",
+    "100",
+    "--save-steps",
+    "50",
+    "--gradient-accumulation-steps",
+    "2",
+    "--report-to",
+    "none",
+]
 TRACE_MINUTES_PER_EPISODE = 1.5
 
 
@@ -363,6 +388,59 @@ def merge_jobs(
     ]
 
 
+def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
+    """GRPO from the merged SFT checkpoint in the run's harness (two GPUs: vLLM + trainer)."""
+    student = student_profile(run)
+    grpo, settings = student.grpo, run.config.grpo
+    args = [
+        *common_args(run),
+        "--student",
+        jobs.q(run.config.student),
+        "--model",
+        jobs.q(run.repo("sft-merged")),
+        "--hub-model-id",
+        jobs.q(run.repo("grpo-lora")),
+        "--trainer",
+        grpo.backend,
+        "--lora-r",
+        str(student.lora.rank),
+        "--timeout",
+        str(run.config.eval.timeout),
+        "--max-tool-calls",
+        str(run.config.eval.max_tool_calls),
+        *GRPO_RECIPE,
+        *[jobs.q(a) for a in grpo.args],
+        *[jobs.q(a) for a in settings.args],
+        "--launch",
+    ]
+    if settings.use_probe:
+        args[-1:-1] = ["--include-ids-repo", jobs.q(run.repo("eval"))]
+    deps = grpo.deps or GRPO_DEPS
+    command = "\n".join(
+        [
+            jobs.prelude(run.repo("code"), rev, run.task.job_setup),
+            jobs.python_module("agent_distill.stages.grpo", args, deps=deps),
+            "echo GRPO_DONE",
+        ]
+    )
+    timeout = settings.timeout or grpo.timeout
+    return [
+        jobs.Job(
+            "grpo",
+            f"{run.name}-grpo"[:90],
+            grpo.image,
+            grpo.flavor,
+            timeout,
+            command,
+            expected_minutes=jobs.timeout_minutes(timeout) * 0.75,
+        )
+    ]
+
+
+def grpo_merge_jobs(run: Run, rev: str) -> list[jobs.Job]:
+    return merge_jobs(run, rev, "grpo-lora", "grpo-merged", base=run.repo("sft-merged"))
+
+
 def probe_jobs(run: Run, rev: str) -> list[jobs.Job]:
     """The difficulty probe: the merged SFT policy, K attempts per train row at the GRPO sampling temperature."""
     student = student_profile(run)
@@ -522,6 +600,51 @@ def overrides(args: argparse.Namespace) -> dict[str, Any]:
     return values
 
 
+def stage_waves(stage: str, run: Run, rev: str) -> list[list[jobs.Job]]:
+    """A stage's jobs in waves; each wave waits for the previous one (GRPO, then its merge)."""
+    if stage == "grpo":
+        return [grpo_jobs(run, rev), grpo_merge_jobs(run, rev)]
+    builders = {"traces": trace_jobs, "sft": sft_jobs, "merge": merge_jobs, "probe": probe_jobs, "eval": eval_jobs}
+    return [builders[stage](run, rev)]
+
+
+# `distill smoke RUN.toml`: the run's whole recipe on a handful of rows and steps, under its own name.
+SMOKE = {
+    "stages": ["traces", "sft", "merge", "probe", "grpo", "eval"],
+    "traces.limit": 8,
+    "traces.shards": 1,
+    "traces.attempts": 1,
+    "sft.args": ["--max-steps", "2", "--save-steps", "1"],
+    "sft.timeout": "1h",
+    "probe.sample": 4,
+    "probe.k": 2,
+    "probe.shards": 1,
+    "probe.timeout": "1h",
+    "grpo.args": ["--max-steps", "2", "--save-steps", "1", "--num-generations", "2", "--max-concurrent-rollouts", "4"],
+    "grpo.timeout": "2h",
+    "grpo.use_probe": False,
+    "eval.limit": 5,
+    "eval.concurrency": 5,
+    "eval.variants": ["base", "sft", "grpo", "teacher"],
+    "budget.traces_usd": 2,
+}
+
+
+def smoke_main(argv: list[str] | None = None) -> int:
+    """`distill smoke RUN.toml [--dry-run]`: the smoke variant of a run (name suffix `-smoke`)."""
+    import sys
+
+    items = list(sys.argv[1:] if argv is None else argv)
+    if not items or items[0].startswith("-"):
+        raise SystemExit("usage: distill smoke RUN.toml [--dry-run] [--over-budget] [--set KEY=JSON ...]")
+    config = load_run(items[0])
+    name = (config.name or "") + "-smoke" if config.name else ""
+    sets = [f"{key}={json.dumps(value)}" for key, value in SMOKE.items()]
+    if name:
+        sets.append(f"name={json.dumps(name)}")
+    return main([items[0], *(arg for pair in sets for arg in ("--set", pair)), *items[1:]])
+
+
 def check_budget(run: Run, built: list[jobs.Job], *, over_budget: bool) -> None:
     cost = jobs.estimate(built)
     cap = run.config.budget.gpu_usd
@@ -575,14 +698,13 @@ def main(argv: list[str] | None = None) -> int:
         if stage == "publish":
             publish(run, dry_run=args.dry_run)
             continue
-        built = {"traces": trace_jobs, "sft": sft_jobs, "merge": merge_jobs, "probe": probe_jobs, "eval": eval_jobs}[
-            stage
-        ](run, rev)
-        check_budget(run, built, over_budget=args.over_budget)
-        if args.dry_run:
-            jobs.describe(built, namespace)
-            continue
-        ids = jobs.launch(built, namespace)
-        if len(stages) > 1 or args.wait:
-            jobs.wait(ids, namespace)
+        waves = stage_waves(stage, run, rev)
+        check_budget(run, [job for wave in waves for job in wave], over_budget=args.over_budget)
+        for index, wave in enumerate(waves):
+            if args.dry_run:
+                jobs.describe(wave, namespace)
+                continue
+            ids = jobs.launch(wave, namespace)
+            if len(stages) > 1 or args.wait or index < len(waves) - 1:
+                jobs.wait(ids, namespace)
     return 0

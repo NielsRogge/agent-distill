@@ -283,6 +283,13 @@ class SFTRun:
 
 
 @dataclass
+class GRPORun:
+    args: list[str] = field(default_factory=list)  # appended after the recipe defaults and the profile's args
+    timeout: str = ""  # default: the student profile's
+    use_probe: bool = True  # train on the difficulty probe's qualified rows (difficulty/ in the eval dataset)
+
+
+@dataclass
 class ProbeRun:
     split: str = "train"
     sample: int | None = None  # default: the student profile's [probe] values
@@ -311,6 +318,7 @@ class RunConfig:
     traces: TracesRun = field(default_factory=TracesRun)
     sft: SFTRun = field(default_factory=SFTRun)
     probe: ProbeRun = field(default_factory=ProbeRun)
+    grpo: GRPORun = field(default_factory=GRPORun)
     budget: Budget = field(default_factory=Budget)
     repos: dict[str, str] = field(default_factory=dict)  # override any artifact repo by suffix: {"eval": "..."}
     profiles: list[str] = field(default_factory=list)  # extra profile folders, relative to the run.toml
