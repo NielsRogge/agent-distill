@@ -73,9 +73,10 @@ def main(argv: list[str] | None = None) -> None:
     profile = load_profile("harnesses", args.harness, args.profiles)
     harness = load_harness(profile)
     settings = teacher.traces
+    # The task's limits, extended (never shortened) by the teacher profile's: a slow teacher gets more time.
     limits = Limits(
-        timeout=args.timeout or settings.episode_timeout,
-        max_tool_calls=args.max_tool_calls or settings.max_tool_calls,
+        timeout=args.timeout or max(settings.episode_timeout, task.limits.timeout),
+        max_tool_calls=args.max_tool_calls or max(settings.max_tool_calls, task.limits.max_tool_calls or 0),
     )
     rows = select_rows(
         task,

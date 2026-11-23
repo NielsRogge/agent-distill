@@ -66,12 +66,27 @@ def episode_extras(run: Run) -> str:
     return ",".join(dict.fromkeys(["hub", *run.task.extras]))
 
 
+def judge_name(run: Run) -> str:
+    return run.task.judge if run.config.judge is None else run.config.judge
+
+
+def judge_args(run: Run, *, bill_to: bool = True) -> list[str]:
+    """`--judge` (always explicit in jobs) and, for a judge, `--bill-to` (router judges bill like teachers)."""
+    name = judge_name(run)
+    args = ["--judge", jobs.q(name)]
+    if name and bill_to and run.config.hub.bill_to:
+        args += ["--bill-to", jobs.q(run.config.hub.bill_to)]
+    return args
+
+
 def profile_files(run: Run) -> dict[str, Path]:
-    """The student, harness and teacher profile files a job needs (staged under profiles/<kind>/)."""
+    """The student, harness, teacher and judge profile files a job needs (staged under profiles/<kind>/)."""
     files = {}
     kinds = [("students", run.config.student), ("harnesses", run.config.harness)]
     if run.config.teacher:
         kinds.append(("teachers", run.config.teacher))
+    if judge_name(run):
+        kinds.append(("judges", judge_name(run)))
     for kind, name in kinds:
         for folder in [*(p / kind for p in run.config.profile_paths), BUILTIN_PROFILES / kind]:
             if (folder / f"{name}.toml").exists():
@@ -185,7 +200,8 @@ def served_job(
         vllm_binary = ["--vllm-binary", '"$(command -v vllm)"']
     else:
         deps.append(f"vllm=={serve.vllm_version}")
-    full = [*common_args(run), "--student", jobs.q(run.config.student), "--model", jobs.q(model), *vllm_binary, *args]
+    full = [*common_args(run), "--student", jobs.q(run.config.student), "--model", jobs.q(model), *vllm_binary, *args,
+            *judge_args(run)]  # fmt: skip
     if adapter:
         full += ["--adapter", jobs.q(adapter), "--adapter-label", jobs.q(label), "--adapter-only"]
     else:
@@ -240,7 +256,7 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
 
 def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minutes: float) -> jobs.Job:
     teacher = teacher_profile(run)
-    full = [*common_args(run), "--teacher", jobs.q(run.config.teacher), *args]
+    full = [*common_args(run), "--teacher", jobs.q(run.config.teacher), *args, *judge_args(run, bill_to=False)]
     if run.config.hub.bill_to:
         full += ["--bill-to", jobs.q(run.config.hub.bill_to)]
     command = "\n".join(
@@ -416,6 +432,7 @@ def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
         "--max-tool-calls",
         str(run.config.eval.max_tool_calls),
         *GRPO_RECIPE,
+        *judge_args(run),
         *[jobs.q(a) for a in grpo.args],
         *[jobs.q(a) for a in settings.args],
         "--launch",

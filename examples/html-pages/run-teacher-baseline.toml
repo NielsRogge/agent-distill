@@ -1,0 +1,26 @@
+# Teacher baseline (DESIGN.md §10, M4): GLM-5.3 and Kimi-K3.1-Pro on the validation concepts in Pi 1.6.0, gated
+# and judged like every later episode. The teacher with the higher pass rate and judge score (weighing in cost per
+# page) becomes the trace teacher.
+#
+#   distill run examples/html-pages/run-teacher-baseline.toml --dry-run
+#   distill run examples/html-pages/run-teacher-baseline.toml --set teacher='"kimi-k3.1-pro"' --dry-run
+task = "."
+teacher = "glm-5.3"
+student = "qwen3.5-9b"  # unused by this run (teacher only), but every run names its student
+harness = "pi@1.6.0"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+
+[eval]
+splits = ["validation"]
+limit = 120  # every validation concept (10 per category)
+timeout = 900
+max_tool_calls = 30
+variants = ["teacher"]
+
+[budget]
+traces_usd = 60  # teacher spend per baseline run (the job stops starting episodes at this)

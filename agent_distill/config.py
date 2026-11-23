@@ -328,6 +328,7 @@ class RunConfig:
     student: str
     harness: str
     teacher: str = ""
+    judge: str | None = None  # judge profile for judge rubrics (None: the task's; "" for none)
     name: str = ""
     stages: list[str] = field(default_factory=lambda: ["eval"])
     hub: HubSettings = field(default_factory=HubSettings)
