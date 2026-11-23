@@ -37,7 +37,7 @@ The library itself must not hardcode `huggingface` or `nielsr`: they belong in t
 
 ## Hub artifacts
 
-- Every artifact a run publishes on the Hugging Face Hub (models, adapters, datasets, trace and evaluation datasets, and Spaces) must be added to the run's collection (`[hub] collection` in its `run.toml`). The examples use the agent-distill collection: https://huggingface.co/collections/nielsr/agent-distill-6b0445568a39b1d979c52e31 (url-extraction's own artifacts stay in its collection). Ask the user before creating another collection.
+- Every artifact a run publishes on the Hugging Face Hub (models, adapters, datasets, trace and evaluation datasets, and Spaces) must be added to the run's collection (`[hub] collection` in its `run.toml`). The examples use the agent-distillation collection: https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31 (url-extraction's own artifacts stay in its collection). Ask the user before creating another collection.
 - Add it when the repo is created, with a one-line note saying what it is (teacher, student, stage, harness).
 - Visibility: models and datasets are public. Spaces, code snapshots (`<run>-code` repos or buckets holding job code) and this GitHub repository stay private.
 - Before making a dataset public, scan it for credentials; `distill publish` does the scan and refuses on a hit.
@@ -55,7 +55,7 @@ Example:
 from huggingface_hub import HfApi
 
 HfApi().add_collection_item(
-    "nielsr/agent-distill-6b0445568a39b1d979c52e31",
+    "nielsr/agent-distillation-6b0445568a39b1d979c52e31",
     item_id="nielsr/<repo>", item_type="model",  # or "dataset" / "space"
     note="Qwen3.5-9B GRPO adapter, opencode@1.2.4 (from SFT on Kimi-K3.1-Pro traces)", exists_ok=True,
 )

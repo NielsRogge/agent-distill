@@ -37,7 +37,7 @@ passed = all_fields_correct and protocol
   `nielsr/paper-url-extraction-v2`.
 - url-extraction's published traces and evaluations: the
   [paper URL agent collection](https://huggingface.co/collections/nielsr/paper-url-agent-frontier-to-small-distillation-6b01c8378db0ff55d524014e).
-- agent-distill's evaluations: the [agent-distill collection](https://huggingface.co/collections/nielsr/agent-distill-6b0445568a39b1d979c52e31)
+- agent-distill's evaluations: the [agent-distillation collection](https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31)
   (parity tier 2: `nielsr/qwen35-9b-paper-urls-parity-opencode-124-eval`; 2.3.2 smoke test:
   `nielsr/qwen35-9b-paper-urls-smoke-opencode-232-eval`).
 

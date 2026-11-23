@@ -12,7 +12,7 @@ stages = ["eval"]
 [hub]
 namespace = "nielsr"
 bill_to = "huggingface"
-collection = "nielsr/agent-distill-6b0445568a39b1d979c52e31"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
 
 [eval]
 splits = ["test"]
