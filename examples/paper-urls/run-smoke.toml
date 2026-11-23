@@ -43,4 +43,4 @@ variants = ["base", "sft", "grpo", "teacher"]
 
 [budget]
 traces_usd = 2
-gpu_usd = 60
+gpu_usd = 75  # per stage; worst case of the 4 eval jobs is $60.4 (each to its 4 h timeout)
