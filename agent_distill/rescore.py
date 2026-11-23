@@ -65,6 +65,7 @@ def rescore(
     *,
     limits: Limits | None = None,
     mode: str = "eval",
+    judge: Any = None,
 ) -> list[Rescored]:
     limits = limits or task.limits
     out: list[Rescored] = []
@@ -74,7 +75,8 @@ def rescore(
         if row is None:
             raise KeyError(f"no label row for {row_id!r}")
         episode = record_to_episode(record, task, row_id)
-        result = task.rubrics.score(episode_context(episode, row, limits=limits, task=task), mode=mode)  # type: ignore[arg-type]
+        context = episode_context(episode, row, limits=limits, task=task, judge=judge)
+        result = task.rubrics.score(context, mode=mode)  # type: ignore[arg-type]
         out.append(Rescored(record, episode, result))
     return out
 
@@ -129,11 +131,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-tool-calls", type=int, help="Tool-call limit the episodes ran with")
     parser.add_argument("--mode", choices=("eval", "train"), default="eval")
     parser.add_argument("--output", type=Path, help="Write the per-file summary as JSON")
+    parser.add_argument("--judge", help="Judge profile for judge rubrics (default: the task's; '' for none)")
+    parser.add_argument("--bill-to", default="", help="HF organization billed for a router judge")
+    parser.add_argument("--judge-cache", type=Path, default=Path("."), help="Folder of the verdict cache")
     args = parser.parse_args(argv)
 
     task = load_task(args.task)
     limits = Limits(timeout=task.limits.timeout, max_tool_calls=args.max_tool_calls or task.limits.max_tool_calls)
     rows = load_rows(task, args.dataset)
+    from agent_distill.rubrics.judge import make_judge_runner
+
+    judge = make_judge_runner(task.judge if args.judge is None else args.judge, cache_dir=args.judge_cache,
+                              bill_to=args.bill_to)  # fmt: skip
     if args.repo:
         from huggingface_hub import hf_hub_download
 
@@ -149,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         if not records or not ({"opencode_messages", "tool_events"} & set(records[0])):
             print(f"skip {name}: not episode records")
             continue
-        summary = summarize(rescore(records, task, rows, limits=limits, mode=args.mode))
+        summary = summarize(rescore(records, task, rows, limits=limits, mode=args.mode, judge=judge))
         report[name] = summary
         print(f"\n## {name}")
         for label, entry in summary.items():
