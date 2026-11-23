@@ -17,7 +17,7 @@ collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
 
 [eval]
 splits = ["validation"]
-limit = 120  # every validation concept (10 per category)
+limit = 60  # every validation concept (5 per category)
 timeout = 900
 max_tool_calls = 30
 variants = ["teacher"]

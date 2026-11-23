@@ -97,6 +97,7 @@ def parse(reply: str) -> list[dict[str, str]]:
 
 async def brainstorm(client: RouterJudge, category: str, target: int, batch: int, budget: float,
                      rng: random.Random) -> list[dict[str, str]]:  # fmt: skip
+    """Batches for one category until `target` concepts, or until the whole run's spend reaches `budget`."""
     concepts: list[dict[str, str]] = []
     for _ in range(target // batch * 3 + 3):  # retries for empty or repetitive batches
         if len(concepts) >= target or client.usage.cost_usd >= budget:
@@ -145,10 +146,8 @@ async def main_async(args: argparse.Namespace) -> None:
                          max_tokens=args.max_tokens, temperature=1.0, timeout=600)  # fmt: skip
     rng = random.Random(args.seed)
     categories = [c for c in CATEGORIES if not args.categories or c in args.categories]
-    per_budget = args.budget_usd / len(categories)
-    results = await asyncio.gather(*(brainstorm(client, category, args.per_category, args.batch,
-                                                per_budget * (i + 1), rng)
-                                     for i, category in enumerate(categories)))  # fmt: skip
+    results = await asyncio.gather(*(brainstorm(client, category, args.per_category, args.batch, args.budget_usd, rng)
+                                     for category in categories))  # fmt: skip
     concepts = dedupe([c for group in results for c in group])  # across categories too
     for concept in concepts:
         concept["concept_id"] = concept_id(concept)
@@ -170,7 +169,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--per-category", type=int, default=20)
     parser.add_argument("--batch", type=int, default=25)
     parser.add_argument("--categories", nargs="*", help="Subset of categories")
-    parser.add_argument("--validation", type=int, default=10, help="Held-out validation concepts per category")
+    parser.add_argument("--validation", type=int, default=5, help="Held-out validation concepts per category")
     parser.add_argument("--test", type=int, default=10, help="Held-out test concepts per category")
     parser.add_argument("--max-tokens", type=int, default=16384)
     parser.add_argument("--budget-usd", type=float, default=2.0)
