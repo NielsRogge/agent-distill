@@ -27,7 +27,9 @@ from agent_distill.config import BUILTIN_PROFILES, UV_IMAGE, RunConfig, load_pro
 from agent_distill.task import Task, load_task
 
 STAGES = ("traces", "sft", "merge", "probe", "grpo", "eval", "publish")
-IMPLEMENTED = STAGES
+# Stages that only redo part of another one (not in a run's default list): `grpo-merge` reruns GRPO's merge.
+PARTIAL_STAGES = ("grpo-merge",)
+IMPLEMENTED = STAGES + PARTIAL_STAGES
 # Expected minutes per episode-slot for the cost estimate (url-extraction evaluations: about 1 min per episode).
 EVAL_MINUTES_PER_EPISODE = 1.5
 VLLM_STARTUP_MINUTES = 15
@@ -604,7 +606,8 @@ def stage_waves(stage: str, run: Run, rev: str) -> list[list[jobs.Job]]:
     """A stage's jobs in waves; each wave waits for the previous one (GRPO, then its merge)."""
     if stage == "grpo":
         return [grpo_jobs(run, rev), grpo_merge_jobs(run, rev)]
-    builders = {"traces": trace_jobs, "sft": sft_jobs, "merge": merge_jobs, "probe": probe_jobs, "eval": eval_jobs}
+    builders = {"traces": trace_jobs, "sft": sft_jobs, "merge": merge_jobs, "probe": probe_jobs, "eval": eval_jobs,
+                "grpo-merge": grpo_merge_jobs}  # fmt: skip
     return [builders[stage](run, rev)]
 
 
@@ -660,7 +663,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     config = load_run(args.run, overrides(args))
     stages = config.stages
-    unknown = [s for s in stages if s not in STAGES]
+    unknown = [s for s in stages if s not in IMPLEMENTED]
     if unknown:
         raise SystemExit(f"unknown stages {unknown}")
     pending = [s for s in stages if s not in IMPLEMENTED]
