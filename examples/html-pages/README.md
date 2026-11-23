@@ -60,3 +60,20 @@ most expensive router provider's prices.
 - **Previewing:** every page that passed had been previewed before it was submitted.
 - **Judge resolution:** the judge (Qwen3.8-27B at the time) gave 7 of the 8 pages it scored 8/10, so it barely
   discriminates. Calibrating it against human labels is the next step.
+
+**Teacher baseline (2026-11-23):** 60 validation concepts per teacher, in Pi, judged by Gemini 4 Hydrogen
+(`run-teacher-baseline.toml`). Passed is the first episode per concept; reruns of episodes cut off by a timeout or
+the output limit are in the records but not in this column.
+
+| Teacher | Passed | Page broken | Judge scores (1–10) | Ended cleanly with `submit` | Cost | Median time |
+|---|---|---|---|---|---|---|
+| Kimi-K3.1-Pro | 56/60 | 4/60 | 7: 2, 8: 23, 9: 34 | 59/63 episodes | $52.67 | 7.0 min |
+| GLM-5.3 | 42/60 | 16/60 | 5–6: 3, 7: 13, 8: 25, 9: 9 | 14/60 first episodes | $36.97 | 10.6 min |
+
+- **Kimi-K3.1-Pro is the teacher.** It almost always previews, fixes and submits within the limits.
+- **GLM-5.3 rarely finishes cleanly.** Of its first episodes, 20 hit the 15-minute timeout, 16 the tool-call limit
+  and 10 the 65k output limit (reasoning before the first tool call). Many still left a good page on disk, which is
+  graded, but those trajectories never submit, so they are poor SFT traces.
+- **Judge resolution:** Hydrogen spreads GLM's pages over 5–9 but puts every Kimi page at 7–9, so it ranks broken or
+  weak pages well and great pages poorly. Calibration against human labels comes next.
+- Datasets: `nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval`, `nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval`.
