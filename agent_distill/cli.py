@@ -1,7 +1,7 @@
 """The `distill` command line.
 
 M0 only wires up the command surface from docs/DESIGN.md §2; each command reports the milestone that
-implements it and exits with status 2.
+implements it and exits with status 3 (`EXIT_NOT_IMPLEMENTED`), distinct from argparse's usage-error status 2.
 """
 
 from __future__ import annotations
@@ -10,6 +10,9 @@ import argparse
 import sys
 
 from agent_distill import __version__
+
+DESCRIPTION = "The `distill` command line."  # not __doc__: `python -OO` strips docstrings
+EXIT_NOT_IMPLEMENTED = 3  # argparse uses 2 for usage errors
 
 # command -> (help, milestone that implements it)
 COMMANDS: dict[str, tuple[str, str]] = {
@@ -22,7 +25,7 @@ COMMANDS: dict[str, tuple[str, str]] = {
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="distill", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(prog="distill", description=DESCRIPTION)
     parser.add_argument("--version", action="version", version=f"agent-distill {__version__}")
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
     for name, (help_text, _) in COMMANDS.items():
@@ -39,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     milestone = COMMANDS[args.command][1]
     message = f"distill {args.command}: not implemented yet (milestone {milestone}, see docs/DESIGN.md §14)"
     print(message, file=sys.stderr)
-    return 2
+    return EXIT_NOT_IMPLEMENTED
 
 
 if __name__ == "__main__":
