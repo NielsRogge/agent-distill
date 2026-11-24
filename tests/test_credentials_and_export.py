@@ -137,3 +137,70 @@ def test_pi_session_without_timestamps():
                  tool_events=[ToolEvent(kind="submit", name="submit")])  # fmt: skip
     lines = episode_to_pi_session(ep)
     assert lines[0]["timestamp"].endswith("Z") and lines[-1]["message"]["role"] == "assistant"
+
+
+# --------------------------------------------------------------------------------------------------
+# Review fixes: line breaks, redaction boundaries, header metadata, truncation
+# --------------------------------------------------------------------------------------------------
+
+LINE_BREAKS = "\u2028\u2029\x85\x0b\x0c\x1c\x1d\x1e\r"
+
+
+def test_record_line_escapes_every_splitlines_break():
+    record = {"output": f"a{LINE_BREAKS}b", "nested": [{"x": "\u2028"}]}
+    line = record_line(record)
+    assert line.endswith("\n") and len(line.splitlines()) == 1
+    assert json.loads(line) == record
+
+
+def test_write_session_escapes_line_breaks_and_redacts(tmp_path):
+    lines = [{"type": "session", "note": f"x{LINE_BREAKS}y"}, {"type": "message", "text": f"\n{HF}"}]
+    path = tmp_path / "s.jsonl"
+    write_session(lines, path)
+    text = path.read_text(encoding="utf-8")
+    assert len(text.splitlines()) == 2 and HF not in text
+    assert json.loads(text.splitlines()[0])["note"] == f"x{LINE_BREAKS}y"
+
+
+def test_redaction_after_json_escapes_and_colour_codes():
+    sk = "sk-" + "Q" * 24
+    for prefix in ("\n", "\x1b[0m", "A", "token="):
+        line = record_line({"out": f"{prefix}{HF} {prefix}{GOOGLE} {prefix}{PAT}"})
+        assert HF not in line and GOOGLE not in line and PAT not in line, prefix
+    for prefix in ("\n", "\x1b[0m", " ", "="):
+        assert sk not in record_line({"out": f"{prefix}{sk}"}), prefix
+    assert "task-" + "b" * 30 in record_line({"out": "task-" + "b" * 30})  # words with "sk-" inside stay
+
+
+def test_pi_session_header_metadata_is_redacted():
+    ep = Episode(task="t", row_id="r", harness="opencode", harness_version="1.2.4", model="m",
+                 messages=[{"role": "user", "content": "q"}],
+                 metadata={"failure_reason": f"provider error: invalid key {HF}"})  # fmt: skip
+    header = episode_to_pi_session(ep)[0]
+    assert HF not in json.dumps(header) and "REDACTED" in header["failure_reason"]
+
+
+def test_tool_output_is_redacted_before_truncation():
+    from agent_distill.export.pi_session import MAX_TOOL_OUTPUT_CHARS
+
+    # The token straddles the truncation limit: truncating first would leave a partial token unredacted.
+    output = "x" * (MAX_TOOL_OUTPUT_CHARS - 10) + HF + "tail"
+    ep = Episode(task="t", row_id="r", harness="opencode", harness_version="1.2.4", model="m",
+                 messages=[{"role": "tool", "tool_call_id": "c", "content": output}])  # fmt: skip
+    lines = episode_to_pi_session(ep)
+    text = lines[-1]["message"]["content"][0]["text"]
+    assert HF[:12] not in text and "truncated" not in text[:MAX_TOOL_OUTPUT_CHARS]
+
+
+def test_v1_reader_uses_the_record_opencode_version():
+    from pydantic import BaseModel
+
+    from agent_distill.harnesses.opencode_v1_reader import episode_from_record
+
+    class Answer(BaseModel):
+        x: int
+
+    record = {"opencode_messages": opencode_messages(), "model": "m", "opencode_version": "1.3.0"}
+    assert episode_from_record(record, answer_model=Answer, task="t", row_id="r").harness_version == "1.3.0"
+    del record["opencode_version"]
+    assert episode_from_record(record, answer_model=Answer, task="t", row_id="r").harness_version == "1.2.4"

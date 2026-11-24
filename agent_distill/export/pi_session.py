@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from agent_distill.credentials import redact_credentials
+from agent_distill.credentials import jsonl_line, redact_credentials
 from agent_distill.episode import Episode
 
 MAX_TOOL_OUTPUT_CHARS = 60_000
@@ -87,6 +87,8 @@ def episode_to_pi_session(
         "model": episode.model,
         **{key: value for key, value in episode.metadata.items() if isinstance(value, str | int | float | bool)},
     }
+    # Metadata strings (e.g. `failure_reason` with a provider's error text) can carry credentials.
+    header = _redact_value(header)
     lines: list[dict[str, Any]] = [header]
     parent: str | None = None
     counter = 0
@@ -129,7 +131,7 @@ def episode_to_pi_session(
             "timestamp": meta.get("timestamp"),
         }
         if meta.get("error"):
-            message["errorMessage"] = redact_credentials(json.dumps(meta["error"], ensure_ascii=False)[:2000])
+            message["errorMessage"] = redact_credentials(json.dumps(meta["error"], ensure_ascii=False))[:2000]
         add({"type": "message", "message": message}, meta.get("timestamp"))
         pending_meta, pending_content, pending_calls = None, [], []
 
@@ -188,7 +190,8 @@ def episode_to_pi_session(
                 pending_calls.append(call)
         elif role == "tool":
             flush_assistant()
-            text = str(message.get("content") or "")
+            # Redact before truncating, so a token cut at the limit cannot leak partially.
+            text = redact_credentials(str(message.get("content") or ""))
             if len(text) > MAX_TOOL_OUTPUT_CHARS:
                 text = (
                     text[:MAX_TOOL_OUTPUT_CHARS]
@@ -240,10 +243,8 @@ def _jsonable(value: Any) -> Any:
 
 
 def write_session(lines: Iterable[dict[str, Any]], path: Path) -> None:
+    """Write session lines as JSONL that `str.splitlines()` splits correctly, with credentials redacted."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         for line in lines:
-            try:
-                handle.write(json.dumps(line, ensure_ascii=False) + "\n")
-            except UnicodeEncodeError:  # lone surrogates from paper text
-                handle.write(json.dumps(line) + "\n")
+            handle.write(jsonl_line(line) + "\n")

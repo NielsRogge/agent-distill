@@ -11,6 +11,7 @@ can be reproduced through the library (DESIGN.md §9).
 | `rubrics.py` | URL correctness (canonical URLs, reference aliases), research protocol (process rubric on normalized tool kinds), shortcut guard (`train_only`), tool-efficiency bonus; the reward and `passed` |
 | `system_prompt.txt` | Identical to url-extraction's `harness/system_prompt.txt` |
 | `parity/tier1.py` | Parity tier 1: both scorers on every published record |
+| `parity/make_fixture.py` | Builds `tests/fixtures/paper_urls_published.jsonl`, the tier-1 CI fixture of real published records |
 
 Ported from url-extraction commit `9fb9a39` (`harness/task.py`, `harness/scoring.py`).
 
@@ -55,6 +56,19 @@ baseline and every trace file (GLM-5.2, Kimi-K3.1-Pro, Inkling-2-Small incl. rej
 tool-call limit each ran with (20 for teacher trace generation, 15 otherwise). The accepted-trace counts come out as
 published (102, 873, 815, 1,215), and `distill rescore` reproduces the README numbers, e.g. Qwen3.5-9B on test:
 base 75.0%, SFT 85.7%, SFT + GRPO 82.1% field accuracy with 6.8 / 3.8 / 3.0 tool calls.
+
+In CI, `tests/test_parity_fixture.py` rescores 12 real published records (every outcome: passed, wrong field,
+incomplete, no answer, tool-call limit; limits 15 and 20; `test_hard` labels from v2) and checks them against the
+verdicts *stored in the records* (`verification.fields`, `attempt_complete`, `accepted`). When the fixture was
+built, the stored verdicts agreed with both scorers on 443 of 445 records of its five source files; the 2 others
+(`teacher-test-kimi-k31.jsonl`) were written by an earlier url-extraction scorer revision, and url-extraction's own
+current rescoring agrees with ours on them. Tier 1 therefore compares against url-extraction's scorer at the
+revision the port is taken from (`9fb9a39`), not against every stored verdict.
+
+`distill rescore` picks each record's tool-call limit (from the record, else the task's `record_limits`: 20 for
+`train*`/`distill*` trace files, 15 otherwise), reads labels with v1 first and v2 only for papers v1 lacks (as
+tier 1), and prints the per-field URL accuracy pooled over all fields (the published `field_accuracy`) next to the
+per-episode mean.
 
 Run tier 1 (CPU; downloads about 1.1 GB of public records):
 
