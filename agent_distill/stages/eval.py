@@ -5,10 +5,11 @@
 
 Serves `--model` (and, with `--adapter`, a LoRA on top of it; both labels run on the same rows), runs every
 selected row in the pinned harness with credentials stripped from the agent's environment, scores each episode with
-the task's rubric set (eval mode), and writes records, raw logs, Pi sessions and a summary, published to a private
-dataset (the publish stage makes it public after a credential scan). An episode whose harness broke (e.g. its
-shell could not spawn) is not recorded; the harness restarts and the row is run again. Ported from url-extraction's
-`evaluate_vllm.py`.
+the task's rubric set (eval mode), and writes records, Pi sessions and a summary, published to a private dataset
+(the publish stage makes it public after a credential scan), and the raw harness logs, published to a separate
+always-private `-raw` dataset. Whatever finished is published even when the job fails part-way. An episode whose
+harness broke (its shell could not spawn, its server died) is not recorded; the harness restarts and the row is run
+again. Ported from url-extraction's `evaluate_vllm.py`.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ import shlex
 import shutil
 import signal
 import subprocess
-import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -30,9 +30,9 @@ from pathlib import Path
 from typing import Any
 
 from agent_distill.config import Student, load_profile
-from agent_distill.harnesses.base import Endpoint, load_harness
+from agent_distill.harnesses.base import Endpoint, HarnessError, default_cache, load_harness
 from agent_distill.harnesses.opencode import harness_failure
-from agent_distill.records import RecordWriter, read_jsonl, summarize_records
+from agent_distill.records import RecordWriter, raw_root_for, read_jsonl, summarize_records
 from agent_distill.rubrics import episode_context
 from agent_distill.task import Limits, Task, load_task
 
@@ -154,7 +154,7 @@ async def run_label(
     *,
     limits: Limits,
     concurrency: int,
-    cache: Path,
+    cache: Path | None = None,
     max_restarts: int = 3,
     extra: dict[str, Any] | None = None,
 ) -> None:
@@ -181,36 +181,71 @@ async def _run_once(
     writer: RecordWriter,
     limits: Limits,
     concurrency: int,
-    cache: Path,
+    cache: Path | None,
     extra: dict[str, Any] | None,
 ) -> bool:
-    """Run `pending` on one fresh harness. Returns True when the harness broke (the rest is left for a restart)."""
+    """Run `pending` on one fresh harness. Returns True when the harness broke (the rest is left for a restart).
+
+    A harness failure (an episode's shell could not spawn, the server died or did not start: `HarnessError`) is not
+    recorded and stops this harness; episodes that finished are already written.
+    """
     broken = asyncio.Event()
     semaphore = asyncio.Semaphore(concurrency)
-    async with harness.session([endpoint], cache=cache, task=task) as runner:
 
-        async def run_row(index: int, row: dict) -> None:
-            async with semaphore:
-                if broken.is_set():
-                    return
-                episode = await harness.run_episode(runner, task, row, endpoint, limits)
-                if failure := harness_failure(episode):
-                    print(f"  [{label}] {episode.row_id}: harness failure, not recorded: {failure}", flush=True)
-                    broken.set()
-                    return
-                context = episode_context(episode, row, limits=limits, task=task)
-                result = await task.rubrics.ascore(context, mode="eval")
-                writer.write(episode, result, harness.native_trace(episode), label=label, **(extra or {}))
-                print(
-                    f"[{label} {index}/{len(pending)}] {episode.row_id} passed={result.passed} "
-                    f"reward={result.reward} tools={episode.tool_calls} failure={episode.failure}",
-                    flush=True,
-                )
+    def harness_broke(row_id: str, reason: str) -> None:
+        print(f"  [{label}] {row_id}: harness failure, not recorded: {reason}", flush=True)
+        broken.set()
 
-        await asyncio.gather(*(run_row(i, row) for i, row in enumerate(pending, 1)))
-        if not broken.is_set():
-            await harness.healthy(runner)
+    try:
+        async with harness.session([endpoint], cache=cache, task=task) as runner:
+            await _run_rows(harness, runner, task, pending, endpoint, label, writer, limits, semaphore, broken,
+                            harness_broke, extra)  # fmt: skip
+            if not broken.is_set():
+                try:
+                    await harness.healthy(runner)
+                except Exception as exc:
+                    harness_broke("-", f"health check failed: {type(exc).__name__}: {exc}")
+    except HarnessError as exc:  # the harness did not start (or failed while stopping)
+        harness_broke("-", str(exc))
     return broken.is_set()
+
+
+async def _run_rows(
+    harness: Any,
+    runner: Any,
+    task: Task,
+    pending: list[dict],
+    endpoint: Endpoint,
+    label: str,
+    writer: RecordWriter,
+    limits: Limits,
+    semaphore: asyncio.Semaphore,
+    broken: asyncio.Event,
+    harness_broke: Any,
+    extra: dict[str, Any] | None,
+) -> None:
+    async def run_row(index: int, row: dict) -> None:
+        async with semaphore:
+            if broken.is_set():
+                return
+            try:
+                episode = await harness.run_episode(runner, task, row, endpoint, limits)
+            except HarnessError as exc:
+                harness_broke(task.row_id(row), str(exc))
+                return
+            if failure := harness_failure(episode):
+                harness_broke(episode.row_id, failure)
+                return
+            context = episode_context(episode, row, limits=limits, task=task)
+            result = await task.rubrics.ascore(context, mode="eval")
+            writer.write(episode, result, harness.native_trace(episode), label=label, **(extra or {}))
+            print(
+                f"[{label} {index}/{len(pending)}] {episode.row_id} passed={result.passed} "
+                f"reward={result.reward} tools={episode.tool_calls} failure={episode.failure}",
+                flush=True,
+            )
+
+    await asyncio.gather(*(run_row(i, row) for i, row in enumerate(pending, 1)))
 
 
 # --------------------------------------------------------------------------------------------------
@@ -231,21 +266,66 @@ def dataset_card(repo: str, harness_id: str, task: str) -> str:
         "- `sessions/`: one Pi-format session per episode, opened by the Hub's "
         "[agent-traces viewer](https://huggingface.co/docs/hub/en/agent-traces) (default config).\n"
         "- `episodes/`: one record per episode (answer, rubric scores, reward, tool events, messages).\n"
-        "- `raw/`: the harness's own messages per episode.\n"
         "- `summaries/`: evaluation summaries.\n\n"
-        "Credential-shaped strings are redacted in every file.\n"
+        "The harness's own raw messages are kept in a separate private dataset for rescoring; they are never "
+        "published. Credential-shaped strings are redacted in every file.\n"
     )
 
 
-def publish(output_dir: Path, repo: str, harness_id: str, task: str) -> None:
+def private_dataset(api: Any, repo: str) -> bool:
+    """Create `repo` as a private dataset, or check that the existing one is private. Returns True when created.
+
+    `create_repo(private=True, exist_ok=True)` leaves an existing public repo public, so unscanned episodes would be
+    uploaded straight into a public dataset: refuse instead.
+    """
+    from huggingface_hub.utils import RepositoryNotFoundError
+
+    try:
+        info = api.repo_info(repo, repo_type="dataset")
+    except RepositoryNotFoundError:
+        api.create_repo(repo, repo_type="dataset", private=True, exist_ok=True)
+        info, created = api.repo_info(repo, repo_type="dataset"), True
+    else:
+        created = False
+    if not info.private:
+        raise SystemExit(
+            f"{repo} is public: refusing to upload unscanned episodes into it. Use a new repo name, or make it "
+            "private and run `distill run ... --stages publish` after the upload to scan and publish it again."
+        )
+    return created
+
+
+def publish(
+    output_dir: Path,
+    repo: str,
+    harness_id: str,
+    task: str,
+    *,
+    raw_dir: Path | None = None,
+    raw_repo: str = "",
+    collection: str = "",
+    note: str = "",
+) -> None:
+    """Upload the episodes, sessions and summaries to the private `repo` (public only after `distill publish`) and
+    the raw logs to the always-private `raw_repo`. A newly created `repo` is added to `collection` at once."""
     from huggingface_hub import HfApi
 
     api = HfApi()
-    api.create_repo(repo, repo_type="dataset", private=True, exist_ok=True)  # public only after `distill publish`
+    if raw_dir is not None and raw_dir.exists() and any(raw_dir.rglob("*.jsonl")):
+        if not raw_repo:
+            raise SystemExit("raw harness logs need a private --raw-repo; they never go into the episode dataset")
+        private_dataset(api, raw_repo)
+        api.upload_folder(folder_path=str(raw_dir), repo_id=raw_repo, repo_type="dataset",
+                          commit_message=f"agent-distill raw harness logs ({harness_id})")  # fmt: skip
+        print(f"published raw logs to {raw_repo} (private, never published)", flush=True)
+    created = private_dataset(api, repo)
+    if created and collection:
+        api.add_collection_item(collection, item_id=repo, item_type="dataset", note=note or f"{task}, {harness_id}",
+                                exists_ok=True)  # fmt: skip
     files = set(api.list_repo_files(repo, repo_type="dataset"))
     if "README.md" not in files:
         (output_dir / "README.md").write_text(dataset_card(repo, harness_id, task))
-    api.upload_folder(folder_path=str(output_dir), repo_id=repo, repo_type="dataset",
+    api.upload_folder(folder_path=str(output_dir), repo_id=repo, repo_type="dataset", ignore_patterns=["raw/**"],
                       commit_message=f"agent-distill evaluation ({harness_id})")  # fmt: skip
     print(f"published {output_dir} to {repo} (private)", flush=True)
 
@@ -276,7 +356,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("/eval"))
     parser.add_argument("--prefix", default="", help="File prefix, e.g. 'base/test' (default: <label>/<split>)")
     parser.add_argument("--output-repo", default="", help="Dataset to publish to (private); '' keeps files local")
-    parser.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "agent-distill-cache")
+    parser.add_argument("--raw-output-dir", type=Path, help="Raw harness logs (default: <output-dir>-raw)")
+    parser.add_argument("--raw-repo", default="", help="Always-private raw-log dataset (default: <output-repo>-raw)")
+    parser.add_argument("--collection", default="", help="Collection to add a newly created --output-repo to")
+    parser.add_argument("--collection-note", default="")
+    parser.add_argument("--answer-retry", action="store_true",
+                        help="OpenCode 2.x: ask once for the JSON answer when an episode ends without one")  # fmt: skip
+    parser.add_argument("--cache", type=Path, default=None, help="Binary cache (default: the per-user cache)")
     parser.add_argument("--vllm-binary", default="vllm")
     parser.add_argument("--no-serve", action="store_true", help="Use an already running vLLM on port 8000")
     return parser.parse_args(argv)
@@ -287,7 +373,9 @@ def main(argv: list[str] | None = None) -> None:
     task = load_task(args.task)
     student = load_profile("students", args.student, args.profiles)
     profile = load_profile("harnesses", args.harness, args.profiles)
-    harness = load_harness(profile)
+    harness = load_harness(profile, **({"answer_retry": True} if args.answer_retry else {}))
+    cache = args.cache or default_cache()
+    raw_dir = args.raw_output_dir or raw_root_for(args.output_dir)
     limits = Limits(timeout=args.timeout, max_tool_calls=args.max_tool_calls)
     rows = select_rows(
         task, args.split, start=args.start, limit=args.limit, row_ids=[r for r in args.row_ids.split(",") if r] or None
@@ -301,7 +389,7 @@ def main(argv: list[str] | None = None) -> None:
         from huggingface_hub import snapshot_download
 
         snapshot = args.adapter if Path(args.adapter).is_dir() else snapshot_download(args.adapter)
-        adapter_path = prepare_text_adapter(snapshot, args.cache / "text-adapter", student.lora.adapter_converter)
+        adapter_path = prepare_text_adapter(snapshot, cache / "text-adapter", student.lora.adapter_converter)
     serve = student.serve
     base_url = f"http://127.0.0.1:{VLLM_PORT}/v1"
     targets: list[tuple[str, Endpoint]] = []
@@ -324,7 +412,7 @@ def main(argv: list[str] | None = None) -> None:
             wait_for_vllm(server)
         for label, endpoint in targets:
             prefix = args.prefix or f"{label}/{args.split}"
-            writer = RecordWriter(args.output_dir, prefix)
+            writer = RecordWriter(args.output_dir, prefix, raw_dir)
             extra = {"split": args.split, "served_model": args.model if label == args.label else args.adapter}
             asyncio.run(
                 run_label(
@@ -336,7 +424,7 @@ def main(argv: list[str] | None = None) -> None:
                     writer,
                     limits=limits,
                     concurrency=args.concurrency,
-                    cache=args.cache,
+                    cache=cache,
                     extra=extra,
                 )
             )
@@ -350,8 +438,11 @@ def main(argv: list[str] | None = None) -> None:
     finally:
         if server is not None:
             stop_process(server)
-    if args.output_repo:
-        publish(args.output_dir, args.output_repo, profile.id, task.name)
+        # Publish whatever finished, also when a label failed part-way (the error still ends the job).
+        if args.output_repo and any((args.output_dir / "episodes").rglob("*.jsonl")):
+            publish(args.output_dir, args.output_repo, profile.id, task.name, raw_dir=raw_dir,
+                    raw_repo=args.raw_repo or f"{args.output_repo}-raw", collection=args.collection,
+                    note=args.collection_note)  # fmt: skip
 
 
 if __name__ == "__main__":

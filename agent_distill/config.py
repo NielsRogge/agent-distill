@@ -264,6 +264,7 @@ class EvalSettings:
     max_tool_calls: int = 15
     # label -> "model[+adapter]"; default: {"base": the student}
     models: dict[str, str] = field(default_factory=dict)
+    answer_retry: bool = False  # OpenCode 2.x: ask once for the JSON answer when an episode ends without one
 
 
 @dataclass

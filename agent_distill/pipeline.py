@@ -99,9 +99,13 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
                 "--profiles", "/work/profiles", "--split", jobs.q(split), "--limit", str(settings.limit),
                 "--concurrency", str(settings.concurrency), "--timeout", str(settings.timeout),
                 "--max-tool-calls", str(settings.max_tool_calls), "--output-dir", "/eval",
-                "--output-repo", jobs.q(run.repo("eval")), "--cache", "/work/cache", "--model", jobs.q(model),
-                *vllm_binary,
+                "--output-repo", jobs.q(run.repo("eval")), "--raw-repo", jobs.q(run.repo("eval-raw")),
+                "--cache", "/work/cache", "--model", jobs.q(model), *vllm_binary,
             ]  # fmt: skip
+            if config.hub.collection:
+                args += ["--collection", jobs.q(config.hub.collection), "--collection-note", jobs.q(eval_note(run))]
+            if settings.answer_retry:
+                args.append("--answer-retry")
             if adapter:
                 args += ["--adapter", jobs.q(adapter), "--adapter-label", jobs.q(label), "--adapter-only"]
             else:
@@ -128,11 +132,20 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
     return built
 
 
-def artifacts(run: Run) -> list[tuple[str, str, str]]:
-    """(repo, type, collection note) of everything a run publishes (M2: the evaluation dataset)."""
+def eval_note(run: Run) -> str:
     pair = " -> ".join(p for p in (run.config.teacher, run.config.student) if p)
     harness = load_profile("harnesses", run.config.harness, run.config.profile_paths).id
-    return [(run.repo("eval"), "dataset", f"{run.task.name}, {pair}, {harness}: evaluation episodes")]
+    return f"{run.task.name}, {pair}, {harness}: evaluation episodes"
+
+
+def artifacts(run: Run) -> list[tuple[str, str, str]]:
+    """(repo, type, collection note) of everything a run publishes (M2: the evaluation dataset)."""
+    return [(run.repo("eval"), "dataset", eval_note(run))]
+
+
+def private_repos(run: Run) -> list[tuple[str, str]]:
+    """(repo, type) of the repos that stay private forever: the code snapshots and the raw harness logs."""
+    return [(run.repo("code"), "model"), (run.repo("eval-raw"), "dataset")]
 
 
 def credential_files(api: Any, repo: str, files: list[str]) -> list[str]:
@@ -152,14 +165,23 @@ def credential_files(api: Any, repo: str, files: list[str]) -> list[str]:
 
 
 def publish(run: Run, *, dry_run: bool) -> None:
-    """Credential-scan datasets, make models and datasets public, add everything to the collection; the code repo
-    must stay private. Nothing is ever deleted."""
+    """Credential-scan datasets, add everything to the collection, then make models and datasets public. Code and
+    raw-log repos must stay private and are never touched; a dataset holding raw logs is never made public. Nothing
+    is ever deleted."""
     from huggingface_hub import HfApi
     from huggingface_hub.utils import RepositoryNotFoundError
 
     api = HfApi()
     collection = run.config.hub.collection
+    for repo, kind in private_repos(run):
+        try:
+            if not api.repo_info(repo, repo_type=kind).private:
+                raise SystemExit(f"{repo} must stay private; make it private and revoke any token it may hold")
+        except RepositoryNotFoundError:
+            pass
     for repo, kind, note in artifacts(run):
+        if repo.endswith("-raw") or repo in {r for r, _ in private_repos(run)}:
+            raise SystemExit(f"{repo} holds raw logs or code and is never published")
         try:
             info = api.repo_info(repo, repo_type=kind)
         except RepositoryNotFoundError:
@@ -167,24 +189,21 @@ def publish(run: Run, *, dry_run: bool) -> None:
             continue
         if kind == "dataset":
             files = api.list_repo_files(repo, repo_type="dataset")
+            if any(name.startswith("raw/") for name in files):
+                raise SystemExit(f"{repo} contains raw harness logs (raw/); it stays private")
             if not any(name.startswith("sessions/") for name in files):
                 raise SystemExit(f"{repo} has no agent-trace sessions; it stays private")
             leaks = credential_files(api, repo, files)
             if leaks:
                 raise SystemExit(f"{repo} contains credential-shaped strings in {leaks[:5]}; it stays private")
         if dry_run:
-            print(f"[dry-run] {repo}: scan passed; private={info.private} -> public; collection note: {note}")
+            print(f"[dry-run] {repo}: scan passed; collection note: {note}; private={info.private} -> public")
             continue
+        if collection:  # in the collection before it becomes public
+            api.add_collection_item(collection, item_id=repo, item_type=kind, note=note, exists_ok=True)
         if info.private:
             api.update_repo_settings(repo, repo_type=kind, private=False)
-        if collection:
-            api.add_collection_item(collection, item_id=repo, item_type=kind, note=note, exists_ok=True)
         print(f"published {repo} ({kind})" + (f" in {collection}" if collection else ""), flush=True)
-    try:
-        if not api.repo_info(run.repo("code")).private:
-            raise SystemExit(f"{run.repo('code')} must stay private")
-    except RepositoryNotFoundError:
-        pass
 
 
 # --------------------------------------------------------------------------------------------------
@@ -255,7 +274,11 @@ def main(argv: list[str] | None = None) -> int:
     if job_stages:
         manifest = {"run": dataclasses.asdict(config), "name": run.name, "git_commit": jobs.git_commit(),
                     "task": run.task.name, "task_version": run.task.version,
-                    "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}  # fmt: skip
+                    "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "residual_risks": list(jobs.RESIDUAL_RISKS)}  # fmt: skip
+        if args.dry_run:
+            for risk in jobs.RESIDUAL_RISKS:
+                print(f"[dry-run] residual risk: {risk}")
         extra = []
         if not args.dry_run:
             import shutil
