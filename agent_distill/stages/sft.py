@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_distill.config import QWEN35_TEXT_LORA_TARGETS, load_profile
+from agent_distill.hub_collection import join_collection
 from agent_distill.records import read_jsonl
 from agent_distill.task import load_task
 
@@ -208,7 +209,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--allow-harness-mismatch", action="store_true")
     parser.add_argument("--model", help="Student checkpoint (default: the profile's model)")
     parser.add_argument("--output", type=Path, default=Path("/sft/adapter"))
-    parser.add_argument("--hub-model-id", default="", help="Push the adapter (private until publish)")
+    parser.add_argument("--hub-model-id", default="", help="Push the adapter (a public model repo)")
+    parser.add_argument("--collection", default="", help="Collection the pushed model joins")
+    parser.add_argument("--collection-note", default="", help="Its one-line note in the collection")
     parser.add_argument("--max-length", type=int, default=8192)
     parser.add_argument("--max-steps", type=int, default=-1, help="Stop after N optimizer steps (smoke runs)")
     parser.add_argument("--batch-size", type=int, default=1)
@@ -336,7 +339,7 @@ def train(args: argparse.Namespace, student: Any, model_id: str, tokenizer: Any,
             report_to="none",
             push_to_hub=bool(args.hub_model_id),
             hub_model_id=args.hub_model_id or None,
-            hub_private_repo=True,  # models go public through `distill publish`
+            hub_private_repo=False,  # models are public from the start (no episode data)
             hub_strategy="checkpoint" if args.hub_model_id else "every_save",
             model_init_kwargs=model_init_kwargs,
         ),
@@ -346,7 +349,8 @@ def train(args: argparse.Namespace, student: Any, model_id: str, tokenizer: Any,
     tokenizer.save_pretrained(str(args.output))
     if args.hub_model_id:
         trainer.push_to_hub()
-        print(f"pushed the adapter to {args.hub_model_id} (private)", flush=True)
+        print(f"pushed the adapter to {args.hub_model_id}", flush=True)
+        join_collection(args.hub_model_id, "model", args.collection, args.collection_note)
 
 
 if __name__ == "__main__":
