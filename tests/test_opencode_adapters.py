@@ -14,6 +14,7 @@ import asyncio
 import fnmatch
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -485,12 +486,14 @@ def test_version_parsing_and_profiles() -> None:
 
 
 @pytest.mark.skipif(not os.environ.get("AGENT_DISTILL_REAL_OPENCODE"), reason="set AGENT_DISTILL_REAL_OPENCODE=1")
+@pytest.mark.parametrize("keyed", [False, True], ids=["local", "keyed-via-proxy"])
 @pytest.mark.parametrize("profile", [V1, V2], ids=["1.2.4", "2.3.2"])
-def test_real_opencode_against_a_fake_model(profile, tmp_path, monkeypatch) -> None:
+def test_real_opencode_against_a_fake_model(profile, keyed, tmp_path, monkeypatch) -> None:
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     requests: list[dict[str, Any]] = []
+    authorizations: list[str | None] = []
     answer = {"reasoning": "x", "github_url": None, "project_page_url": None}
 
     class Model(BaseHTTPRequestHandler):
@@ -500,6 +503,7 @@ def test_real_opencode_against_a_fake_model(profile, tmp_path, monkeypatch) -> N
         def do_POST(self) -> None:
             request = json.loads(self.rfile.read(int(self.headers["content-length"])))
             requests.append(request)
+            authorizations.append(self.headers.get("authorization"))
             self.send_response(200)
             self.send_header("content-type", "text/event-stream")
             self.end_headers()
@@ -523,6 +527,9 @@ def test_real_opencode_against_a_fake_model(profile, tmp_path, monkeypatch) -> N
     threading.Thread(target=model_server.serve_forever, daemon=True).start()
     monkeypatch.setenv("HF_TOKEN", "hf_should_not_leak_into_the_agent_env")
     endpoint = Endpoint(base_url=f"http://127.0.0.1:{model_server.server_address[1]}/v1", model="policy")
+    if keyed:  # a teacher-style endpoint: the real key stays in the stage process, behind the key proxy
+        monkeypatch.setenv("FAKE_TEACHER_KEY", "real-teacher-key-xyz")
+        endpoint = replace(endpoint, key_env="FAKE_TEACHER_KEY")
     harness = load_harness(profile)
     cache = Path(os.environ.get("AGENT_DISTILL_CACHE", tmp_path))
     row = ROW_OF["correct_and_complete"]
@@ -548,3 +555,5 @@ def test_real_opencode_against_a_fake_model(profile, tmp_path, monkeypatch) -> N
         assert tools == ["StructuredOutput", "bash", "glob", "grep", "read", "webfetch"]
         assert episode.answer_mode == "native"
     assert "hf_should_not_leak" not in json.dumps(requests)
+    if keyed:
+        assert authorizations and all(a == "Bearer real-teacher-key-xyz" for a in authorizations)
