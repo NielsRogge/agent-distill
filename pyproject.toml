@@ -4,7 +4,13 @@ version = "0.0.1"
 description = "Distill frontier agents running in real agent harnesses (OpenCode, Pi) into small fine-tuned open models with TRL, OpenEnv and Hugging Face Jobs."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "huggingface-hub>=1.13.0",
+  "pydantic>=2.10,<3",
+]
+
+[project.optional-dependencies]
+hub = ["datasets>=4.0.0"]  # label datasets for rescoring
 
 [project.scripts]
 distill = "agent_distill.cli:main"

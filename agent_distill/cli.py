@@ -1,7 +1,7 @@
 """The `distill` command line.
 
-M0 only wires up the command surface from docs/DESIGN.md §2; each command reports the milestone that
-implements it and exits with status 3 (`EXIT_NOT_IMPLEMENTED`), distinct from argparse's usage-error status 2.
+Commands not implemented yet report the milestone that implements them (docs/DESIGN.md §14) and exit with
+status 3 (`EXIT_NOT_IMPLEMENTED`), distinct from argparse's usage-error status 2.
 """
 
 from __future__ import annotations
@@ -33,9 +33,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# Implemented commands parse their own arguments.
+IMPLEMENTED = {"rescore": "agent_distill.rescore:main"}
+
+
 def main(argv: list[str] | None = None) -> int:
+    items = list(sys.argv[1:] if argv is None else argv)
+    if items and items[0] in IMPLEMENTED:
+        from agent_distill.hooks import resolve
+
+        return int(resolve(IMPLEMENTED[items[0]])(items[1:]) or 0)
     parser = build_parser()
-    args, _unparsed = parser.parse_known_args(argv)  # stubs accept and ignore their future arguments
+    args, _unparsed = parser.parse_known_args(items)  # stubs accept and ignore their future arguments
     if args.command is None:
         parser.print_help()
         return 0

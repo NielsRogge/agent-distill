@@ -177,7 +177,7 @@ Task(
         filter=fully_scoreable,                # row -> bool
     ),
     system_prompt=Path("system_prompt.txt"),   # None keeps the harness default
-    prompt=user_prompt,                        # row -> str, or a Jinja template string
+    prompt=user_prompt,                        # row -> str, or a str.format template over the row
     answer=URLFindings,                        # pydantic model: JSON schema + validation; or FileAnswer("index.html")
     rubrics=RUBRICS,                           # RubricSet (§4)
     tools=["shell", "fetch", "read", "search"],  # normalized kinds; adapters map them to native tools

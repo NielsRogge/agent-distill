@@ -7,3 +7,7 @@ build/
 .pytest_cache/
 .ruff_cache/
 .env
+
+# Agent-local state (settings, worktrees)
+.claude/settings.local.json
+.claude/worktrees/
