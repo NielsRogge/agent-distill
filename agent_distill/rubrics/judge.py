@@ -154,9 +154,11 @@ def parse_criteria(reply: str, spec: JudgeSpec) -> dict[str, float]:
     low, high = spec.scale
     found: dict[str, float] = {}
     for name in spec.criteria:
-        match = re.search(rf"(?i)\b{re.escape(name)}\s*[:=]\s*(-?\d+(?:\.\d+)?)", reply)
-        if match and low <= float(match.group(1)) <= high and high != low:
-            found[name] = (float(match.group(1)) - low) / (high - low)
+        # The last mention wins (a reply may discuss a criterion before giving its final value), and markdown around
+        # the name or the number ("**visual_quality:** 8") is allowed.
+        matches = re.findall(rf"(?i)\b{re.escape(name)}\**\s*[:=]\s*\**\s*(-?\d+(?:\.\d+)?)", reply)
+        if matches and low <= float(matches[-1]) <= high and high != low:
+            found[name] = (float(matches[-1]) - low) / (high - low)
     return found
 
 

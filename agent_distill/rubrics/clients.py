@@ -35,6 +35,11 @@ class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
+    budget_usd: float = 0.0  # 0 = no cap; past it every call fails (unscorable) and the stage's error stop ends it
+
+    def check(self) -> None:
+        if self.budget_usd and self.cost_usd >= self.budget_usd:
+            raise JudgeError(f"judge budget reached: ${self.cost_usd:.2f} of ${self.budget_usd:.2f} spent")
 
     def add(self, tokens_in: int, tokens_out: int, price: tuple[float, float], cost: float | None = None) -> None:
         """Tally one call; `cost` is the provider's own figure (the HF router reports it), else priced tokens."""
@@ -90,6 +95,7 @@ class RouterJudge:
         for image in images:
             data = base64.b64encode(image).decode()
             content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{data}"}})
+        self.usage.check()
         headers = {"Authorization": f"Bearer {_key(self.key_env)}"}
         if self.bill_to:
             headers["X-HF-Bill-To"] = self.bill_to
@@ -124,6 +130,7 @@ class GeminiJudge:
     usage: Usage = field(default_factory=Usage)
 
     async def complete(self, prompt: str, images: list[bytes]) -> str:
+        self.usage.check()
         parts: list[dict[str, Any]] = [{"text": prompt}]
         parts += [{"inline_data": {"mime_type": "image/png", "data": base64.b64encode(image).decode()}}
                   for image in images]  # fmt: skip
@@ -133,8 +140,9 @@ class GeminiJudge:
                             headers={"x-goog-api-key": _key(self.key_env)}, body=body, timeout=self.timeout,
                             retries=self.retries)  # fmt: skip
         usage = reply.get("usageMetadata") or {}
-        self.usage.add(int(usage.get("promptTokenCount") or 0), int(usage.get("candidatesTokenCount") or 0),
-                       self.price)  # fmt: skip
+        # Thinking tokens are billed as output (`thoughtsTokenCount` is not part of `candidatesTokenCount`).
+        output = int(usage.get("candidatesTokenCount") or 0) + int(usage.get("thoughtsTokenCount") or 0)
+        self.usage.add(int(usage.get("promptTokenCount") or 0), output, self.price)
         try:
             candidate = reply["candidates"][0]
             text = "".join(part.get("text", "") for part in (candidate.get("content") or {}).get("parts", []))
@@ -145,13 +153,25 @@ class GeminiJudge:
         return text
 
 
-def judge_client(profile: Any, bill_to: str = "") -> RouterJudge | GeminiJudge:
-    """A client for a judge profile (`profiles/judges/*.toml`)."""
+JUDGE_BUDGET_ENV = "AGENT_DISTILL_JUDGE_BUDGET_USD"  # set per job by the pipeline from `[budget] judge_usd`
+
+
+def judge_client(profile: Any, bill_to: str = "", budget_usd: float | None = None) -> RouterJudge | GeminiJudge:
+    """A client for a judge profile (`profiles/judges/*.toml`), capped at `budget_usd` (default: the job's
+    `AGENT_DISTILL_JUDGE_BUDGET_USD`, 0 = no cap)."""
     price = (profile.price.input, profile.price.output)
+    if budget_usd is None:
+        budget_usd = float(os.environ.get(JUDGE_BUDGET_ENV) or 0)
+    if budget_usd and profile.api == "gemini" and not any(price):
+        raise ValueError(f"judge {profile.name} has no price in its profile, so its budget cannot be enforced")
     if profile.api == "gemini":
-        return GeminiJudge(model=profile.model, key_env=profile.key_env or "GEMINI_API_KEY", price=price,
-                           max_tokens=profile.max_tokens)  # fmt: skip
-    if profile.api == "router":
-        return RouterJudge(model=profile.model, bill_to=bill_to, key_env=profile.key_env or "HF_TOKEN", price=price,
-                           max_tokens=profile.max_tokens)  # fmt: skip
-    raise ValueError(f"judge {profile.name}: unknown api {profile.api!r}")
+        key = profile.key_env or "GEMINI_API_KEY"
+        client: RouterJudge | GeminiJudge = GeminiJudge(model=profile.model, key_env=key, price=price,
+                                                        max_tokens=profile.max_tokens)  # fmt: skip
+    elif profile.api == "router":
+        client = RouterJudge(model=profile.model, bill_to=bill_to, key_env=profile.key_env or "HF_TOKEN", price=price,
+                             max_tokens=profile.max_tokens)  # fmt: skip
+    else:
+        raise ValueError(f"judge {profile.name}: unknown api {profile.api!r}")
+    client.usage.budget_usd = budget_usd
+    return client

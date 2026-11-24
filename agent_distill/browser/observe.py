@@ -16,32 +16,39 @@ what a judge is given.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
-import os
-import tempfile
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from agent_distill.browser.preview import DESKTOP, LOCAL_SCHEMES, PHONE, _changed_fraction
+from agent_distill.browser.preview import DESKTOP, PHONE, _changed_fraction
+from agent_distill.browser.sandbox import PAGE_SECONDS, PAGE_URL, close_quietly, launch, page_context
 
 FRAME_SIZE = (720, 450)  # each frame in the filmstrip (half of 1440x900)
 COLUMNS = 4
 
-# Counts Web Audio, speech, animation frames and listeners from inside the page, before any page script runs.
+# Counts Web Audio, speech, animation frames and listeners from inside the page, before any page script runs. The
+# counts live in a closure; the page sees only `window.__agentDistillProbe`, a frozen, non-configurable object of
+# getters, so it can add to the counts only by really doing the thing (creating audio, animating, listening), never
+# by writing numbers. Builtins the getters use are captured before page scripts can replace them.
 PROBE_JS = r"""
 (() => {
-  const probe = window.__probe = {audioContexts: 0, sourcesStarted: 0, nodes: {}, toDestination: 0,
-    speech: 0, raf: 0, listeners: {}, mutations: 0, audioSeconds: 0};
-  const count = (map, key) => { map[key] = (map[key] || 0) + 1; };
+  const state = {audioContexts: 0, sourcesStarted: 0, toDestination: 0, speech: 0, raf: 0, mutations: 0};
+  const nodes = new Map(), listeners = new Map(), contexts = [];
+  const bump = (map, key) => map.set(String(key).slice(0, 40), (map.get(String(key).slice(0, 40)) || 0) + 1);
+  const fromEntries = Object.fromEntries, freeze = Object.freeze, define = Object.defineProperty;
   const AC = window.AudioContext || window.webkitAudioContext;
+  const stateOf = AC && Object.getOwnPropertyDescriptor(BaseAudioContext.prototype, 'state').get;
+  const timeOf = AC && Object.getOwnPropertyDescriptor(BaseAudioContext.prototype, 'currentTime').get;
   if (AC) {
     const Wrapped = function (...args) {
-      probe.audioContexts++;
+      state.audioContexts++;
       const ctx = new AC(...args);
-      (probe._ctx = probe._ctx || []).push(ctx);
+      contexts.push(ctx);
       return ctx;
     };
     Wrapped.prototype = AC.prototype;
@@ -51,55 +58,69 @@ PROBE_JS = r"""
       const original = BaseAudioContext.prototype[name];
       if (typeof original !== 'function') continue;
       BaseAudioContext.prototype[name] = function (...args) {
-        count(probe.nodes, name.slice(6));
+        bump(nodes, name.slice(6));
         return original.apply(this, args);
       };
     }
     const start = AudioScheduledSourceNode.prototype.start;
     AudioScheduledSourceNode.prototype.start = function (...args) {
-      probe.sourcesStarted++;
+      state.sourcesStarted++;
       return start.apply(this, args);
     };
     const connect = AudioNode.prototype.connect;
+    const Destination = AudioDestinationNode;
     AudioNode.prototype.connect = function (target, ...rest) {
-      if (target instanceof AudioDestinationNode) probe.toDestination++;
+      if (target instanceof Destination) state.toDestination++;
       return connect.call(this, target, ...rest);
     };
   }
   if (window.speechSynthesis) {
     const speak = window.speechSynthesis.speak.bind(window.speechSynthesis);
-    window.speechSynthesis.speak = (u) => { probe.speech++; return speak(u); };
+    window.speechSynthesis.speak = (u) => { state.speech++; return speak(u); };
   }
   const raf = window.requestAnimationFrame.bind(window);
-  window.requestAnimationFrame = (cb) => { probe.raf++; return raf(cb); };
+  window.requestAnimationFrame = (cb) => { state.raf++; return raf(cb); };
   const add = EventTarget.prototype.addEventListener;
   EventTarget.prototype.addEventListener = function (type, ...rest) {
-    count(probe.listeners, type);
+    bump(listeners, type);
     return add.call(this, type, ...rest);
   };
-  const watch = () => new MutationObserver((m) => { probe.mutations += m.length; })
+  const watch = () => new MutationObserver((m) => { state.mutations += m.length; })
     .observe(document.documentElement, {subtree: true, childList: true, attributes: true, characterData: true});
-  if (document.documentElement) watch(); else document.addEventListener('DOMContentLoaded', watch);
+  if (document.documentElement) watch(); else add.call(document, 'DOMContentLoaded', watch);
+  const view = {};
+  for (const key of Object.keys(state)) define(view, key, {get: () => state[key], enumerable: true});
+  define(view, 'running', {get: () => contexts.filter((c) => stateOf.call(c) === 'running').length});
+  define(view, 'audioSeconds', {get: () => Math.max(0, ...contexts.map((c) => timeOf.call(c) || 0))});
+  define(view, 'nodes', {get: () => fromEntries(nodes)});
+  define(view, 'listeners', {get: () => fromEntries(listeners)});
+  define(window, '__agentDistillProbe', {value: freeze(view), writable: false, configurable: false});
 })();
 """
 
 READ_PROBE_JS = r"""
 () => {
-  const p = window.__probe || {};
-  const ctxs = p._ctx || [];
+  const p = window.__agentDistillProbe;
+  if (!p) return {};
+  return {audioContexts: p.audioContexts, running: p.running, audioSeconds: p.audioSeconds,
+    sourcesStarted: p.sourcesStarted, nodes: p.nodes, toDestination: p.toDestination, speech: p.speech, raf: p.raf,
+    listeners: p.listeners, mutations: p.mutations};
+}
+"""
+
+# DOM facts, read in an isolated world (its own pristine builtins, the page's DOM), so page scripts cannot patch
+# querySelectorAll or innerText to change them.
+READ_DOM_JS = r"""
+(() => {
   const controls = [...document.querySelectorAll('button, [role=button], input, select, textarea, a[href]')];
   const label = (el) => (el.getAttribute('aria-label') || el.innerText || el.value || el.title || el.type || el.tagName)
     .toString().trim().replace(/\s+/g, ' ').slice(0, 30);
-  return {
-    audioContexts: p.audioContexts || 0, running: ctxs.filter((c) => c.state === 'running').length,
-    audioSeconds: Math.max(0, ...ctxs.map((c) => c.currentTime || 0)), sourcesStarted: p.sourcesStarted || 0,
-    nodes: p.nodes || {}, toDestination: p.toDestination || 0, speech: p.speech || 0, raf: p.raf || 0,
-    listeners: p.listeners || {}, mutations: p.mutations || 0,
+  return JSON.stringify({
     canvases: document.querySelectorAll('canvas').length, svgs: document.querySelectorAll('svg').length,
     controls: controls.length, sliders: document.querySelectorAll('input[type=range]').length,
     controlLabels: controls.slice(0, 14).map(label).filter(Boolean),
-  };
-}
+  });
+})()
 """
 
 INPUT_EVENTS = (
@@ -182,30 +203,82 @@ def _log(probe: dict[str, Any], steps: list[tuple[str, float]], seconds: float) 
     return "\n".join(lines)
 
 
+_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,39}$")
+
+
+def _count(value: Any, cap: int = 10**7) -> int | float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0
+    if number != number or number < 0:  # NaN or negative
+        return 0
+    return min(number, cap) if not number.is_integer() else int(min(number, cap))
+
+
+def _label(text: Any) -> str:
+    """A control label as quoted data in a judge prompt: printable, short, no quotes or line breaks."""
+    cleaned = "".join(ch for ch in str(text) if ch.isprintable()).replace("'", "").replace('"', "")
+    return re.sub(r"\s+", " ", cleaned).strip()[:30]
+
+
+def sanitize_probe(raw: dict[str, Any], dom: dict[str, Any]) -> dict[str, Any]:
+    """Everything the page reported, as numbers and short names only (it is untrusted and goes into a prompt)."""
+
+    def names(mapping: Any) -> dict[str, int]:
+        if not isinstance(mapping, dict):
+            return {}
+        return {k: int(_count(v)) for k, v in list(mapping.items())[:200] if isinstance(k, str) and _NAME.match(k)}
+
+    probe = {key: _count((raw or {}).get(key)) for key in
+             ("audioContexts", "running", "audioSeconds", "sourcesStarted", "toDestination", "speech", "raf",
+              "mutations")}  # fmt: skip
+    probe["nodes"] = names((raw or {}).get("nodes"))
+    probe["listeners"] = names((raw or {}).get("listeners"))
+    for key in ("canvases", "svgs", "controls", "sliders"):
+        probe[key] = int(_count((dom or {}).get(key)))
+    labels = (dom or {}).get("controlLabels") or []
+    probe["controlLabels"] = [x for x in (_label(t) for t in labels[:14] if isinstance(t, str)) if x]
+    return probe
+
+
+async def _read_dom(page: Any) -> dict[str, Any]:
+    """`READ_DOM_JS` in an isolated world of the page's main frame (CDP)."""
+    session = await page.context.new_cdp_session(page)
+    try:
+        tree = await session.send("Page.getFrameTree")
+        world = await session.send("Page.createIsolatedWorld", {"frameId": tree["frameTree"]["frame"]["id"],
+                                                                 "worldName": "agent-distill-observer"})  # fmt: skip
+        result = await session.send("Runtime.evaluate", {"expression": READ_DOM_JS,
+                                                         "contextId": world["executionContextId"],
+                                                         "returnByValue": True})  # fmt: skip
+        value = (result.get("result") or {}).get("value")
+        return json.loads(value) if isinstance(value, str) else {}
+    finally:
+        await session.detach()
+
+
 async def observe_page(path: str | Path) -> Observation:
+    path = Path(path).resolve()  # noqa: ASYNC240 - one small local file
+    return await observe_html(path.read_text(encoding="utf-8", errors="replace"))
+
+
+async def observe_html(html: str) -> Observation:
+    """Play the page in the sandboxed browser; a page that hangs raises `TimeoutError` (the judge is unscorable)."""
+    obs = Observation()
+    await asyncio.wait_for(_observe(html, obs), timeout=PAGE_SECONDS)
+    return obs
+
+
+async def _observe(html: str, obs: Observation) -> None:
     from playwright.async_api import async_playwright
 
-    path = Path(path).resolve()  # noqa: ASYNC240 - one stat of a local file
-    url = path.as_uri()
-    obs = Observation()
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(
-            executable_path=os.environ.get("AGENT_DISTILL_CHROMIUM") or None,
-            args=["--no-sandbox", "--autoplay-policy=no-user-gesture-required"],
-        )
+        browser = await launch(playwright, ("--autoplay-policy=no-user-gesture-required",))
         try:
-            context = await browser.new_context(viewport=DESKTOP, device_scale_factor=1)
-
-            async def route(handle: Any) -> None:
-                if handle.request.url.startswith(LOCAL_SCHEMES) or handle.request.url == url:
-                    await handle.continue_()
-                else:
-                    await handle.abort()
-
-            await context.route("**/*", route)
-            await context.add_init_script(PROBE_JS)
+            context = await page_context(browser, html, viewport=DESKTOP, init_script=PROBE_JS)
             page = await context.new_page()
-            await page.goto(url, wait_until="load", timeout=15000)
+            await page.goto(PAGE_URL, wait_until="load", timeout=15000)
             w, h = DESKTOP["width"], DESKTOP["height"]
             frames: list[tuple[str, bytes]] = []
             previous: bytes | None = None
@@ -260,22 +333,14 @@ async def observe_page(path: str | Path) -> Observation:
             await page.wait_for_timeout(2500)
             await snap("back up, 2.5 s to settle")
             seconds = time.monotonic() - started
-            obs.probe = await page.evaluate(READ_PROBE_JS)
+            obs.probe = sanitize_probe(await page.evaluate(READ_PROBE_JS), await _read_dom(page))
             obs.filmstrip = _contact_sheet(frames)
             await page.set_viewport_size(PHONE)
             await page.wait_for_timeout(500)
             obs.phone = await page.screenshot()
             obs.log = _log(obs.probe, obs.steps, seconds)
         finally:
-            await browser.close()
-    return obs
-
-
-async def observe_html(html: str) -> Observation:
-    with tempfile.TemporaryDirectory(prefix="agent-distill-observe-") as tmp:
-        page = Path(tmp) / "index.html"
-        page.write_text(html, encoding="utf-8")
-        return await observe_page(page)
+            await close_quietly(browser)
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - a debugging aid

@@ -1,0 +1,1402 @@
+{
+ "p001": {
+  "human": -1.0,
+  "kind": "same concept",
+  "hydrogen_abs": 1,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 4.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    9.0
+   ],
+   "defects": [
+    3.0,
+    7.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -2.0,
+  "raw_abs_motion": [
+   9.0,
+   7.0
+  ]
+ },
+ "p002": {
+  "human": 0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": -1.0,
+  "hydrogen_defects": -4.0,
+  "hydrogen_pair": -0.75,
+  "pair_forward": -1.0,
+  "pair_backward": 0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    7.0
+   ],
+   "defects": [
+    5.0,
+    1.0
+   ]
+  },
+  "hydrogen_pair_motion": -0.75,
+  "pm_forward": -1.0,
+  "pm_backward": 0.5,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   7.0,
+   7.0
+  ]
+ },
+ "p003": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": 2.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    3.0,
+    5.0
+   ]
+  },
+  "hydrogen_pair_motion": 1.0,
+  "pm_forward": 1.0,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 1.0,
+  "raw_abs_motion": [
+   8.0,
+   9.0
+  ]
+ },
+ "p004": {
+  "human": 1.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": null,
+  "hydrogen_pair": 0.75,
+  "pair_forward": 1.0,
+  "pair_backward": -0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    2.0,
+    null
+   ]
+  },
+  "hydrogen_pair_motion": 1.0,
+  "pm_forward": 1.0,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 2.0,
+  "raw_abs_motion": [
+   7.0,
+   9.0
+  ]
+ },
+ "p005": {
+  "human": 1.0,
+  "kind": "same concept",
+  "hydrogen_abs": 2,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 3.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    7.0,
+    8.0
+   ],
+   "defects": [
+    2.0,
+    5.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -1.0,
+  "raw_abs_motion": [
+   9.0,
+   8.0
+  ]
+ },
+ "p006": {
+  "human": -1.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": -3.0,
+  "hydrogen_defects": -2.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    5.0
+   ],
+   "defects": [
+    4.0,
+    2.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": 1.0,
+  "raw_abs_motion": [
+   7.0,
+   8.0
+  ]
+ },
+ "p007": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 2,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": 8.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    0.0,
+    8.0
+   ]
+  },
+  "hydrogen_pair_motion": 1.0,
+  "pm_forward": 1.0,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 2.0,
+  "raw_abs_motion": [
+   7.0,
+   9.0
+  ]
+ },
+ "p008": {
+  "human": 0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -2.0,
+  "hydrogen_pair": 0.75,
+  "pair_forward": 1.0,
+  "pair_backward": -0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    5.0,
+    3.0
+   ]
+  },
+  "hydrogen_pair_motion": 1.0,
+  "pm_forward": 1.0,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   9.0,
+   9.0
+  ]
+ },
+ "p009": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": -2,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": null,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    null,
+    4.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.0,
+  "pm_forward": -0.5,
+  "pm_backward": -0.5,
+  "hydrogen_abs_motion": -1.0,
+  "raw_abs_motion": [
+   9.0,
+   8.0
+  ]
+ },
+ "p010": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 1,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 4.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    7.0,
+    8.0
+   ],
+   "defects": [
+    0.0,
+    4.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.5,
+  "pm_forward": 0.5,
+  "pm_backward": -0.5,
+  "hydrogen_abs_motion": 1.0,
+  "raw_abs_motion": [
+   7.0,
+   8.0
+  ]
+ },
+ "p011": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 1,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 0.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    9.0
+   ],
+   "defects": [
+    0.0,
+    0.0
+   ]
+  },
+  "hydrogen_pair_motion": 1.0,
+  "pm_forward": 1.0,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 2.0,
+  "raw_abs_motion": [
+   7.0,
+   9.0
+  ]
+ },
+ "p012": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": null,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    null,
+    3.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -1.0,
+  "raw_abs_motion": [
+   9.0,
+   8.0
+  ]
+ },
+ "p013": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": -2,
+  "qwen_abs": -1.0,
+  "hydrogen_defects": -2.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    9.0,
+    8.0
+   ],
+   "defects": [
+    6.0,
+    4.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -2.0,
+  "raw_abs_motion": [
+   8.0,
+   6.0
+  ]
+ },
+ "p014": {
+  "human": 0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 1,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 2.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    9.0
+   ],
+   "defects": [
+    5.0,
+    7.0
+   ]
+  },
+  "hydrogen_pair_motion": 1.0,
+  "pm_forward": 1.0,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 1.0,
+  "raw_abs_motion": [
+   7.0,
+   8.0
+  ]
+ },
+ "p015": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": 0.0,
+  "hydrogen_pair": -0.75,
+  "pair_forward": -0.5,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    2.0,
+    2.0
+   ]
+  },
+  "hydrogen_pair_motion": -0.5,
+  "pm_forward": -0.5,
+  "pm_backward": 0.5,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   8.0,
+   8.0
+  ]
+ },
+ "p016": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": -2,
+  "qwen_abs": -2.0,
+  "hydrogen_defects": 1.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    9.0,
+    7.0
+   ],
+   "defects": [
+    3.0,
+    4.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -1.0,
+  "raw_abs_motion": [
+   8.0,
+   7.0
+  ]
+ },
+ "p017": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -2.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    7.0,
+    5.0
+   ]
+  },
+  "hydrogen_pair_motion": 1.0,
+  "pm_forward": 1.0,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   9.0,
+   9.0
+  ]
+ },
+ "p018": {
+  "human": 0.5,
+  "kind": "same concept",
+  "hydrogen_abs": -1,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -1.0,
+  "hydrogen_pair": -0.75,
+  "pair_forward": -1.0,
+  "pair_backward": 0.5,
+  "raw": {
+   "qwen": [
+    9.0,
+    9.0
+   ],
+   "defects": [
+    8.0,
+    7.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   9.0,
+   9.0
+  ]
+ },
+ "p019": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": -1.0,
+  "hydrogen_defects": 3.0,
+  "hydrogen_pair": -0.75,
+  "pair_forward": -0.5,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    9.0,
+    8.0
+   ],
+   "defects": [
+    2.0,
+    5.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -1.0,
+  "raw_abs_motion": [
+   8.0,
+   7.0
+  ]
+ },
+ "p020": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": -2.0,
+  "hydrogen_pair": -0.75,
+  "pair_forward": -1.0,
+  "pair_backward": 0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    9.0
+   ],
+   "defects": [
+    6.0,
+    4.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.0,
+  "pm_forward": -0.5,
+  "pm_backward": -0.5,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   8.0,
+   8.0
+  ]
+ },
+ "p021": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": 2.0,
+  "hydrogen_pair": 0.0,
+  "pair_forward": -0.5,
+  "pair_backward": -0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    5.0,
+    7.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.25,
+  "pm_forward": -0.5,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   7.0,
+   7.0
+  ]
+ },
+ "p022": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": 1.0,
+  "hydrogen_pair": 0.5,
+  "pair_forward": 0.5,
+  "pair_backward": -0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    4.0,
+    5.0
+   ]
+  },
+  "hydrogen_pair_motion": 1.0,
+  "pm_forward": 1.0,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 1.0,
+  "raw_abs_motion": [
+   8.0,
+   9.0
+  ]
+ },
+ "p023": {
+  "human": -1.0,
+  "kind": "same concept",
+  "hydrogen_abs": -2,
+  "qwen_abs": -1.0,
+  "hydrogen_defects": -1.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    7.0
+   ],
+   "defects": [
+    3.0,
+    2.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -4.0,
+  "raw_abs_motion": [
+   9.0,
+   5.0
+  ]
+ },
+ "p024": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 2,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": 2.0,
+  "hydrogen_pair": 0.75,
+  "pair_forward": 0.5,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    4.0,
+    6.0
+   ]
+  },
+  "hydrogen_pair_motion": -0.75,
+  "pm_forward": -1.0,
+  "pm_backward": 0.5,
+  "hydrogen_abs_motion": -1.0,
+  "raw_abs_motion": [
+   7.0,
+   6.0
+  ]
+ },
+ "p025": {
+  "human": 0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 1,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -1.0,
+  "hydrogen_pair": 0.0,
+  "pair_forward": -0.5,
+  "pair_backward": -0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    2.0,
+    1.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.75,
+  "pm_forward": 0.5,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 1.0,
+  "raw_abs_motion": [
+   7.0,
+   8.0
+  ]
+ },
+ "p026": {
+  "human": 0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 1,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 2.0,
+  "hydrogen_pair": 0.5,
+  "pair_forward": 0.5,
+  "pair_backward": -0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    9.0
+   ],
+   "defects": [
+    4.0,
+    6.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.75,
+  "pm_forward": 0.5,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   9.0,
+   9.0
+  ]
+ },
+ "p027": {
+  "human": 0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -1.0,
+  "hydrogen_pair": -0.5,
+  "pair_forward": -0.5,
+  "pair_backward": 0.5,
+  "raw": {
+   "qwen": [
+    7.0,
+    7.0
+   ],
+   "defects": [
+    4.0,
+    3.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.0,
+  "pm_forward": -0.5,
+  "pm_backward": -0.5,
+  "hydrogen_abs_motion": 1.0,
+  "raw_abs_motion": [
+   7.0,
+   8.0
+  ]
+ },
+ "p028": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": -2,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": 1.0,
+  "hydrogen_pair": -0.75,
+  "pair_forward": -1.0,
+  "pair_backward": 0.5,
+  "raw": {
+   "qwen": [
+    7.0,
+    7.0
+   ],
+   "defects": [
+    3.0,
+    4.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -3.0,
+  "raw_abs_motion": [
+   8.0,
+   5.0
+  ]
+ },
+ "p029": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": -1,
+  "qwen_abs": -1.0,
+  "hydrogen_defects": -3.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    7.0
+   ],
+   "defects": [
+    5.0,
+    2.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -2.0,
+  "raw_abs_motion": [
+   8.0,
+   6.0
+  ]
+ },
+ "p030": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": -3,
+  "qwen_abs": -3.0,
+  "hydrogen_defects": -2.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    9.0,
+    6.0
+   ],
+   "defects": [
+    4.0,
+    2.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.0,
+  "pm_forward": -0.5,
+  "pm_backward": -0.5,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   8.0,
+   8.0
+  ]
+ },
+ "p031": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 3.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    9.0
+   ],
+   "defects": [
+    4.0,
+    7.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.0,
+  "pm_forward": -0.5,
+  "pm_backward": -0.5,
+  "hydrogen_abs_motion": -1.0,
+  "raw_abs_motion": [
+   9.0,
+   8.0
+  ]
+ },
+ "p032": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": -1,
+  "qwen_abs": -1.0,
+  "hydrogen_defects": 0.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    9.0,
+    8.0
+   ],
+   "defects": [
+    4.0,
+    4.0
+   ]
+  },
+  "hydrogen_pair_motion": -0.75,
+  "pm_forward": -1.0,
+  "pm_backward": 0.5,
+  "hydrogen_abs_motion": -2.0,
+  "raw_abs_motion": [
+   8.0,
+   6.0
+  ]
+ },
+ "p033": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": -2,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -7.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    7.0,
+    0.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.75,
+  "pm_forward": 0.5,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   8.0,
+   8.0
+  ]
+ },
+ "p034": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": -1,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -6.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    9.0,
+    9.0
+   ],
+   "defects": [
+    7.0,
+    1.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.0,
+  "pm_forward": -0.5,
+  "pm_backward": -0.5,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   9.0,
+   9.0
+  ]
+ },
+ "p035": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": -2,
+  "qwen_abs": -1.0,
+  "hydrogen_defects": 1.0,
+  "hydrogen_pair": -0.75,
+  "pair_forward": -0.5,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    9.0,
+    8.0
+   ],
+   "defects": [
+    5.0,
+    6.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.75,
+  "pm_forward": 0.5,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 1.0,
+  "raw_abs_motion": [
+   8.0,
+   9.0
+  ]
+ },
+ "p036": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": -1,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -6.0,
+  "hydrogen_pair": -0.75,
+  "pair_forward": -1.0,
+  "pair_backward": 0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    8.0,
+    2.0
+   ]
+  },
+  "hydrogen_pair_motion": -0.5,
+  "pm_forward": -0.5,
+  "pm_backward": 0.5,
+  "hydrogen_abs_motion": -1.0,
+  "raw_abs_motion": [
+   9.0,
+   8.0
+  ]
+ },
+ "p037": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -1.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    9.0,
+    9.0
+   ],
+   "defects": [
+    3.0,
+    2.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   8.0,
+   8.0
+  ]
+ },
+ "p038": {
+  "human": -1.0,
+  "kind": "same concept",
+  "hydrogen_abs": 1,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 0.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    9.0
+   ],
+   "defects": [
+    5.0,
+    5.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.75,
+  "pm_forward": 0.5,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   8.0,
+   8.0
+  ]
+ },
+ "p039": {
+  "human": 0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -2.0,
+  "hydrogen_pair": 0.75,
+  "pair_forward": 0.5,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    2.0,
+    0.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.25,
+  "pm_forward": -0.5,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   9.0,
+   9.0
+  ]
+ },
+ "p040": {
+  "human": -1.0,
+  "kind": "same concept",
+  "hydrogen_abs": 1,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": 4.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    2.0,
+    6.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   8.0,
+   8.0
+  ]
+ },
+ "p041": {
+  "human": 1.0,
+  "kind": "same concept",
+  "hydrogen_abs": -1,
+  "qwen_abs": -1.0,
+  "hydrogen_defects": -1.0,
+  "hydrogen_pair": -0.75,
+  "pair_forward": -1.0,
+  "pair_backward": 0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    7.0
+   ],
+   "defects": [
+    6.0,
+    5.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   8.0,
+   8.0
+  ]
+ },
+ "p042": {
+  "human": -1.0,
+  "kind": "same concept",
+  "hydrogen_abs": -1,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -6.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    6.0,
+    0.0
+   ]
+  },
+  "hydrogen_pair_motion": -0.75,
+  "pm_forward": -1.0,
+  "pm_backward": 0.5,
+  "hydrogen_abs_motion": -1.0,
+  "raw_abs_motion": [
+   9.0,
+   8.0
+  ]
+ },
+ "p043": {
+  "human": -1.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": 0.0,
+  "hydrogen_pair": 0.25,
+  "pair_forward": -0.5,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    1.0,
+    1.0
+   ]
+  },
+  "hydrogen_pair_motion": 1.0,
+  "pm_forward": 1.0,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   9.0,
+   9.0
+  ]
+ },
+ "p044": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": -1.0,
+  "hydrogen_defects": 0.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    9.0,
+    8.0
+   ],
+   "defects": [
+    5.0,
+    5.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.0,
+  "pm_forward": -0.5,
+  "pm_backward": -0.5,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   9.0,
+   9.0
+  ]
+ },
+ "p045": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -1.0,
+  "hydrogen_pair": -0.5,
+  "pair_forward": -0.5,
+  "pair_backward": 0.5,
+  "raw": {
+   "qwen": [
+    9.0,
+    9.0
+   ],
+   "defects": [
+    6.0,
+    5.0
+   ]
+  },
+  "hydrogen_pair_motion": -0.75,
+  "pm_forward": -0.5,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -2.0,
+  "raw_abs_motion": [
+   9.0,
+   7.0
+  ]
+ },
+ "p046": {
+  "human": 0.0,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 4.0,
+  "hydrogen_pair": 0.5,
+  "pair_forward": 0.5,
+  "pair_backward": -0.5,
+  "raw": {
+   "qwen": [
+    8.0,
+    9.0
+   ],
+   "defects": [
+    3.0,
+    7.0
+   ]
+  },
+  "hydrogen_pair_motion": -1.0,
+  "pm_forward": -1.0,
+  "pm_backward": 1.0,
+  "hydrogen_abs_motion": -1.0,
+  "raw_abs_motion": [
+   9.0,
+   8.0
+  ]
+ },
+ "p047": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": -1,
+  "qwen_abs": 0.0,
+  "hydrogen_defects": -3.0,
+  "hydrogen_pair": -1.0,
+  "pair_forward": -1.0,
+  "pair_backward": 1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    8.0
+   ],
+   "defects": [
+    4.0,
+    1.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.25,
+  "pm_forward": -0.5,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   7.0,
+   7.0
+  ]
+ },
+ "p048": {
+  "human": 1.0,
+  "kind": "same concept",
+  "hydrogen_abs": 3,
+  "qwen_abs": 2.0,
+  "hydrogen_defects": 3.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    7.0,
+    9.0
+   ],
+   "defects": [
+    0.0,
+    3.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.5,
+  "pm_forward": 0.5,
+  "pm_backward": -0.5,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   7.0,
+   7.0
+  ]
+ },
+ "p049": {
+  "human": -0.5,
+  "kind": "same concept",
+  "hydrogen_abs": 0,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 3.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    9.0
+   ],
+   "defects": [
+    2.0,
+    5.0
+   ]
+  },
+  "hydrogen_pair_motion": 1.0,
+  "pm_forward": 1.0,
+  "pm_backward": -1.0,
+  "hydrogen_abs_motion": 0.0,
+  "raw_abs_motion": [
+   9.0,
+   9.0
+  ]
+ },
+ "p050": {
+  "human": -1.0,
+  "kind": "same concept",
+  "hydrogen_abs": 1,
+  "qwen_abs": 1.0,
+  "hydrogen_defects": 0.0,
+  "hydrogen_pair": 1.0,
+  "pair_forward": 1.0,
+  "pair_backward": -1.0,
+  "raw": {
+   "qwen": [
+    8.0,
+    9.0
+   ],
+   "defects": [
+    4.0,
+    4.0
+   ]
+  },
+  "hydrogen_pair_motion": 0.0,
+  "pm_forward": -0.5,
+  "pm_backward": -0.5,
+  "hydrogen_abs_motion": 2.0,
+  "raw_abs_motion": [
+   6.0,
+   8.0
+  ]
+ }
+}

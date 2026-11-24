@@ -10,7 +10,9 @@ teacher = "kimi-k3.1-pro"
 student = "qwen3.5-9b-pages"
 harness = "pi@1.6.0"
 name = "qwen35-9b-html-pages-kimi-k31-pro-pi-160"
-stages = ["traces", "sft", "merge", "eval", "probe", "grpo", "grpo-merge"]
+# GRPO is left out until the judge is validated as a reward (README, "Judge calibration"); opt in with
+# --stages grpo,grpo-merge and add "grpo" to [eval] variants.
+stages = ["traces", "sft", "merge", "eval", "probe"]
 profiles = ["profiles"]
 
 [hub]
@@ -30,7 +32,7 @@ limit = 120  # every test concept (10 per category)
 concurrency = 8
 timeout = 900
 max_tool_calls = 30
-variants = ["base", "sft", "grpo"]  # the teacher's validation baseline is already published
+variants = ["base", "sft"]  # the teacher's validation baseline is already published
 
 [probe]
 sample = 200
@@ -38,5 +40,5 @@ k = 4
 
 [budget]
 traces_usd = 600  # Kimi at ~$0.84 per episode (baseline), 600 rows plus reruns
-judge_usd = 0  # Hydrogen has no price in its profile yet; calls are counted
+judge_usd = 100  # per stage, split over its jobs; Hydrogen costs ~$0.02-0.03 per page judged
 gpu_usd = 400

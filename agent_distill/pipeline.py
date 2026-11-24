@@ -689,6 +689,22 @@ def smoke_main(argv: list[str] | None = None) -> int:
     return main([items[0], *(arg for pair in sets for arg in ("--set", pair)), *items[1:]])
 
 
+def apply_judge_budget(run: Run, built: list[jobs.Job]) -> None:
+    """Split `[budget] judge_usd` evenly over a stage's judging jobs; each job's judge client stops at its share."""
+    cap = run.config.budget.judge_usd
+    judging = [job for job in built if "--judge " in job.command and "--judge ''" not in job.command]
+    name = judge_name(run)
+    if name and judging:
+        profile = load_profile("judges", name, run.config.profile_paths)
+        if cap and profile.api == "gemini" and not (profile.price.input or profile.price.output):
+            raise SystemExit(f"[budget] judge_usd needs a price in the {name} judge profile")
+        print(f"judge {name}: cap {'$' + format(cap / len(judging), '.2f') + ' per job' if cap else 'none'} "
+              f"({len(judging)} judging jobs)")  # fmt: skip
+    for job in judging:
+        if cap:
+            job.env["AGENT_DISTILL_JUDGE_BUDGET_USD"] = f"{cap / len(judging):.4f}"
+
+
 def check_budget(run: Run, built: list[jobs.Job], *, over_budget: bool) -> None:
     cost = jobs.estimate(built)
     cap = run.config.budget.gpu_usd
@@ -743,6 +759,7 @@ def main(argv: list[str] | None = None) -> int:
             publish(run, dry_run=args.dry_run)
             continue
         waves = stage_waves(stage, run, rev)
+        apply_judge_budget(run, [job for wave in waves for job in wave])
         check_budget(run, [job for wave in waves for job in wave], over_budget=args.over_budget)
         for index, wave in enumerate(waves):
             if args.dry_run:

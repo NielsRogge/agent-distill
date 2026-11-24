@@ -1,0 +1,2522 @@
+{
+ "pages": {
+  "b618085ccf": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 52,
+   "row_id": "6c4363c2875a",
+   "hydrogen_stills_score": 8
+  },
+  "b675e77b2f": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 53,
+   "row_id": "6c4363c2875a",
+   "hydrogen_stills_score": 9
+  },
+  "3abb8a0a41": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 34,
+   "row_id": "ae5e4eec27d2",
+   "hydrogen_stills_score": 8
+  },
+  "d598b04d8c": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 36,
+   "row_id": "ae5e4eec27d2",
+   "hydrogen_stills_score": 8
+  },
+  "6d9564ad02": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 3,
+   "row_id": "515af59264d0",
+   "hydrogen_stills_score": 8
+  },
+  "1ad8486d55": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 2,
+   "row_id": "515af59264d0",
+   "hydrogen_stills_score": 8
+  },
+  "0aecfebb75": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 69,
+   "row_id": "8a25d19b09a3",
+   "hydrogen_stills_score": 8
+  },
+  "d94b031392": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 39,
+   "row_id": "8a25d19b09a3",
+   "hydrogen_stills_score": 8
+  },
+  "64d6e1c800": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 59,
+   "row_id": "313ac6651269",
+   "hydrogen_stills_score": 7
+  },
+  "ebfba889ce": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 58,
+   "row_id": "313ac6651269",
+   "hydrogen_stills_score": 9
+  },
+  "549560e121": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 47,
+   "row_id": "f5ac1817bf76",
+   "hydrogen_stills_score": 8
+  },
+  "b524d56ec6": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 47,
+   "row_id": "f5ac1817bf76",
+   "hydrogen_stills_score": 8
+  },
+  "a5d30eda74": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 20,
+   "row_id": "3928744084bc",
+   "hydrogen_stills_score": 7
+  },
+  "d0901c2a1d": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 62,
+   "row_id": "3928744084bc",
+   "hydrogen_stills_score": 9
+  },
+  "98326da038": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 43,
+   "row_id": "56b0443b3abf",
+   "hydrogen_stills_score": 9
+  },
+  "455a3ba975": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 44,
+   "row_id": "56b0443b3abf",
+   "hydrogen_stills_score": 9
+  },
+  "5cb57c3ea3": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 25,
+   "row_id": "805e8d0124f2",
+   "hydrogen_stills_score": 9
+  },
+  "d179dcc531": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 25,
+   "row_id": "805e8d0124f2",
+   "hydrogen_stills_score": 7
+  },
+  "4e789a8fec": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 11,
+   "row_id": "86197583988c",
+   "hydrogen_stills_score": 8
+  },
+  "c59ad91a7a": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 60,
+   "row_id": "86197583988c",
+   "hydrogen_stills_score": 9
+  },
+  "5de9044911": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 6,
+   "row_id": "d25e26b27ec4",
+   "hydrogen_stills_score": 8
+  },
+  "c6fd7288cb": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 4,
+   "row_id": "d25e26b27ec4",
+   "hydrogen_stills_score": 9
+  },
+  "df560e1346": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 9,
+   "row_id": "b7046221ff6b",
+   "hydrogen_stills_score": 8
+  },
+  "4630503b48": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 61,
+   "row_id": "b7046221ff6b",
+   "hydrogen_stills_score": 8
+  },
+  "5aacbc3c02": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 19,
+   "row_id": "868606509e17",
+   "hydrogen_stills_score": 9
+  },
+  "1fd63ea7c7": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 18,
+   "row_id": "868606509e17",
+   "hydrogen_stills_score": 7
+  },
+  "f3416f75a5": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 54,
+   "row_id": "25180d65e9dc",
+   "hydrogen_stills_score": 8
+  },
+  "d236b3b885": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 56,
+   "row_id": "25180d65e9dc",
+   "hydrogen_stills_score": 9
+  },
+  "bc5da961d6": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 8,
+   "row_id": "0c06489a1de9",
+   "hydrogen_stills_score": 8
+  },
+  "9132faf508": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 5,
+   "row_id": "0c06489a1de9",
+   "hydrogen_stills_score": 8
+  },
+  "d2f4b28d93": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 12,
+   "row_id": "e79a7d0aa684",
+   "hydrogen_stills_score": 9
+  },
+  "201c53cfad": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 76,
+   "row_id": "e79a7d0aa684",
+   "hydrogen_stills_score": 7
+  },
+  "7a79aaeb1f": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 37,
+   "row_id": "5e89dbcd6709",
+   "hydrogen_stills_score": 9
+  },
+  "bf287cdc2e": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 37,
+   "row_id": "5e89dbcd6709",
+   "hydrogen_stills_score": 9
+  },
+  "3b3d2e339c": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 33,
+   "row_id": "407a7abe6f17",
+   "hydrogen_stills_score": 9
+  },
+  "1001d5875e": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 33,
+   "row_id": "407a7abe6f17",
+   "hydrogen_stills_score": 8
+  },
+  "457fd03c36": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 44,
+   "row_id": "6438daf1a195",
+   "hydrogen_stills_score": 8
+  },
+  "c13ac9d121": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 43,
+   "row_id": "6438daf1a195",
+   "hydrogen_stills_score": 8
+  },
+  "856db68056": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 14,
+   "row_id": "da191d3a284d",
+   "hydrogen_stills_score": 9
+  },
+  "7421baa74b": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 14,
+   "row_id": "da191d3a284d",
+   "hydrogen_stills_score": 9
+  },
+  "b0b55e92a1": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 29,
+   "row_id": "ebfeca1bd943",
+   "hydrogen_stills_score": 8
+  },
+  "44cbbb525c": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 61,
+   "row_id": "ebfeca1bd943",
+   "hydrogen_stills_score": 8
+  },
+  "5258ff7549": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 32,
+   "row_id": "658a942aef96",
+   "hydrogen_stills_score": 9
+  },
+  "ef067ddc1c": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 30,
+   "row_id": "658a942aef96",
+   "hydrogen_stills_score": 9
+  },
+  "9e1cc1426a": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 28,
+   "row_id": "fd720db71c45",
+   "hydrogen_stills_score": 8
+  },
+  "70948b128a": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 28,
+   "row_id": "fd720db71c45",
+   "hydrogen_stills_score": 6
+  },
+  "4e139a6708": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 66,
+   "row_id": "23531e7522cf",
+   "hydrogen_stills_score": 7
+  },
+  "3611e8ce7d": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 36,
+   "row_id": "23531e7522cf",
+   "hydrogen_stills_score": 9
+  },
+  "4f1b496029": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 17,
+   "row_id": "c6dfd217914d",
+   "hydrogen_stills_score": 7
+  },
+  "181ac41d78": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 17,
+   "row_id": "c6dfd217914d",
+   "hydrogen_stills_score": 8
+  },
+  "2658784982": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 35,
+   "row_id": "5ca2f233adc3",
+   "hydrogen_stills_score": 8
+  },
+  "77d7ad5d5e": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 35,
+   "row_id": "5ca2f233adc3",
+   "hydrogen_stills_score": 9
+  },
+  "991a568c52": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 15,
+   "row_id": "a79f0764492e",
+   "hydrogen_stills_score": 7
+  },
+  "3daef9344a": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 13,
+   "row_id": "a79f0764492e",
+   "hydrogen_stills_score": 7
+  },
+  "dbe4956547": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 45,
+   "row_id": "0eb4a44a1f65",
+   "hydrogen_stills_score": 9
+  },
+  "4022f69120": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 45,
+   "row_id": "0eb4a44a1f65",
+   "hydrogen_stills_score": 7
+  },
+  "a9fffb96bd": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 5,
+   "row_id": "ca85e09b1ff6",
+   "hydrogen_stills_score": 8
+  },
+  "fc75434e9f": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 7,
+   "row_id": "ca85e09b1ff6",
+   "hydrogen_stills_score": 7
+  },
+  "2538210f1f": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 48,
+   "row_id": "58df9312f65c",
+   "hydrogen_stills_score": 8
+  },
+  "8ed80f6e4f": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 70,
+   "row_id": "58df9312f65c",
+   "hydrogen_stills_score": 5
+  },
+  "ded07974c7": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 58,
+   "row_id": "aefcaaa75077",
+   "hydrogen_stills_score": 8
+  },
+  "ba65ce41d4": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 57,
+   "row_id": "aefcaaa75077",
+   "hydrogen_stills_score": 8
+  },
+  "758714b6bc": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 24,
+   "row_id": "56287ed62527",
+   "hydrogen_stills_score": 9
+  },
+  "899237c0b5": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 22,
+   "row_id": "56287ed62527",
+   "hydrogen_stills_score": 8
+  },
+  "fa4f1385bf": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 11,
+   "row_id": "e0d36d10c80b",
+   "hydrogen_stills_score": 9
+  },
+  "cc3deaeb2d": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 15,
+   "row_id": "e0d36d10c80b",
+   "hydrogen_stills_score": 7
+  },
+  "af92d4caa7": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 26,
+   "row_id": "7cea8160e65c",
+   "hydrogen_stills_score": 9
+  },
+  "60d56b342c": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 26,
+   "row_id": "7cea8160e65c",
+   "hydrogen_stills_score": 8
+  },
+  "95ca94c0d8": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 46,
+   "row_id": "7f107c52052d",
+   "hydrogen_stills_score": 9
+  },
+  "2816cb30ac": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 46,
+   "row_id": "7f107c52052d",
+   "hydrogen_stills_score": 7
+  },
+  "371ae04eee": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 10,
+   "row_id": "21970e25a4ed",
+   "hydrogen_stills_score": 9
+  },
+  "d815752f8f": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 10,
+   "row_id": "21970e25a4ed",
+   "hydrogen_stills_score": 8
+  },
+  "f91e8da71e": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 13,
+   "row_id": "0f58cc6cab4e",
+   "hydrogen_stills_score": 8
+  },
+  "1143ad3209": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 8,
+   "row_id": "0f58cc6cab4e",
+   "hydrogen_stills_score": 8
+  },
+  "cf50dfd9ba": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 40,
+   "row_id": "4c8b1c7d28ef",
+   "hydrogen_stills_score": 7
+  },
+  "35a7b6f76b": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 42,
+   "row_id": "4c8b1c7d28ef",
+   "hydrogen_stills_score": 8
+  },
+  "3542a83881": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 55,
+   "row_id": "904862e6fcaa",
+   "hydrogen_stills_score": 8
+  },
+  "d68b01c88d": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 55,
+   "row_id": "904862e6fcaa",
+   "hydrogen_stills_score": 8
+  },
+  "5ca0f876fc": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 31,
+   "row_id": "e6ded01ea203",
+   "hydrogen_stills_score": 8
+  },
+  "0a33a422b0": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 32,
+   "row_id": "e6ded01ea203",
+   "hydrogen_stills_score": 9
+  },
+  "c57af68786": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 0,
+   "row_id": "b28d86c2d534",
+   "hydrogen_stills_score": 9
+  },
+  "895d9662a5": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 60,
+   "row_id": "b28d86c2d534",
+   "hydrogen_stills_score": 8
+  },
+  "9eaad9e587": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 1,
+   "row_id": "6b55dc44e28a",
+   "hydrogen_stills_score": 9
+  },
+  "e35aa4fdbf": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 1,
+   "row_id": "6b55dc44e28a",
+   "hydrogen_stills_score": 8
+  },
+  "9ec58d8a12": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 41,
+   "row_id": "21ab39b9f16f",
+   "hydrogen_stills_score": 8
+  },
+  "70052a2788": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 42,
+   "row_id": "21ab39b9f16f",
+   "hydrogen_stills_score": 8
+  },
+  "6672036fa9": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 27,
+   "row_id": "a9789c4e6451",
+   "hydrogen_stills_score": 9
+  },
+  "c930ca8055": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 27,
+   "row_id": "a9789c4e6451",
+   "hydrogen_stills_score": 9
+  },
+  "4232099219": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 50,
+   "row_id": "1c896451461c",
+   "hydrogen_stills_score": 9
+  },
+  "dee85467b5": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 51,
+   "row_id": "1c896451461c",
+   "hydrogen_stills_score": 9
+  },
+  "c588e48a86": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 30,
+   "row_id": "1591a16f3e44",
+   "hydrogen_stills_score": 9
+  },
+  "b982b86a11": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 29,
+   "row_id": "1591a16f3e44",
+   "hydrogen_stills_score": 9
+  },
+  "16696dc977": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 54,
+   "row_id": "cf5a020a0cd0",
+   "hydrogen_stills_score": 8
+  },
+  "6283a4a4fc": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 56,
+   "row_id": "cf5a020a0cd0",
+   "hydrogen_stills_score": 7
+  },
+  "243e7762ce": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 53,
+   "row_id": "6f073b38e269",
+   "hydrogen_stills_score": 6
+  },
+  "819408ee2b": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 52,
+   "row_id": "6f073b38e269",
+   "hydrogen_stills_score": 9
+  },
+  "b17a3c016d": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 41,
+   "row_id": "25f49f2e60b4",
+   "hydrogen_stills_score": 9
+  },
+  "5959ef169b": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 40,
+   "row_id": "25f49f2e60b4",
+   "hydrogen_stills_score": 9
+  },
+  "3f9c41c160": {
+   "teacher": "glm-5.3",
+   "repo": "nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 49,
+   "row_id": "624cd0f5abba",
+   "hydrogen_stills_score": 8
+  },
+  "cbf426d7d3": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 49,
+   "row_id": "624cd0f5abba",
+   "hydrogen_stills_score": 9
+  },
+  "5fd67e2354": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 16,
+   "row_id": "d26bd0558ee2",
+   "hydrogen_stills_score": 8
+  },
+  "b02579e821": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 3,
+   "row_id": "8b51bdbce00e",
+   "hydrogen_stills_score": 9
+  },
+  "06fcf503c2": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 20,
+   "row_id": "2da2ec90980b",
+   "hydrogen_stills_score": 9
+  },
+  "50dfd44d4b": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 50,
+   "row_id": "4f59b96500b2",
+   "hydrogen_stills_score": 8
+  },
+  "c4a35955c8": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 18,
+   "row_id": "2790eb424b92",
+   "hydrogen_stills_score": 8
+  },
+  "7d3367b34b": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 21,
+   "row_id": "5d200ca53c70",
+   "hydrogen_stills_score": 8
+  },
+  "764fe2e4e9": {
+   "teacher": "kimi-k3.1-pro",
+   "repo": "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval",
+   "file": "episodes/teacher/validation.jsonl",
+   "index": 6,
+   "row_id": "ca58ecb518ad",
+   "hydrogen_stills_score": 9
+  }
+ },
+ "pairs": [
+  {
+   "id": "p001",
+   "kind": "same concept",
+   "category": "retro interface",
+   "left": {
+    "page": "b618085ccf",
+    "title": "Dial-Up, CONNECT 2400",
+    "idea": "Dial a late-night bulletin board through a shrieking 2400-baud modem, sign in under a 1993 handle, and navigate glowing ANSI menus to discover the sysop left you a private message."
+   },
+   "right": {
+    "page": "b675e77b2f",
+    "title": "Dial-Up, CONNECT 2400",
+    "idea": "Dial a late-night bulletin board through a shrieking 2400-baud modem, sign in under a 1993 handle, and navigate glowing ANSI menus to discover the sysop left you a private message."
+   }
+  },
+  {
+   "id": "p002",
+   "kind": "same concept",
+   "category": "simulation",
+   "left": {
+    "page": "3abb8a0a41",
+    "title": "Pilot-Wave Droplets",
+    "idea": "A bouncing droplet rides the standing waves it creates on a vibrated oil bath, drifting and interfering with its own wake like a quantum particle while you tune the bath toward chaos."
+   },
+   "right": {
+    "page": "d598b04d8c",
+    "title": "Pilot-Wave Droplets",
+    "idea": "A bouncing droplet rides the standing waves it creates on a vibrated oil bath, drifting and interfering with its own wake like a quantum particle while you tune the bath toward chaos."
+   }
+  },
+  {
+   "id": "p003",
+   "kind": "same concept",
+   "category": "interactive toy",
+   "left": {
+    "page": "6d9564ad02",
+    "title": "Laser Cat Pounce",
+    "idea": "Your cursor is a red laser dot that an orange cat stalks with dilating pupils, butt-wiggle windups and physics pounces \u2014 but sneak the dot behind the couch and the cat will investigate everything except where it went."
+   },
+   "right": {
+    "page": "1ad8486d55",
+    "title": "Laser Cat Pounce",
+    "idea": "Your cursor is a red laser dot that an orange cat stalks with dilating pupils, butt-wiggle windups and physics pounces \u2014 but sneak the dot behind the couch and the cat will investigate everything except where it went."
+   }
+  },
+  {
+   "id": "p004",
+   "kind": "same concept",
+   "category": "music and sound",
+   "left": {
+    "page": "0aecfebb75",
+    "title": "Foley Artist's Bench",
+    "idea": "A silent canvas-animated film scene loops above a workbench of props \u2014 coconut hooves, creaky door, thunder sheet, gravel boots \u2014 and you drag each onto the cue strip so it fires in sync with the picture, performing the soundtrack live."
+   },
+   "right": {
+    "page": "d94b031392",
+    "title": "Foley Artist's Bench",
+    "idea": "A silent canvas-animated film scene loops above a workbench of props \u2014 coconut hooves, creaky door, thunder sheet, gravel boots \u2014 and you drag each onto the cue strip so it fires in sync with the picture, performing the soundtrack live."
+   }
+  },
+  {
+   "id": "p005",
+   "kind": "same concept",
+   "category": "education",
+   "left": {
+    "page": "64d6e1c800",
+    "title": "A Drop of Perfume",
+    "idea": "A molecule's-eye view of diffusion: players guide one perfume molecule through a chaotic random walk to see why smells fill a room slowly without any breeze, then change air temperature to speed the cloud."
+   },
+   "right": {
+    "page": "ebfba889ce",
+    "title": "A Drop of Perfume",
+    "idea": "A molecule's-eye view of diffusion: players guide one perfume molecule through a chaotic random walk to see why smells fill a room slowly without any breeze, then change air temperature to speed the cloud."
+   }
+  },
+  {
+   "id": "p006",
+   "kind": "same concept",
+   "category": "story",
+   "left": {
+    "page": "549560e121",
+    "title": "Daylight on the Night Watch",
+    "idea": "A swipe-to-restore story of Rembrandt's 'night' that never was: scrub away centuries of dark varnish to reveal noon behind the marching militia, then drag the canvas edges outward to recover the two figures trimmed off in 1715."
+   },
+   "right": {
+    "page": "b524d56ec6",
+    "title": "Daylight on the Night Watch",
+    "idea": "A swipe-to-restore story of Rembrandt's 'night' that never was: scrub away centuries of dark varnish to reveal noon behind the marching militia, then drag the canvas edges outward to recover the two figures trimmed off in 1715."
+   }
+  },
+  {
+   "id": "p007",
+   "kind": "same concept",
+   "category": "data visualization",
+   "left": {
+    "page": "a5d30eda74",
+    "title": "The Hailstone Storm",
+    "idea": "Thousands of Collatz trajectories plotted like falling hail, each number rising, tumbling and funneling into the same sink at 1, alongside a histogram of how long each storm takes to land."
+   },
+   "right": {
+    "page": "d0901c2a1d",
+    "title": "The Hailstone Storm",
+    "idea": "Thousands of Collatz trajectories plotted like falling hail, each number rising, tumbling and funneling into the same sink at 1, alongside a histogram of how long each storm takes to land."
+   }
+  },
+  {
+   "id": "p008",
+   "kind": "same concept",
+   "category": "music and sound",
+   "left": {
+    "page": "98326da038",
+    "title": "Circuit Bloom Garden",
+    "idea": "A garden where plants sprout from glowing circuit-board nodes and brushing a leaf plucks a pentatonic tone that travels down the vine\u2014cross-pollinate two plants to breed hybrid melodies, drawn as botanical copper etchings."
+   },
+   "right": {
+    "page": "455a3ba975",
+    "title": "Circuit Bloom Garden",
+    "idea": "A garden where plants sprout from glowing circuit-board nodes and brushing a leaf plucks a pentatonic tone that travels down the vine\u2014cross-pollinate two plants to breed hybrid melodies, drawn as botanical copper etchings."
+   }
+  },
+  {
+   "id": "p009",
+   "kind": "same concept",
+   "category": "typography experiment",
+   "left": {
+    "page": "5cb57c3ea3",
+    "title": "Loom of Letters",
+    "idea": "A patient pedal-loom where arrow keys shoot the shuttle and each weft pass interlaces a row of glyphs, weaving your typed phrase into cloth one thread at a time, with honest thread-breaks you can choose to leave in as slubs."
+   },
+   "right": {
+    "page": "d179dcc531",
+    "title": "Loom of Letters",
+    "idea": "A patient pedal-loom where arrow keys shoot the shuttle and each weft pass interlaces a row of glyphs, weaving your typed phrase into cloth one thread at a time, with honest thread-breaks you can choose to leave in as slubs."
+   }
+  },
+  {
+   "id": "p010",
+   "kind": "same concept",
+   "category": "generative art",
+   "left": {
+    "page": "4e789a8fec",
+    "title": "Signal Flag Hoist",
+    "idea": "Type any message and watch it run up the halyard letter by letter, each character a crisp naval pennant that snaps and shivers in gusty procedural wind, hiding plain meaning in plain bunting."
+   },
+   "right": {
+    "page": "c59ad91a7a",
+    "title": "Signal Flag Hoist",
+    "idea": "Type any message and watch it run up the halyard letter by letter, each character a crisp naval pennant that snaps and shivers in gusty procedural wind, hiding plain meaning in plain bunting."
+   }
+  },
+  {
+   "id": "p011",
+   "kind": "same concept",
+   "category": "game",
+   "left": {
+    "page": "5de9044911",
+    "title": "The Water Ballet",
+    "idea": "Choreograph synchronized swimmers by drawing their paths on an overhead pool diagram, then play your routine back and watch judges score synchronization, symmetry and the grace of swimmers gliding within inches of collision."
+   },
+   "right": {
+    "page": "c6fd7288cb",
+    "title": "The Water Ballet",
+    "idea": "Choreograph synchronized swimmers by drawing their paths on an overhead pool diagram, then play your routine back and watch judges score synchronization, symmetry and the grace of swimmers gliding within inches of collision."
+   }
+  },
+  {
+   "id": "p012",
+   "kind": "same concept",
+   "category": "game",
+   "left": {
+    "page": "df560e1346",
+    "title": "Limestone Ghosts",
+    "idea": "Careful paleontology in cross-section: choose brush sizes to sweep away rock layers and expose a trilobite without chipping it, reading the faint ridges that hint where its fragile spine continues before you dig on."
+   },
+   "right": {
+    "page": "4630503b48",
+    "title": "Limestone Ghosts",
+    "idea": "Careful paleontology in cross-section: choose brush sizes to sweep away rock layers and expose a trilobite without chipping it, reading the faint ridges that hint where its fragile spine continues before you dig on."
+   }
+  },
+  {
+   "id": "p013",
+   "kind": "same concept",
+   "category": "tool",
+   "left": {
+    "page": "5aacbc3c02",
+    "title": "Line Fade",
+    "idea": "An actor's memorization drill that takes a pasted script and blanks out words one by one \u2014 then in clumps \u2014 as you master them, testing recall while the full text waits underneath a reveal."
+   },
+   "right": {
+    "page": "1fd63ea7c7",
+    "title": "Line Fade",
+    "idea": "An actor's memorization drill that takes a pasted script and blanks out words one by one \u2014 then in clumps \u2014 as you master them, testing recall while the full text waits underneath a reveal."
+   }
+  },
+  {
+   "id": "p014",
+   "kind": "same concept",
+   "category": "education",
+   "left": {
+    "page": "f3416f75a5",
+    "title": "The Cold That Isn't There",
+    "idea": "A table of metal, wood, plastic, and ice at identical temperature; place your cursor-finger on each and watch heat-flow arrows race or crawl away, showing that coldness is just how fast a material steals from you."
+   },
+   "right": {
+    "page": "d236b3b885",
+    "title": "The Cold That Isn't There",
+    "idea": "A table of metal, wood, plastic, and ice at identical temperature; place your cursor-finger on each and watch heat-flow arrows race or crawl away, showing that coldness is just how fast a material steals from you."
+   }
+  },
+  {
+   "id": "p015",
+   "kind": "same concept",
+   "category": "game",
+   "left": {
+    "page": "bc5da961d6",
+    "title": "Bathyal",
+    "idea": "A sonar-navigation game where the cave only exists as fading echoes: each ping costs battery and paints the walls as transitory dots, so you map the abyss mostly from memory."
+   },
+   "right": {
+    "page": "9132faf508",
+    "title": "Bathyal",
+    "idea": "A sonar-navigation game where the cave only exists as fading echoes: each ping costs battery and paints the walls as transitory dots, so you map the abyss mostly from memory."
+   }
+  },
+  {
+   "id": "p016",
+   "kind": "same concept",
+   "category": "generative art",
+   "left": {
+    "page": "d2f4b28d93",
+    "title": "Bowerbird Curator",
+    "idea": "A satin bowerbird steals whatever buttons, beetles and berries you click into his avenue, then silently rearranges the hoard by blueness and adjusts his stick walls, judging your donations against his own standards."
+   },
+   "right": {
+    "page": "201c53cfad",
+    "title": "Bowerbird Curator",
+    "idea": "A satin bowerbird steals whatever buttons, beetles and berries you click into his avenue, then silently rearranges the hoard by blueness and adjusts his stick walls, judging your donations against his own standards."
+   }
+  },
+  {
+   "id": "p017",
+   "kind": "same concept",
+   "category": "simulation",
+   "left": {
+    "page": "7a79aaeb1f",
+    "title": "Euler's Disk",
+    "idea": "A polished disk spinning on a mirror: flick it with your mouse and it wobbles faster and faster as it dies, its rising ringing hum synthesized live until the motion abruptly stills."
+   },
+   "right": {
+    "page": "bf287cdc2e",
+    "title": "Euler's Disk",
+    "idea": "A polished disk spinning on a mirror: flick it with your mouse and it wobbles faster and faster as it dies, its rising ringing hum synthesized live until the motion abruptly stills."
+   }
+  },
+  {
+   "id": "p018",
+   "kind": "same concept",
+   "category": "product page",
+   "left": {
+    "page": "3b3d2e339c",
+    "title": "The Postponed Festival",
+    "idea": "An annual festival that has been 'coming next month' since 2014; the countdown timer visibly gains time as you watch, and the Buy Tickets button flinches away from your cursor."
+   },
+   "right": {
+    "page": "1001d5875e",
+    "title": "The Postponed Festival",
+    "idea": "An annual festival that has been 'coming next month' since 2014; the countdown timer visibly gains time as you watch, and the Buy Tickets button flinches away from your cursor."
+   }
+  },
+  {
+   "id": "p019",
+   "kind": "same concept",
+   "category": "story",
+   "left": {
+    "page": "457fd03c36",
+    "title": "Carrington's Sky",
+    "idea": "The 1859 Carrington Event typeset as one continuous telegraph-tape spool: as aurora floods the sky and the tape fills with sparks and gibberish, the page's palette burns from sepia to red."
+   },
+   "right": {
+    "page": "c13ac9d121",
+    "title": "Carrington's Sky",
+    "idea": "The 1859 Carrington Event typeset as one continuous telegraph-tape spool: as aurora floods the sky and the tape fills with sparks and gibberish, the page's palette burns from sepia to red."
+   }
+  },
+  {
+   "id": "p020",
+   "kind": "same concept",
+   "category": "tool",
+   "left": {
+    "page": "856db68056",
+    "title": "Dipole Cutter",
+    "idea": "Type a band or frequency and get exact wire lengths for a half-wave dipole or inverted-V, rendered as a stretchable antenna elevation view to take to the hardware store."
+   },
+   "right": {
+    "page": "7421baa74b",
+    "title": "Dipole Cutter",
+    "idea": "Type a band or frequency and get exact wire lengths for a half-wave dipole or inverted-V, rendered as a stretchable antenna elevation view to take to the hardware store."
+   }
+  },
+  {
+   "id": "p021",
+   "kind": "same concept",
+   "category": "typography experiment",
+   "left": {
+    "page": "b0b55e92a1",
+    "title": "Endangered Alphabet",
+    "idea": "A typing game where every letter has a population of twenty and each use pushes it toward permanent grayed-out extinction, forcing you to write something worthwhile before the alphabet dies out."
+   },
+   "right": {
+    "page": "44cbbb525c",
+    "title": "Endangered Alphabet",
+    "idea": "A typing game where every letter has a population of twenty and each use pushes it toward permanent grayed-out extinction, forcing you to write something worthwhile before the alphabet dies out."
+   }
+  },
+  {
+   "id": "p022",
+   "kind": "same concept",
+   "category": "product page",
+   "left": {
+    "page": "5258ff7549",
+    "title": "The Lighthouse Timeshare",
+    "idea": "Weeks of lighthouse beam sold by the hour; a rotating beam sweeps the coastline, illuminating keepers' diaries, vacancy calendars and a beam-intensity configurator only as it passes, then lets the page go dark again."
+   },
+   "right": {
+    "page": "ef067ddc1c",
+    "title": "The Lighthouse Timeshare",
+    "idea": "Weeks of lighthouse beam sold by the hour; a rotating beam sweeps the coastline, illuminating keepers' diaries, vacancy calendars and a beam-intensity configurator only as it passes, then lets the page go dark again."
+   }
+  },
+  {
+   "id": "p023",
+   "kind": "same concept",
+   "category": "typography experiment",
+   "left": {
+    "page": "9e1cc1426a",
+    "title": "The Murmuration",
+    "idea": "A dusk sky where a boids flock of thousands of starlings flows into words, scattering into noise when you swoop through it and re-settling letter by letter until the sentence holds."
+   },
+   "right": {
+    "page": "70948b128a",
+    "title": "The Murmuration",
+    "idea": "A dusk sky where a boids flock of thousands of starlings flows into words, scattering into noise when you swoop through it and re-settling letter by letter until the sentence holds."
+   }
+  },
+  {
+   "id": "p024",
+   "kind": "same concept",
+   "category": "product page",
+   "left": {
+    "page": "4e139a6708",
+    "title": "The Whittler's Circle",
+    "idea": "A woodcarving club where you whittle a wooden spoon directly on the page, scratching away curled SVG shavings until your finished spoon earns you membership."
+   },
+   "right": {
+    "page": "3611e8ce7d",
+    "title": "The Whittler's Circle",
+    "idea": "A woodcarving club where you whittle a wooden spoon directly on the page, scratching away curled SVG shavings until your finished spoon earns you membership."
+   }
+  },
+  {
+   "id": "p025",
+   "kind": "same concept",
+   "category": "tool",
+   "left": {
+    "page": "4f1b496029",
+    "title": "Meeting Cost Ticker",
+    "idea": "Punch in headcount and rough salary bands and the page becomes a live boardroom counter of money burned per second, per agenda item, with a big red end-meeting button for catharsis."
+   },
+   "right": {
+    "page": "181ac41d78",
+    "title": "Meeting Cost Ticker",
+    "idea": "Punch in headcount and rough salary bands and the page becomes a live boardroom counter of money burned per second, per agenda item, with a big red end-meeting button for catharsis."
+   }
+  },
+  {
+   "id": "p026",
+   "kind": "same concept",
+   "category": "simulation",
+   "left": {
+    "page": "2658784982",
+    "title": "Urban Heat Island",
+    "idea": "A paintable city where every stroke matters: lay asphalt, water, and tree canopy across a block, run the clock through a heat-wave afternoon, and read the ironbow thermal camera that judges your street design."
+   },
+   "right": {
+    "page": "77d7ad5d5e",
+    "title": "Urban Heat Island",
+    "idea": "A paintable city where every stroke matters: lay asphalt, water, and tree canopy across a block, run the clock through a heat-wave afternoon, and read the ironbow thermal camera that judges your street design."
+   }
+  },
+  {
+   "id": "p027",
+   "kind": "same concept",
+   "category": "generative art",
+   "left": {
+    "page": "991a568c52",
+    "title": "Pyrography Slow Burn",
+    "idea": "A wood-burning pen where holding still lets the scorch bloom outward through the grain, so every line you draw deepens from honey to chocolate to char, and overworking one spot burns clean through the board."
+   },
+   "right": {
+    "page": "3daef9344a",
+    "title": "Pyrography Slow Burn",
+    "idea": "A wood-burning pen where holding still lets the scorch bloom outward through the grain, so every line you draw deepens from honey to chocolate to char, and overworking one spot burns clean through the board."
+   }
+  },
+  {
+   "id": "p028",
+   "kind": "same concept",
+   "category": "music and sound",
+   "left": {
+    "page": "dbe4956547",
+    "title": "Aurora Curtain Synth",
+    "idea": "Players paint aurora ribbons across a polar night sky, each ribbon a detuned oscillator pair whose shimmer, drift and detune follow the ribbon's height and wobble."
+   },
+   "right": {
+    "page": "4022f69120",
+    "title": "Aurora Curtain Synth",
+    "idea": "Players paint aurora ribbons across a polar night sky, each ribbon a detuned oscillator pair whose shimmer, drift and detune follow the ribbon's height and wobble."
+   }
+  },
+  {
+   "id": "p029",
+   "kind": "same concept",
+   "category": "interactive toy",
+   "left": {
+    "page": "a9fffb96bd",
+    "title": "Jelly Slice Wobble",
+    "idea": "A trembling jelly on a glass plate ripples with soft-body physics when you poke or slap it, and can be sliced cleanly with a drag so each half keeps wobbling on its own."
+   },
+   "right": {
+    "page": "fc75434e9f",
+    "title": "Jelly Slice Wobble",
+    "idea": "A trembling jelly on a glass plate ripples with soft-body physics when you poke or slap it, and can be sliced cleanly with a drag so each half keeps wobbling on its own."
+   }
+  },
+  {
+   "id": "p030",
+   "kind": "same concept",
+   "category": "retro interface",
+   "left": {
+    "page": "2538210f1f",
+    "title": "Sign-Off, Test Pattern",
+    "idea": "The station's last transmission of the night: a bored announcer drones the sign-off script, the monochrome test pattern rolls on with a 1,000-cycle tone, and then it's shimmering gray snow until you switch off or hold out for the 6 a.m. farm report."
+   },
+   "right": {
+    "page": "8ed80f6e4f",
+    "title": "Sign-Off, Test Pattern",
+    "idea": "The station's last transmission of the night: a bored announcer drones the sign-off script, the monochrome test pattern rolls on with a 1,000-cycle tone, and then it's shimmering gray snow until you switch off or hold out for the 6 a.m. farm report."
+   }
+  },
+  {
+   "id": "p031",
+   "kind": "same concept",
+   "category": "education",
+   "left": {
+    "page": "ded07974c7",
+    "title": "The Heart's Own Drummer",
+    "idea": "Fire the sinoatrial node yourself and watch an electrical wave ripple through a cutaway heart, with a tap-along tempo test proving why CPR compressions ride the beat of Stayin' Alive."
+   },
+   "right": {
+    "page": "ba65ce41d4",
+    "title": "The Heart's Own Drummer",
+    "idea": "Fire the sinoatrial node yourself and watch an electrical wave ripple through a cutaway heart, with a tap-along tempo test proving why CPR compressions ride the beat of Stayin' Alive."
+   }
+  },
+  {
+   "id": "p032",
+   "kind": "same concept",
+   "category": "data visualization",
+   "left": {
+    "page": "758714b6bc",
+    "title": "The Falling Price of Light",
+    "idea": "Nordhaus's illumination economics \u2014 a Babylonian oil lamp versus an LED \u2014 charted as a six-millennium cliff-fall, each hover translating cost into hours of labor needed to buy a single hour of reading light."
+   },
+   "right": {
+    "page": "899237c0b5",
+    "title": "The Falling Price of Light",
+    "idea": "Nordhaus's illumination economics \u2014 a Babylonian oil lamp versus an LED \u2014 charted as a six-millennium cliff-fall, each hover translating cost into hours of labor needed to buy a single hour of reading light."
+   }
+  },
+  {
+   "id": "p033",
+   "kind": "same concept",
+   "category": "generative art",
+   "left": {
+    "page": "fa4f1385bf",
+    "title": "Terrazzo Pour and Polish",
+    "idea": "Pour jewel-toned chips into wet binder, trowel them around with your cursor, then run the grinding pass that flattens the surface and reveals your aggregate as an instant terrazzo slab."
+   },
+   "right": {
+    "page": "cc3deaeb2d",
+    "title": "Terrazzo Pour and Polish",
+    "idea": "Pour jewel-toned chips into wet binder, trowel them around with your cursor, then run the grinding pass that flattens the surface and reveals your aggregate as an instant terrazzo slab."
+   }
+  },
+  {
+   "id": "p034",
+   "kind": "same concept",
+   "category": "typography experiment",
+   "left": {
+    "page": "af92d4caa7",
+    "title": "The Tremor Transcript",
+    "idea": "A seismograph drum where the needle scribbles in letters as if the earth itself were writing, and shaking your cursor spikes the amplitude from tidy script into jagged, unreadable panic."
+   },
+   "right": {
+    "page": "60d56b342c",
+    "title": "The Tremor Transcript",
+    "idea": "A seismograph drum where the needle scribbles in letters as if the earth itself were writing, and shaking your cursor spikes the amplitude from tidy script into jagged, unreadable panic."
+   }
+  },
+  {
+   "id": "p035",
+   "kind": "same concept",
+   "category": "story",
+   "left": {
+    "page": "95ca94c0d8",
+    "title": "The Ship That Sailed Alone",
+    "idea": "A fog-bound maritime investigation of the Mary Celeste, found seaworthy but deserted in 1872; you gather contradicting evidence \u2014 warm meals, intact cargo, a frayed log line \u2014 and pin different theories to watch the ship's final hours re-render themselves."
+   },
+   "right": {
+    "page": "2816cb30ac",
+    "title": "The Ship That Sailed Alone",
+    "idea": "A fog-bound maritime investigation of the Mary Celeste, found seaworthy but deserted in 1872; you gather contradicting evidence \u2014 warm meals, intact cargo, a frayed log line \u2014 and pin different theories to watch the ship's final hours re-render themselves."
+   }
+  },
+  {
+   "id": "p036",
+   "kind": "same concept",
+   "category": "game",
+   "left": {
+    "page": "371ae04eee",
+    "title": "The Aeronaut's Ballast",
+    "idea": "Balloon piloting where heat is your only control: burn to rise into wind bands flowing in different directions, vent to sink, and thread mountain passes on a dwindling fuel gauge."
+   },
+   "right": {
+    "page": "d815752f8f",
+    "title": "The Aeronaut's Ballast",
+    "idea": "Balloon piloting where heat is your only control: burn to rise into wind bands flowing in different directions, vent to sink, and thread mountain passes on a dwindling fuel gauge."
+   }
+  },
+  {
+   "id": "p037",
+   "kind": "same concept",
+   "category": "generative art",
+   "left": {
+    "page": "f91e8da71e",
+    "title": "Comet Tail Grammar",
+    "idea": "Fling comets into orbit around a sun and real orbital physics splits each wake into a curved dust tail and a straight ion tail streaming away from the light, braiding long-exposure trails into celestial calligraphy."
+   },
+   "right": {
+    "page": "1143ad3209",
+    "title": "Comet Tail Grammar",
+    "idea": "Fling comets into orbit around a sun and real orbital physics splits each wake into a curved dust tail and a straight ion tail streaming away from the light, braiding long-exposure trails into celestial calligraphy."
+   }
+  },
+  {
+   "id": "p038",
+   "kind": "same concept",
+   "category": "music and sound",
+   "left": {
+    "page": "cf50dfd9ba",
+    "title": "Thunderhead Mixing Desk",
+    "idea": "A night storm front laid out like a mixing console \u2014 faders and toggles blend wind noise, rain hi-hats, rolling thunder timpani and lightning-flash accents \u2014 while a distant city skyline silhouette flickers in reaction to your improvised weather."
+   },
+   "right": {
+    "page": "35a7b6f76b",
+    "title": "Thunderhead Mixing Desk",
+    "idea": "A night storm front laid out like a mixing console \u2014 faders and toggles blend wind noise, rain hi-hats, rolling thunder timpani and lightning-flash accents \u2014 while a distant city skyline silhouette flickers in reaction to your improvised weather."
+   }
+  },
+  {
+   "id": "p039",
+   "kind": "same concept",
+   "category": "retro interface",
+   "left": {
+    "page": "3542a83881",
+    "title": "Cat's Eye, Dial 1010",
+    "idea": "A 1940s living-room tube radio with warm-up hum and a glowing glass dial; you spin a weighted flywheel tuner across a band of static and hidden stations while the green magic-eye tube narrows to a slit as you home in on a dance-band broadcast."
+   },
+   "right": {
+    "page": "d68b01c88d",
+    "title": "Cat's Eye, Dial 1010",
+    "idea": "A 1940s living-room tube radio with warm-up hum and a glowing glass dial; you spin a weighted flywheel tuner across a band of static and hidden stations while the green magic-eye tube narrows to a slit as you home in on a dance-band broadcast."
+   }
+  },
+  {
+   "id": "p040",
+   "kind": "same concept",
+   "category": "product page",
+   "left": {
+    "page": "5ca0f876fc",
+    "title": "The Feathered Whistle Co.",
+    "idea": "A woodcarver's catalog of bird-call whistles; hover each carved bird to trigger its synthesized song (WebAudio), read which species call it imitates, and leave a two-note reply the flock will answer."
+   },
+   "right": {
+    "page": "0a33a422b0",
+    "title": "The Feathered Whistle Co.",
+    "idea": "A woodcarver's catalog of bird-call whistles; hover each carved bird to trigger its synthesized song (WebAudio), read which species call it imitates, and leave a two-note reply the flock will answer."
+   }
+  },
+  {
+   "id": "p041",
+   "kind": "same concept",
+   "category": "interactive toy",
+   "left": {
+    "page": "c57af68786",
+    "title": "Gelatin Keyboard",
+    "idea": "Every key is a slab of quivering neon gelatin with soft-body physics, so typing sends slap-ripples through neighboring keys and mashing hard makes the whole keyboard jiggle like a tray of dessert."
+   },
+   "right": {
+    "page": "895d9662a5",
+    "title": "Gelatin Keyboard",
+    "idea": "Every key is a slab of quivering neon gelatin with soft-body physics, so typing sends slap-ripples through neighboring keys and mashing hard makes the whole keyboard jiggle like a tray of dessert."
+   }
+  },
+  {
+   "id": "p105",
+   "kind": "same concept",
+   "category": "generative art",
+   "left": {
+    "page": "c59ad91a7a",
+    "title": "Signal Flag Hoist",
+    "idea": "Type any message and watch it run up the halyard letter by letter, each character a crisp naval pennant that snaps and shivers in gusty procedural wind, hiding plain meaning in plain bunting."
+   },
+   "right": {
+    "page": "4e789a8fec",
+    "title": "Signal Flag Hoist",
+    "idea": "Type any message and watch it run up the halyard letter by letter, each character a crisp naval pennant that snaps and shivers in gusty procedural wind, hiding plain meaning in plain bunting."
+   },
+   "repeat_of": "p010"
+  },
+  {
+   "id": "p042",
+   "kind": "same concept",
+   "category": "interactive toy",
+   "left": {
+    "page": "9eaad9e587",
+    "title": "Euler's Disk Hum",
+    "idea": "Spin a chrome disk on a curved mirror and chase its eerily accelerating wobble-hum as it decays, flicking it mid-precession to buy a few more hypnotic seconds."
+   },
+   "right": {
+    "page": "e35aa4fdbf",
+    "title": "Euler's Disk Hum",
+    "idea": "Spin a chrome disk on a curved mirror and chase its eerily accelerating wobble-hum as it decays, flicking it mid-precession to buy a few more hypnotic seconds."
+   }
+  },
+  {
+   "id": "p043",
+   "kind": "same concept",
+   "category": "music and sound",
+   "left": {
+    "page": "9ec58d8a12",
+    "title": "Music Box Cylinder Workshop",
+    "idea": "Punch pins into a spinning brass cylinder so they pluck the teeth of a metal comb, composing a hand-cranked melody whose tempo is literally whatever speed you turn the handle."
+   },
+   "right": {
+    "page": "70052a2788",
+    "title": "Music Box Cylinder Workshop",
+    "idea": "Punch pins into a spinning brass cylinder so they pluck the teeth of a metal comb, composing a hand-cranked melody whose tempo is literally whatever speed you turn the handle."
+   }
+  },
+  {
+   "id": "p044",
+   "kind": "same concept",
+   "category": "typography experiment",
+   "left": {
+    "page": "6672036fa9",
+    "title": "Ligature Smelting Works",
+    "idea": "A molten foundry floor where loose letters slide with real collision physics until an f meets an i and smelts into a glowing fi ligature, chaining exothermic fusion reactions that reward you for engineering ever-longer glyph alloys."
+   },
+   "right": {
+    "page": "c930ca8055",
+    "title": "Ligature Smelting Works",
+    "idea": "A molten foundry floor where loose letters slide with real collision physics until an f meets an i and smelts into a glowing fi ligature, chaining exothermic fusion reactions that reward you for engineering ever-longer glyph alloys."
+   }
+  },
+  {
+   "id": "p045",
+   "kind": "same concept",
+   "category": "retro interface",
+   "left": {
+    "page": "4232099219",
+    "title": "SCRAM, Rods Full In",
+    "idea": "A 1970s reactor control room of analog needle gauges and amber annunciators that hums along boringly until you trip a fault and slam the big red SCRAM handle, dropping rods into a disciplined panic of blinking tiles and decay curves."
+   },
+   "right": {
+    "page": "dee85467b5",
+    "title": "SCRAM, Rods Full In",
+    "idea": "A 1970s reactor control room of analog needle gauges and amber annunciators that hums along boringly until you trip a fault and slam the big red SCRAM handle, dropping rods into a disciplined panic of blinking tiles and decay curves."
+   }
+  },
+  {
+   "id": "p046",
+   "kind": "same concept",
+   "category": "product page",
+   "left": {
+    "page": "c588e48a86",
+    "title": "Dial Tone Revival Society",
+    "idea": "A club preserving the specific buzz of obsolete telephone networks, where each membership tier plays an authentically re-synthesized dial tone from a different decade via Web Audio, with an oscilloscope visualization painted across the hero."
+   },
+   "right": {
+    "page": "b982b86a11",
+    "title": "Dial Tone Revival Society",
+    "idea": "A club preserving the specific buzz of obsolete telephone networks, where each membership tier plays an authentically re-synthesized dial tone from a different decade via Web Audio, with an oscilloscope visualization painted across the hero."
+   }
+  },
+  {
+   "id": "p047",
+   "kind": "same concept",
+   "category": "education",
+   "left": {
+    "page": "16696dc977",
+    "title": "When the Billionaire Walks In",
+    "idea": "A bar chart of 100 ordinary incomes gets one new patron, and as you drag the billionaire's wealth the mean and median split apart \u2014 a visceral demonstration of why averages lie."
+   },
+   "right": {
+    "page": "6283a4a4fc",
+    "title": "When the Billionaire Walks In",
+    "idea": "A bar chart of 100 ordinary incomes gets one new patron, and as you drag the billionaire's wealth the mean and median split apart \u2014 a visceral demonstration of why averages lie."
+   }
+  },
+  {
+   "id": "p048",
+   "kind": "same concept",
+   "category": "retro interface",
+   "left": {
+    "page": "243e7762ce",
+    "title": "78 rpm, Spring Dying",
+    "idea": "Wind the mainspring of a 1922 gramophone, lower the cactus needle onto a 78, and keep winding mid-song to hold the pitch true, because when the spring dies the singer sinks into a monstrous drawl."
+   },
+   "right": {
+    "page": "819408ee2b",
+    "title": "78 rpm, Spring Dying",
+    "idea": "Wind the mainspring of a 1922 gramophone, lower the cactus needle onto a 78, and keep winding mid-song to hold the pitch true, because when the spring dies the singer sinks into a monstrous drawl."
+   }
+  },
+  {
+   "id": "p049",
+   "kind": "same concept",
+   "category": "simulation",
+   "left": {
+    "page": "b17a3c016d",
+    "title": "Hare & Lynx Ledger",
+    "idea": "A fur-trade ledger from the 1850s comes alive as the hare and lynx populations of the Lotka\u2013Volterra equations chase each other through the decades while their phase-space orbit draws its closed loop \u2014 adjust trapping pressure and the cycle tightens or spirals."
+   },
+   "right": {
+    "page": "5959ef169b",
+    "title": "Hare & Lynx Ledger",
+    "idea": "A fur-trade ledger from the 1850s comes alive as the hare and lynx populations of the Lotka\u2013Volterra equations chase each other through the decades while their phase-space orbit draws its closed loop \u2014 adjust trapping pressure and the cycle tightens or spirals."
+   }
+  },
+  {
+   "id": "p050",
+   "kind": "same concept",
+   "category": "story",
+   "left": {
+    "page": "3f9c41c160",
+    "title": "Pointing at Nothing",
+    "idea": "In 1995 Hubble stared at a supposedly empty patch of sky for ten straight days; as your scroll accumulates 'integration time,' thousands of procedurally generated galaxies bloom out of pixel noise, each layer fainter than the last, until 'nothing' turns out to hold thousands of worlds."
+   },
+   "right": {
+    "page": "cbf426d7d3",
+    "title": "Pointing at Nothing",
+    "idea": "In 1995 Hubble stared at a supposedly empty patch of sky for ten straight days; as your scroll accumulates 'integration time,' thousands of procedurally generated galaxies bloom out of pixel noise, each layer fainter than the last, until 'nothing' turns out to hold thousands of worlds."
+   }
+  },
+  {
+   "id": "p051",
+   "kind": "same category",
+   "category": "typography experiment",
+   "left": {
+    "page": "d179dcc531",
+    "title": "Loom of Letters",
+    "idea": "A patient pedal-loom where arrow keys shoot the shuttle and each weft pass interlaces a row of glyphs, weaving your typed phrase into cloth one thread at a time, with honest thread-breaks you can choose to leave in as slubs."
+   },
+   "right": {
+    "page": "70948b128a",
+    "title": "The Murmuration",
+    "idea": "A dusk sky where a boids flock of thousands of starlings flows into words, scattering into noise when you swoop through it and re-settling letter by letter until the sentence holds."
+   }
+  },
+  {
+   "id": "p110",
+   "kind": "same concept",
+   "category": "tool",
+   "left": {
+    "page": "1fd63ea7c7",
+    "title": "Line Fade",
+    "idea": "An actor's memorization drill that takes a pasted script and blanks out words one by one \u2014 then in clumps \u2014 as you master them, testing recall while the full text waits underneath a reveal."
+   },
+   "right": {
+    "page": "5aacbc3c02",
+    "title": "Line Fade",
+    "idea": "An actor's memorization drill that takes a pasted script and blanks out words one by one \u2014 then in clumps \u2014 as you master them, testing recall while the full text waits underneath a reveal."
+   },
+   "repeat_of": "p013"
+  },
+  {
+   "id": "p052",
+   "kind": "same category",
+   "category": "tool",
+   "left": {
+    "page": "1fd63ea7c7",
+    "title": "Line Fade",
+    "idea": "An actor's memorization drill that takes a pasted script and blanks out words one by one \u2014 then in clumps \u2014 as you master them, testing recall while the full text waits underneath a reveal."
+   },
+   "right": {
+    "page": "5fd67e2354",
+    "title": "Darts Checkout Chalkboard",
+    "idea": "Type any remaining score of 170 or under and a pub chalkboard chalks up the fastest double-out finishing routes, highlighting the trebles, singles, and final double for match play."
+   }
+  },
+  {
+   "id": "p053",
+   "kind": "same category",
+   "category": "interactive toy",
+   "left": {
+    "page": "b02579e821",
+    "title": "Matryoshka Nest Surprise",
+    "idea": "Twist open doll after doll to find a smaller, stranger character inside \u2014 seven nested personalities with their own tics \u2014 then stack them all back together with a satisfying clack."
+   },
+   "right": {
+    "page": "e35aa4fdbf",
+    "title": "Euler's Disk Hum",
+    "idea": "Spin a chrome disk on a curved mirror and chase its eerily accelerating wobble-hum as it decays, flicking it mid-precession to buy a few more hypnotic seconds."
+   }
+  },
+  {
+   "id": "p054",
+   "kind": "same category",
+   "category": "data visualization",
+   "left": {
+    "page": "06fcf503c2",
+    "title": "The Ulam Spiral",
+    "idea": "Wind the counting numbers into a square spiral and watch primes congeal into impossible diagonal galaxies, with a control to restart the spiral from any number and hunt for your own secret ridges."
+   },
+   "right": {
+    "page": "899237c0b5",
+    "title": "The Falling Price of Light",
+    "idea": "Nordhaus's illumination economics \u2014 a Babylonian oil lamp versus an LED \u2014 charted as a six-millennium cliff-fall, each hover translating cost into hours of labor needed to buy a single hour of reading light."
+   }
+  },
+  {
+   "id": "p055",
+   "kind": "same category",
+   "category": "product page",
+   "left": {
+    "page": "3611e8ce7d",
+    "title": "The Whittler's Circle",
+    "idea": "A woodcarving club where you whittle a wooden spoon directly on the page, scratching away curled SVG shavings until your finished spoon earns you membership."
+   },
+   "right": {
+    "page": "1001d5875e",
+    "title": "The Postponed Festival",
+    "idea": "An annual festival that has been 'coming next month' since 2014; the countdown timer visibly gains time as you watch, and the Buy Tickets button flinches away from your cursor."
+   }
+  },
+  {
+   "id": "p056",
+   "kind": "same category",
+   "category": "story",
+   "left": {
+    "page": "50dfd44d4b",
+    "title": "The Mechanical Turk",
+    "idea": "The 1770 chess automaton as an interactive cabinet: you play a small chess engine while opening the sliding doors and candlelit panels one by one to find the hidden human operator on his sliding seat \u2014 a page that is simultaneously the trick, the show, and its exposure."
+   },
+   "right": {
+    "page": "cbf426d7d3",
+    "title": "Pointing at Nothing",
+    "idea": "In 1995 Hubble stared at a supposedly empty patch of sky for ten straight days; as your scroll accumulates 'integration time,' thousands of procedurally generated galaxies bloom out of pixel noise, each layer fainter than the last, until 'nothing' turns out to hold thousands of worlds."
+   }
+  },
+  {
+   "id": "p057",
+   "kind": "same category",
+   "category": "game",
+   "left": {
+    "page": "d815752f8f",
+    "title": "The Aeronaut's Ballast",
+    "idea": "Balloon piloting where heat is your only control: burn to rise into wind bands flowing in different directions, vent to sink, and thread mountain passes on a dwindling fuel gauge."
+   },
+   "right": {
+    "page": "bc5da961d6",
+    "title": "Bathyal",
+    "idea": "A sonar-navigation game where the cave only exists as fading echoes: each ping costs battery and paints the walls as transitory dots, so you map the abyss mostly from memory."
+   }
+  },
+  {
+   "id": "p058",
+   "kind": "same category",
+   "category": "simulation",
+   "left": {
+    "page": "2658784982",
+    "title": "Urban Heat Island",
+    "idea": "A paintable city where every stroke matters: lay asphalt, water, and tree canopy across a block, run the clock through a heat-wave afternoon, and read the ironbow thermal camera that judges your street design."
+   },
+   "right": {
+    "page": "3abb8a0a41",
+    "title": "Pilot-Wave Droplets",
+    "idea": "A bouncing droplet rides the standing waves it creates on a vibrated oil bath, drifting and interfering with its own wake like a quantum particle while you tune the bath toward chaos."
+   }
+  },
+  {
+   "id": "p059",
+   "kind": "same category",
+   "category": "data visualization",
+   "left": {
+    "page": "06fcf503c2",
+    "title": "The Ulam Spiral",
+    "idea": "Wind the counting numbers into a square spiral and watch primes congeal into impossible diagonal galaxies, with a control to restart the spiral from any number and hunt for your own secret ridges."
+   },
+   "right": {
+    "page": "758714b6bc",
+    "title": "The Falling Price of Light",
+    "idea": "Nordhaus's illumination economics \u2014 a Babylonian oil lamp versus an LED \u2014 charted as a six-millennium cliff-fall, each hover translating cost into hours of labor needed to buy a single hour of reading light."
+   }
+  },
+  {
+   "id": "p060",
+   "kind": "same category",
+   "category": "typography experiment",
+   "left": {
+    "page": "d179dcc531",
+    "title": "Loom of Letters",
+    "idea": "A patient pedal-loom where arrow keys shoot the shuttle and each weft pass interlaces a row of glyphs, weaving your typed phrase into cloth one thread at a time, with honest thread-breaks you can choose to leave in as slubs."
+   },
+   "right": {
+    "page": "44cbbb525c",
+    "title": "Endangered Alphabet",
+    "idea": "A typing game where every letter has a population of twenty and each use pushes it toward permanent grayed-out extinction, forcing you to write something worthwhile before the alphabet dies out."
+   }
+  },
+  {
+   "id": "p061",
+   "kind": "same category",
+   "category": "tool",
+   "left": {
+    "page": "c4a35955c8",
+    "title": "Rafter Birdsmouth Setter",
+    "idea": "A cross-section of a gable roof that recomputes rafter length, plumb cut and birdsmouth depth as you drag the pitch triangle, plus a printable cut checklist."
+   },
+   "right": {
+    "page": "5fd67e2354",
+    "title": "Darts Checkout Chalkboard",
+    "idea": "Type any remaining score of 170 or under and a pub chalkboard chalks up the fastest double-out finishing routes, highlighting the trebles, singles, and final double for match play."
+   }
+  },
+  {
+   "id": "p062",
+   "kind": "same category",
+   "category": "interactive toy",
+   "left": {
+    "page": "fc75434e9f",
+    "title": "Jelly Slice Wobble",
+    "idea": "A trembling jelly on a glass plate ripples with soft-body physics when you poke or slap it, and can be sliced cleanly with a drag so each half keeps wobbling on its own."
+   },
+   "right": {
+    "page": "1ad8486d55",
+    "title": "Laser Cat Pounce",
+    "idea": "Your cursor is a red laser dot that an orange cat stalks with dilating pupils, butt-wiggle windups and physics pounces \u2014 but sneak the dot behind the couch and the cat will investigate everything except where it went."
+   }
+  },
+  {
+   "id": "p063",
+   "kind": "same category",
+   "category": "typography experiment",
+   "left": {
+    "page": "5cb57c3ea3",
+    "title": "Loom of Letters",
+    "idea": "A patient pedal-loom where arrow keys shoot the shuttle and each weft pass interlaces a row of glyphs, weaving your typed phrase into cloth one thread at a time, with honest thread-breaks you can choose to leave in as slubs."
+   },
+   "right": {
+    "page": "b0b55e92a1",
+    "title": "Endangered Alphabet",
+    "idea": "A typing game where every letter has a population of twenty and each use pushes it toward permanent grayed-out extinction, forcing you to write something worthwhile before the alphabet dies out."
+   }
+  },
+  {
+   "id": "p064",
+   "kind": "same category",
+   "category": "interactive toy",
+   "left": {
+    "page": "c57af68786",
+    "title": "Gelatin Keyboard",
+    "idea": "Every key is a slab of quivering neon gelatin with soft-body physics, so typing sends slap-ripples through neighboring keys and mashing hard makes the whole keyboard jiggle like a tray of dessert."
+   },
+   "right": {
+    "page": "1ad8486d55",
+    "title": "Laser Cat Pounce",
+    "idea": "Your cursor is a red laser dot that an orange cat stalks with dilating pupils, butt-wiggle windups and physics pounces \u2014 but sneak the dot behind the couch and the cat will investigate everything except where it went."
+   }
+  },
+  {
+   "id": "p065",
+   "kind": "same category",
+   "category": "data visualization",
+   "left": {
+    "page": "758714b6bc",
+    "title": "The Falling Price of Light",
+    "idea": "Nordhaus's illumination economics \u2014 a Babylonian oil lamp versus an LED \u2014 charted as a six-millennium cliff-fall, each hover translating cost into hours of labor needed to buy a single hour of reading light."
+   },
+   "right": {
+    "page": "7d3367b34b",
+    "title": "A Quarter Are Beetles",
+    "idea": "The tree of life with branches drawn at true species-count width, so zooming in reveals that a quarter of all named organisms are beetles while mammals are a whisker, annotated with how Victorian beetle-mania shaped the count."
+   }
+  },
+  {
+   "id": "p066",
+   "kind": "same category",
+   "category": "education",
+   "left": {
+    "page": "ded07974c7",
+    "title": "The Heart's Own Drummer",
+    "idea": "Fire the sinoatrial node yourself and watch an electrical wave ripple through a cutaway heart, with a tap-along tempo test proving why CPR compressions ride the beat of Stayin' Alive."
+   },
+   "right": {
+    "page": "d236b3b885",
+    "title": "The Cold That Isn't There",
+    "idea": "A table of metal, wood, plastic, and ice at identical temperature; place your cursor-finger on each and watch heat-flow arrows race or crawl away, showing that coldness is just how fast a material steals from you."
+   }
+  },
+  {
+   "id": "p109",
+   "kind": "same concept",
+   "category": "product page",
+   "left": {
+    "page": "ef067ddc1c",
+    "title": "The Lighthouse Timeshare",
+    "idea": "Weeks of lighthouse beam sold by the hour; a rotating beam sweeps the coastline, illuminating keepers' diaries, vacancy calendars and a beam-intensity configurator only as it passes, then lets the page go dark again."
+   },
+   "right": {
+    "page": "5258ff7549",
+    "title": "The Lighthouse Timeshare",
+    "idea": "Weeks of lighthouse beam sold by the hour; a rotating beam sweeps the coastline, illuminating keepers' diaries, vacancy calendars and a beam-intensity configurator only as it passes, then lets the page go dark again."
+   },
+   "repeat_of": "p022"
+  },
+  {
+   "id": "p067",
+   "kind": "same category",
+   "category": "generative art",
+   "left": {
+    "page": "991a568c52",
+    "title": "Pyrography Slow Burn",
+    "idea": "A wood-burning pen where holding still lets the scorch bloom outward through the grain, so every line you draw deepens from honey to chocolate to char, and overworking one spot burns clean through the board."
+   },
+   "right": {
+    "page": "cc3deaeb2d",
+    "title": "Terrazzo Pour and Polish",
+    "idea": "Pour jewel-toned chips into wet binder, trowel them around with your cursor, then run the grinding pass that flattens the surface and reveals your aggregate as an instant terrazzo slab."
+   }
+  },
+  {
+   "id": "p068",
+   "kind": "same category",
+   "category": "interactive toy",
+   "left": {
+    "page": "9eaad9e587",
+    "title": "Euler's Disk Hum",
+    "idea": "Spin a chrome disk on a curved mirror and chase its eerily accelerating wobble-hum as it decays, flicking it mid-precession to buy a few more hypnotic seconds."
+   },
+   "right": {
+    "page": "895d9662a5",
+    "title": "Gelatin Keyboard",
+    "idea": "Every key is a slab of quivering neon gelatin with soft-body physics, so typing sends slap-ripples through neighboring keys and mashing hard makes the whole keyboard jiggle like a tray of dessert."
+   }
+  },
+  {
+   "id": "p069",
+   "kind": "same category",
+   "category": "tool",
+   "left": {
+    "page": "4f1b496029",
+    "title": "Meeting Cost Ticker",
+    "idea": "Punch in headcount and rough salary bands and the page becomes a live boardroom counter of money burned per second, per agenda item, with a big red end-meeting button for catharsis."
+   },
+   "right": {
+    "page": "1fd63ea7c7",
+    "title": "Line Fade",
+    "idea": "An actor's memorization drill that takes a pasted script and blanks out words one by one \u2014 then in clumps \u2014 as you master them, testing recall while the full text waits underneath a reveal."
+   }
+  },
+  {
+   "id": "p107",
+   "kind": "same concept",
+   "category": "tool",
+   "left": {
+    "page": "181ac41d78",
+    "title": "Meeting Cost Ticker",
+    "idea": "Punch in headcount and rough salary bands and the page becomes a live boardroom counter of money burned per second, per agenda item, with a big red end-meeting button for catharsis."
+   },
+   "right": {
+    "page": "4f1b496029",
+    "title": "Meeting Cost Ticker",
+    "idea": "Punch in headcount and rough salary bands and the page becomes a live boardroom counter of money burned per second, per agenda item, with a big red end-meeting button for catharsis."
+   },
+   "repeat_of": "p025"
+  },
+  {
+   "id": "p070",
+   "kind": "same category",
+   "category": "game",
+   "left": {
+    "page": "5de9044911",
+    "title": "The Water Ballet",
+    "idea": "Choreograph synchronized swimmers by drawing their paths on an overhead pool diagram, then play your routine back and watch judges score synchronization, symmetry and the grace of swimmers gliding within inches of collision."
+   },
+   "right": {
+    "page": "9132faf508",
+    "title": "Bathyal",
+    "idea": "A sonar-navigation game where the cave only exists as fading echoes: each ping costs battery and paints the walls as transitory dots, so you map the abyss mostly from memory."
+   }
+  },
+  {
+   "id": "p071",
+   "kind": "same category",
+   "category": "typography experiment",
+   "left": {
+    "page": "44cbbb525c",
+    "title": "Endangered Alphabet",
+    "idea": "A typing game where every letter has a population of twenty and each use pushes it toward permanent grayed-out extinction, forcing you to write something worthwhile before the alphabet dies out."
+   },
+   "right": {
+    "page": "9e1cc1426a",
+    "title": "The Murmuration",
+    "idea": "A dusk sky where a boids flock of thousands of starlings flows into words, scattering into noise when you swoop through it and re-settling letter by letter until the sentence holds."
+   }
+  },
+  {
+   "id": "p072",
+   "kind": "same category",
+   "category": "game",
+   "left": {
+    "page": "bc5da961d6",
+    "title": "Bathyal",
+    "idea": "A sonar-navigation game where the cave only exists as fading echoes: each ping costs battery and paints the walls as transitory dots, so you map the abyss mostly from memory."
+   },
+   "right": {
+    "page": "4630503b48",
+    "title": "Limestone Ghosts",
+    "idea": "Careful paleontology in cross-section: choose brush sizes to sweep away rock layers and expose a trilobite without chipping it, reading the faint ridges that hint where its fragile spine continues before you dig on."
+   }
+  },
+  {
+   "id": "p073",
+   "kind": "same category",
+   "category": "music and sound",
+   "left": {
+    "page": "0aecfebb75",
+    "title": "Foley Artist's Bench",
+    "idea": "A silent canvas-animated film scene loops above a workbench of props \u2014 coconut hooves, creaky door, thunder sheet, gravel boots \u2014 and you drag each onto the cue strip so it fires in sync with the picture, performing the soundtrack live."
+   },
+   "right": {
+    "page": "98326da038",
+    "title": "Circuit Bloom Garden",
+    "idea": "A garden where plants sprout from glowing circuit-board nodes and brushing a leaf plucks a pentatonic tone that travels down the vine\u2014cross-pollinate two plants to breed hybrid melodies, drawn as botanical copper etchings."
+   }
+  },
+  {
+   "id": "p074",
+   "kind": "same category",
+   "category": "music and sound",
+   "left": {
+    "page": "dbe4956547",
+    "title": "Aurora Curtain Synth",
+    "idea": "Players paint aurora ribbons across a polar night sky, each ribbon a detuned oscillator pair whose shimmer, drift and detune follow the ribbon's height and wobble."
+   },
+   "right": {
+    "page": "d94b031392",
+    "title": "Foley Artist's Bench",
+    "idea": "A silent canvas-animated film scene loops above a workbench of props \u2014 coconut hooves, creaky door, thunder sheet, gravel boots \u2014 and you drag each onto the cue strip so it fires in sync with the picture, performing the soundtrack live."
+   }
+  },
+  {
+   "id": "p075",
+   "kind": "same category",
+   "category": "retro interface",
+   "left": {
+    "page": "dee85467b5",
+    "title": "SCRAM, Rods Full In",
+    "idea": "A 1970s reactor control room of analog needle gauges and amber annunciators that hums along boringly until you trip a fault and slam the big red SCRAM handle, dropping rods into a disciplined panic of blinking tiles and decay curves."
+   },
+   "right": {
+    "page": "819408ee2b",
+    "title": "78 rpm, Spring Dying",
+    "idea": "Wind the mainspring of a 1922 gramophone, lower the cactus needle onto a 78, and keep winding mid-song to hold the pitch true, because when the spring dies the singer sinks into a monstrous drawl."
+   }
+  },
+  {
+   "id": "p076",
+   "kind": "same category",
+   "category": "generative art",
+   "left": {
+    "page": "f91e8da71e",
+    "title": "Comet Tail Grammar",
+    "idea": "Fling comets into orbit around a sun and real orbital physics splits each wake into a curved dust tail and a straight ion tail streaming away from the light, braiding long-exposure trails into celestial calligraphy."
+   },
+   "right": {
+    "page": "4e789a8fec",
+    "title": "Signal Flag Hoist",
+    "idea": "Type any message and watch it run up the halyard letter by letter, each character a crisp naval pennant that snaps and shivers in gusty procedural wind, hiding plain meaning in plain bunting."
+   }
+  },
+  {
+   "id": "p077",
+   "kind": "same category",
+   "category": "typography experiment",
+   "left": {
+    "page": "9e1cc1426a",
+    "title": "The Murmuration",
+    "idea": "A dusk sky where a boids flock of thousands of starlings flows into words, scattering into noise when you swoop through it and re-settling letter by letter until the sentence holds."
+   },
+   "right": {
+    "page": "c930ca8055",
+    "title": "Ligature Smelting Works",
+    "idea": "A molten foundry floor where loose letters slide with real collision physics until an f meets an i and smelts into a glowing fi ligature, chaining exothermic fusion reactions that reward you for engineering ever-longer glyph alloys."
+   }
+  },
+  {
+   "id": "p078",
+   "kind": "same category",
+   "category": "game",
+   "left": {
+    "page": "764fe2e4e9",
+    "title": "The Listening Room",
+    "idea": "An audio-only naturalist job: identify unseen birds purely from synthesized birdsong \u2014 rhythm, pitch, repetition \u2014 and correctly label the museum's archive tapes as the dawn-chorus recordings layer more species at once."
+   },
+   "right": {
+    "page": "c6fd7288cb",
+    "title": "The Water Ballet",
+    "idea": "Choreograph synchronized swimmers by drawing their paths on an overhead pool diagram, then play your routine back and watch judges score synchronization, symmetry and the grace of swimmers gliding within inches of collision."
+   }
+  },
+  {
+   "id": "p079",
+   "kind": "same category",
+   "category": "music and sound",
+   "left": {
+    "page": "9ec58d8a12",
+    "title": "Music Box Cylinder Workshop",
+    "idea": "Punch pins into a spinning brass cylinder so they pluck the teeth of a metal comb, composing a hand-cranked melody whose tempo is literally whatever speed you turn the handle."
+   },
+   "right": {
+    "page": "35a7b6f76b",
+    "title": "Thunderhead Mixing Desk",
+    "idea": "A night storm front laid out like a mixing console \u2014 faders and toggles blend wind noise, rain hi-hats, rolling thunder timpani and lightning-flash accents \u2014 while a distant city skyline silhouette flickers in reaction to your improvised weather."
+   }
+  },
+  {
+   "id": "p103",
+   "kind": "same concept",
+   "category": "generative art",
+   "left": {
+    "page": "3daef9344a",
+    "title": "Pyrography Slow Burn",
+    "idea": "A wood-burning pen where holding still lets the scorch bloom outward through the grain, so every line you draw deepens from honey to chocolate to char, and overworking one spot burns clean through the board."
+   },
+   "right": {
+    "page": "991a568c52",
+    "title": "Pyrography Slow Burn",
+    "idea": "A wood-burning pen where holding still lets the scorch bloom outward through the grain, so every line you draw deepens from honey to chocolate to char, and overworking one spot burns clean through the board."
+   },
+   "repeat_of": "p027"
+  },
+  {
+   "id": "p080",
+   "kind": "same category",
+   "category": "story",
+   "left": {
+    "page": "50dfd44d4b",
+    "title": "The Mechanical Turk",
+    "idea": "The 1770 chess automaton as an interactive cabinet: you play a small chess engine while opening the sliding doors and candlelit panels one by one to find the hidden human operator on his sliding seat \u2014 a page that is simultaneously the trick, the show, and its exposure."
+   },
+   "right": {
+    "page": "c13ac9d121",
+    "title": "Carrington's Sky",
+    "idea": "The 1859 Carrington Event typeset as one continuous telegraph-tape spool: as aurora floods the sky and the tape fills with sparks and gibberish, the page's palette burns from sepia to red."
+   }
+  },
+  {
+   "id": "p108",
+   "kind": "same concept",
+   "category": "music and sound",
+   "left": {
+    "page": "4022f69120",
+    "title": "Aurora Curtain Synth",
+    "idea": "Players paint aurora ribbons across a polar night sky, each ribbon a detuned oscillator pair whose shimmer, drift and detune follow the ribbon's height and wobble."
+   },
+   "right": {
+    "page": "dbe4956547",
+    "title": "Aurora Curtain Synth",
+    "idea": "Players paint aurora ribbons across a polar night sky, each ribbon a detuned oscillator pair whose shimmer, drift and detune follow the ribbon's height and wobble."
+   },
+   "repeat_of": "p028"
+  },
+  {
+   "id": "p081",
+   "kind": "same category",
+   "category": "music and sound",
+   "left": {
+    "page": "dbe4956547",
+    "title": "Aurora Curtain Synth",
+    "idea": "Players paint aurora ribbons across a polar night sky, each ribbon a detuned oscillator pair whose shimmer, drift and detune follow the ribbon's height and wobble."
+   },
+   "right": {
+    "page": "70052a2788",
+    "title": "Music Box Cylinder Workshop",
+    "idea": "Punch pins into a spinning brass cylinder so they pluck the teeth of a metal comb, composing a hand-cranked melody whose tempo is literally whatever speed you turn the handle."
+   }
+  },
+  {
+   "id": "p082",
+   "kind": "same category",
+   "category": "interactive toy",
+   "left": {
+    "page": "6d9564ad02",
+    "title": "Laser Cat Pounce",
+    "idea": "Your cursor is a red laser dot that an orange cat stalks with dilating pupils, butt-wiggle windups and physics pounces \u2014 but sneak the dot behind the couch and the cat will investigate everything except where it went."
+   },
+   "right": {
+    "page": "9eaad9e587",
+    "title": "Euler's Disk Hum",
+    "idea": "Spin a chrome disk on a curved mirror and chase its eerily accelerating wobble-hum as it decays, flicking it mid-precession to buy a few more hypnotic seconds."
+   }
+  },
+  {
+   "id": "p106",
+   "kind": "same concept",
+   "category": "generative art",
+   "left": {
+    "page": "1143ad3209",
+    "title": "Comet Tail Grammar",
+    "idea": "Fling comets into orbit around a sun and real orbital physics splits each wake into a curved dust tail and a straight ion tail streaming away from the light, braiding long-exposure trails into celestial calligraphy."
+   },
+   "right": {
+    "page": "f91e8da71e",
+    "title": "Comet Tail Grammar",
+    "idea": "Fling comets into orbit around a sun and real orbital physics splits each wake into a curved dust tail and a straight ion tail streaming away from the light, braiding long-exposure trails into celestial calligraphy."
+   },
+   "repeat_of": "p037"
+  },
+  {
+   "id": "p083",
+   "kind": "same category",
+   "category": "game",
+   "left": {
+    "page": "371ae04eee",
+    "title": "The Aeronaut's Ballast",
+    "idea": "Balloon piloting where heat is your only control: burn to rise into wind bands flowing in different directions, vent to sink, and thread mountain passes on a dwindling fuel gauge."
+   },
+   "right": {
+    "page": "df560e1346",
+    "title": "Limestone Ghosts",
+    "idea": "Careful paleontology in cross-section: choose brush sizes to sweep away rock layers and expose a trilobite without chipping it, reading the faint ridges that hint where its fragile spine continues before you dig on."
+   }
+  },
+  {
+   "id": "p084",
+   "kind": "same category",
+   "category": "generative art",
+   "left": {
+    "page": "1143ad3209",
+    "title": "Comet Tail Grammar",
+    "idea": "Fling comets into orbit around a sun and real orbital physics splits each wake into a curved dust tail and a straight ion tail streaming away from the light, braiding long-exposure trails into celestial calligraphy."
+   },
+   "right": {
+    "page": "3daef9344a",
+    "title": "Pyrography Slow Burn",
+    "idea": "A wood-burning pen where holding still lets the scorch bloom outward through the grain, so every line you draw deepens from honey to chocolate to char, and overworking one spot burns clean through the board."
+   }
+  },
+  {
+   "id": "p085",
+   "kind": "same category",
+   "category": "product page",
+   "left": {
+    "page": "b982b86a11",
+    "title": "Dial Tone Revival Society",
+    "idea": "A club preserving the specific buzz of obsolete telephone networks, where each membership tier plays an authentically re-synthesized dial tone from a different decade via Web Audio, with an oscilloscope visualization painted across the hero."
+   },
+   "right": {
+    "page": "5ca0f876fc",
+    "title": "The Feathered Whistle Co.",
+    "idea": "A woodcarver's catalog of bird-call whistles; hover each carved bird to trigger its synthesized song (WebAudio), read which species call it imitates, and leave a two-note reply the flock will answer."
+   }
+  },
+  {
+   "id": "p086",
+   "kind": "same category",
+   "category": "retro interface",
+   "left": {
+    "page": "819408ee2b",
+    "title": "78 rpm, Spring Dying",
+    "idea": "Wind the mainspring of a 1922 gramophone, lower the cactus needle onto a 78, and keep winding mid-song to hold the pitch true, because when the spring dies the singer sinks into a monstrous drawl."
+   },
+   "right": {
+    "page": "2538210f1f",
+    "title": "Sign-Off, Test Pattern",
+    "idea": "The station's last transmission of the night: a bored announcer drones the sign-off script, the monochrome test pattern rolls on with a 1,000-cycle tone, and then it's shimmering gray snow until you switch off or hold out for the 6 a.m. farm report."
+   }
+  },
+  {
+   "id": "p087",
+   "kind": "same category",
+   "category": "generative art",
+   "left": {
+    "page": "c59ad91a7a",
+    "title": "Signal Flag Hoist",
+    "idea": "Type any message and watch it run up the halyard letter by letter, each character a crisp naval pennant that snaps and shivers in gusty procedural wind, hiding plain meaning in plain bunting."
+   },
+   "right": {
+    "page": "fa4f1385bf",
+    "title": "Terrazzo Pour and Polish",
+    "idea": "Pour jewel-toned chips into wet binder, trowel them around with your cursor, then run the grinding pass that flattens the surface and reveals your aggregate as an instant terrazzo slab."
+   }
+  },
+  {
+   "id": "p088",
+   "kind": "same category",
+   "category": "simulation",
+   "left": {
+    "page": "2658784982",
+    "title": "Urban Heat Island",
+    "idea": "A paintable city where every stroke matters: lay asphalt, water, and tree canopy across a block, run the clock through a heat-wave afternoon, and read the ironbow thermal camera that judges your street design."
+   },
+   "right": {
+    "page": "d598b04d8c",
+    "title": "Pilot-Wave Droplets",
+    "idea": "A bouncing droplet rides the standing waves it creates on a vibrated oil bath, drifting and interfering with its own wake like a quantum particle while you tune the bath toward chaos."
+   }
+  },
+  {
+   "id": "p101",
+   "kind": "same concept",
+   "category": "music and sound",
+   "left": {
+    "page": "35a7b6f76b",
+    "title": "Thunderhead Mixing Desk",
+    "idea": "A night storm front laid out like a mixing console \u2014 faders and toggles blend wind noise, rain hi-hats, rolling thunder timpani and lightning-flash accents \u2014 while a distant city skyline silhouette flickers in reaction to your improvised weather."
+   },
+   "right": {
+    "page": "cf50dfd9ba",
+    "title": "Thunderhead Mixing Desk",
+    "idea": "A night storm front laid out like a mixing console \u2014 faders and toggles blend wind noise, rain hi-hats, rolling thunder timpani and lightning-flash accents \u2014 while a distant city skyline silhouette flickers in reaction to your improvised weather."
+   },
+   "repeat_of": "p038"
+  },
+  {
+   "id": "p089",
+   "kind": "same category",
+   "category": "interactive toy",
+   "left": {
+    "page": "e35aa4fdbf",
+    "title": "Euler's Disk Hum",
+    "idea": "Spin a chrome disk on a curved mirror and chase its eerily accelerating wobble-hum as it decays, flicking it mid-precession to buy a few more hypnotic seconds."
+   },
+   "right": {
+    "page": "c57af68786",
+    "title": "Gelatin Keyboard",
+    "idea": "Every key is a slab of quivering neon gelatin with soft-body physics, so typing sends slap-ripples through neighboring keys and mashing hard makes the whole keyboard jiggle like a tray of dessert."
+   }
+  },
+  {
+   "id": "p090",
+   "kind": "same category",
+   "category": "product page",
+   "left": {
+    "page": "5258ff7549",
+    "title": "The Lighthouse Timeshare",
+    "idea": "Weeks of lighthouse beam sold by the hour; a rotating beam sweeps the coastline, illuminating keepers' diaries, vacancy calendars and a beam-intensity configurator only as it passes, then lets the page go dark again."
+   },
+   "right": {
+    "page": "3611e8ce7d",
+    "title": "The Whittler's Circle",
+    "idea": "A woodcarving club where you whittle a wooden spoon directly on the page, scratching away curled SVG shavings until your finished spoon earns you membership."
+   }
+  },
+  {
+   "id": "p091",
+   "kind": "same category",
+   "category": "retro interface",
+   "left": {
+    "page": "b618085ccf",
+    "title": "Dial-Up, CONNECT 2400",
+    "idea": "Dial a late-night bulletin board through a shrieking 2400-baud modem, sign in under a 1993 handle, and navigate glowing ANSI menus to discover the sysop left you a private message."
+   },
+   "right": {
+    "page": "2538210f1f",
+    "title": "Sign-Off, Test Pattern",
+    "idea": "The station's last transmission of the night: a bored announcer drones the sign-off script, the monochrome test pattern rolls on with a 1,000-cycle tone, and then it's shimmering gray snow until you switch off or hold out for the 6 a.m. farm report."
+   }
+  },
+  {
+   "id": "p092",
+   "kind": "same category",
+   "category": "generative art",
+   "left": {
+    "page": "1143ad3209",
+    "title": "Comet Tail Grammar",
+    "idea": "Fling comets into orbit around a sun and real orbital physics splits each wake into a curved dust tail and a straight ion tail streaming away from the light, braiding long-exposure trails into celestial calligraphy."
+   },
+   "right": {
+    "page": "c59ad91a7a",
+    "title": "Signal Flag Hoist",
+    "idea": "Type any message and watch it run up the halyard letter by letter, each character a crisp naval pennant that snaps and shivers in gusty procedural wind, hiding plain meaning in plain bunting."
+   }
+  },
+  {
+   "id": "p093",
+   "kind": "same category",
+   "category": "typography experiment",
+   "left": {
+    "page": "c930ca8055",
+    "title": "Ligature Smelting Works",
+    "idea": "A molten foundry floor where loose letters slide with real collision physics until an f meets an i and smelts into a glowing fi ligature, chaining exothermic fusion reactions that reward you for engineering ever-longer glyph alloys."
+   },
+   "right": {
+    "page": "af92d4caa7",
+    "title": "The Tremor Transcript",
+    "idea": "A seismograph drum where the needle scribbles in letters as if the earth itself were writing, and shaking your cursor spikes the amplitude from tidy script into jagged, unreadable panic."
+   }
+  },
+  {
+   "id": "p094",
+   "kind": "same category",
+   "category": "education",
+   "left": {
+    "page": "ded07974c7",
+    "title": "The Heart's Own Drummer",
+    "idea": "Fire the sinoatrial node yourself and watch an electrical wave ripple through a cutaway heart, with a tap-along tempo test proving why CPR compressions ride the beat of Stayin' Alive."
+   },
+   "right": {
+    "page": "16696dc977",
+    "title": "When the Billionaire Walks In",
+    "idea": "A bar chart of 100 ordinary incomes gets one new patron, and as you drag the billionaire's wealth the mean and median split apart \u2014 a visceral demonstration of why averages lie."
+   }
+  },
+  {
+   "id": "p095",
+   "kind": "same category",
+   "category": "interactive toy",
+   "left": {
+    "page": "895d9662a5",
+    "title": "Gelatin Keyboard",
+    "idea": "Every key is a slab of quivering neon gelatin with soft-body physics, so typing sends slap-ripples through neighboring keys and mashing hard makes the whole keyboard jiggle like a tray of dessert."
+   },
+   "right": {
+    "page": "fc75434e9f",
+    "title": "Jelly Slice Wobble",
+    "idea": "A trembling jelly on a glass plate ripples with soft-body physics when you poke or slap it, and can be sliced cleanly with a drag so each half keeps wobbling on its own."
+   }
+  },
+  {
+   "id": "p104",
+   "kind": "same concept",
+   "category": "product page",
+   "left": {
+    "page": "0a33a422b0",
+    "title": "The Feathered Whistle Co.",
+    "idea": "A woodcarver's catalog of bird-call whistles; hover each carved bird to trigger its synthesized song (WebAudio), read which species call it imitates, and leave a two-note reply the flock will answer."
+   },
+   "right": {
+    "page": "5ca0f876fc",
+    "title": "The Feathered Whistle Co.",
+    "idea": "A woodcarver's catalog of bird-call whistles; hover each carved bird to trigger its synthesized song (WebAudio), read which species call it imitates, and leave a two-note reply the flock will answer."
+   },
+   "repeat_of": "p040"
+  },
+  {
+   "id": "p096",
+   "kind": "same category",
+   "category": "data visualization",
+   "left": {
+    "page": "d0901c2a1d",
+    "title": "The Hailstone Storm",
+    "idea": "Thousands of Collatz trajectories plotted like falling hail, each number rising, tumbling and funneling into the same sink at 1, alongside a histogram of how long each storm takes to land."
+   },
+   "right": {
+    "page": "899237c0b5",
+    "title": "The Falling Price of Light",
+    "idea": "Nordhaus's illumination economics \u2014 a Babylonian oil lamp versus an LED \u2014 charted as a six-millennium cliff-fall, each hover translating cost into hours of labor needed to buy a single hour of reading light."
+   }
+  },
+  {
+   "id": "p097",
+   "kind": "same category",
+   "category": "product page",
+   "left": {
+    "page": "0a33a422b0",
+    "title": "The Feathered Whistle Co.",
+    "idea": "A woodcarver's catalog of bird-call whistles; hover each carved bird to trigger its synthesized song (WebAudio), read which species call it imitates, and leave a two-note reply the flock will answer."
+   },
+   "right": {
+    "page": "b982b86a11",
+    "title": "Dial Tone Revival Society",
+    "idea": "A club preserving the specific buzz of obsolete telephone networks, where each membership tier plays an authentically re-synthesized dial tone from a different decade via Web Audio, with an oscilloscope visualization painted across the hero."
+   }
+  },
+  {
+   "id": "p102",
+   "kind": "same concept",
+   "category": "interactive toy",
+   "left": {
+    "page": "895d9662a5",
+    "title": "Gelatin Keyboard",
+    "idea": "Every key is a slab of quivering neon gelatin with soft-body physics, so typing sends slap-ripples through neighboring keys and mashing hard makes the whole keyboard jiggle like a tray of dessert."
+   },
+   "right": {
+    "page": "c57af68786",
+    "title": "Gelatin Keyboard",
+    "idea": "Every key is a slab of quivering neon gelatin with soft-body physics, so typing sends slap-ripples through neighboring keys and mashing hard makes the whole keyboard jiggle like a tray of dessert."
+   },
+   "repeat_of": "p041"
+  },
+  {
+   "id": "p098",
+   "kind": "same category",
+   "category": "tool",
+   "left": {
+    "page": "c4a35955c8",
+    "title": "Rafter Birdsmouth Setter",
+    "idea": "A cross-section of a gable roof that recomputes rafter length, plumb cut and birdsmouth depth as you drag the pitch triangle, plus a printable cut checklist."
+   },
+   "right": {
+    "page": "4f1b496029",
+    "title": "Meeting Cost Ticker",
+    "idea": "Punch in headcount and rough salary bands and the page becomes a live boardroom counter of money burned per second, per agenda item, with a big red end-meeting button for catharsis."
+   }
+  },
+  {
+   "id": "p099",
+   "kind": "same category",
+   "category": "product page",
+   "left": {
+    "page": "5258ff7549",
+    "title": "The Lighthouse Timeshare",
+    "idea": "Weeks of lighthouse beam sold by the hour; a rotating beam sweeps the coastline, illuminating keepers' diaries, vacancy calendars and a beam-intensity configurator only as it passes, then lets the page go dark again."
+   },
+   "right": {
+    "page": "0a33a422b0",
+    "title": "The Feathered Whistle Co.",
+    "idea": "A woodcarver's catalog of bird-call whistles; hover each carved bird to trigger its synthesized song (WebAudio), read which species call it imitates, and leave a two-note reply the flock will answer."
+   }
+  },
+  {
+   "id": "p100",
+   "kind": "same category",
+   "category": "retro interface",
+   "left": {
+    "page": "4232099219",
+    "title": "SCRAM, Rods Full In",
+    "idea": "A 1970s reactor control room of analog needle gauges and amber annunciators that hums along boringly until you trip a fault and slam the big red SCRAM handle, dropping rods into a disciplined panic of blinking tiles and decay curves."
+   },
+   "right": {
+    "page": "3542a83881",
+    "title": "Cat's Eye, Dial 1010",
+    "idea": "A 1940s living-room tube radio with warm-up hum and a glowing glass dial; you spin a weighted flywheel tuner across a band of static and hidden stations while the green magic-eye tube narrows to a slit as you home in on a dance-band broadcast."
+   }
+  }
+ ]
+}

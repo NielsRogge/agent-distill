@@ -1,9 +1,13 @@
 # Gemini 4 Hydrogen through the Gemini API: the judge chosen for the SVG experiment (2026-11-23; plain-JSON
 # replies, 64k output tokens, about 10-12 s per call). Its key is read only by the judge client in the stage
-# process. Prices: USD per 1M tokens (fill in from the Gemini pricing page before a budgeted run).
+# process. Prices: USD per 1M tokens.
 name = "gemini-4-hydrogen"
 model = "gemini-4-hydrogen"
 api = "gemini"
 key_env = "GEMINI_API_KEY"
 capabilities = ["image_input"]
 max_tokens = 16384  # its reasoning counts against this; at 4096 longer prompts got empty replies
+
+[price]  # Gemini API standard paid tier (Nov 2026, as listed by third-party trackers); thinking is billed as output
+input = 1.5
+output = 7.5

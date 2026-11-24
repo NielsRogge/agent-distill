@@ -11,7 +11,10 @@ passed" mean the same thing. It reports:
 - whether the page is blank or nearly uniform (screenshot pixel spread);
 - whether anything animates (frames taken apart differ);
 - horizontal overflow at 390 px (phone) and 1440 px (desktop) widths;
-- every network request (a page must be one self-contained file: no CDNs, fonts, images or fetches).
+- every network request (a page must be one self-contained file: no CDNs, fonts, images, fetches or WebSockets);
+- a page that stops responding (an endless loop) within the time limit.
+
+Pages run in the sandboxed browser of `sandbox.py` (served from memory, no files, no network, no credentials).
 
 Screenshots (desktop before and after the interaction, phone) are kept for judges but never shown to the agent:
 episodes are text-only. `AGENT_DISTILL_CHROMIUM` points to a Chromium binary when Playwright's own is not
@@ -24,17 +27,17 @@ import argparse
 import asyncio
 import io
 import json
-import os
 import sys
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from agent_distill.browser.sandbox import PAGE_SECONDS, PAGE_URL, close_quietly, launch, page_context
+
 DESKTOP = {"width": 1440, "height": 900}
 PHONE = {"width": 390, "height": 844}
 INTERACTION_SECONDS = 5.0
-LOCAL_SCHEMES = ("file:", "data:", "blob:", "about:", "javascript:")
 # A page whose screenshot has a smaller per-channel standard deviation than this is "blank" (one flat colour).
 BLANK_STDDEV = 3.0
 ANIMATION_DIFF = 0.0001  # fraction of pixels (about 130 at 1440x900) that must change to count as a change
@@ -151,42 +154,49 @@ async def _interact(page: Any, width: int, height: int) -> None:
 
 
 async def inspect_page(path: str | Path, *, interaction: bool = True, screenshots: bool = True) -> PageReport:
-    from playwright.async_api import async_playwright
-
+    """Inspect a page file (what the agent's `preview` runs on its workspace)."""
     path = Path(path).resolve()  # noqa: ASYNC240 - one stat of a local file
-    report = PageReport(path=path.name, size_bytes=path.stat().st_size if path.exists() else 0)
     if not path.is_file():
+        report = PageReport(path=path.name, size_bytes=0)
         report.load_failed = "file not found"
         return report
-    url = path.as_uri()
+    html = path.read_text(encoding="utf-8", errors="replace")
+    return await _inspect(html, path.name, path.stat().st_size, interaction=interaction, screenshots=screenshots)
+
+
+async def _inspect(html: str, name: str, size: int, *, interaction: bool, screenshots: bool) -> PageReport:
+    """Run the inspection in the sandboxed browser (`sandbox.py`), within `PAGE_SECONDS`."""
+    report = PageReport(path=name, size_bytes=size)
     phase = {"name": "load"}
+    try:
+        await asyncio.wait_for(_run(html, report, phase, interaction, screenshots), timeout=PAGE_SECONDS)
+    except TimeoutError:
+        message = f"the page stopped responding (nothing finished within {PAGE_SECONDS:.0f} s; an endless loop?)"
+        if phase["name"] == "load":
+            report.load_failed = message
+        else:
+            report.interaction_errors.append(message)
+    return report
+
+
+async def _run(html: str, report: PageReport, phase: dict, interaction: bool, screenshots: bool) -> None:
+    from playwright.async_api import async_playwright
 
     def on_error(text: str) -> None:
         (report.load_errors if phase["name"] == "load" else report.interaction_errors).append(text[:300])
 
     async with async_playwright() as playwright:
-        executable = os.environ.get("AGENT_DISTILL_CHROMIUM") or None
-        browser = await playwright.chromium.launch(executable_path=executable, args=["--no-sandbox"])
+        browser = await launch(playwright)
         try:
-            context = await browser.new_context(viewport=DESKTOP, device_scale_factor=1)
-
-            async def route(handle: Any) -> None:  # record and block every request that leaves the file
-                request_url = handle.request.url
-                if request_url.startswith(LOCAL_SCHEMES) or request_url == url:
-                    await handle.continue_()
-                else:
-                    report.network_requests.append(request_url[:200])
-                    await handle.abort()
-
-            await context.route("**/*", route)
+            context = await page_context(browser, html, viewport=DESKTOP, on_blocked=report.network_requests.append)
             page = await context.new_page()
             page.on("console", lambda m: on_error(f"console.{m.type}: {m.text}") if m.type == "error" else None)
             page.on("pageerror", lambda exc: on_error(f"uncaught {exc}"))
             try:
-                await page.goto(url, wait_until="load", timeout=15000)
+                await page.goto(PAGE_URL, wait_until="load", timeout=15000)
             except Exception as exc:
                 report.load_failed = f"{type(exc).__name__}: {str(exc).splitlines()[0][:200]}"
-                return report
+                return
             await page.wait_for_timeout(1200)
             report.title = (await page.title())[:120]
             first = await page.screenshot()
@@ -211,26 +221,23 @@ async def inspect_page(path: str | Path, *, interaction: bool = True, screenshot
             if screenshots:
                 report.screenshots["phone"] = await page.screenshot()
         finally:
-            await browser.close()
-    return report
+            await close_quietly(browser)
 
 
 _CACHE: dict[tuple[str, bool], PageReport] = {}
+CACHE_SIZE = 16  # reports hold three full-size screenshots; one episode's gates and judge share one
 
 
 async def inspect_html(html: str, *, interaction: bool = True) -> PageReport:
     """Inspect HTML text (a submitted answer); reports are cached per content within the process, so every gate
     and judge of one episode shares one browser run."""
     import hashlib
-    import tempfile
 
     key = (hashlib.sha256(html.encode()).hexdigest(), interaction)
     if key not in _CACHE:
-        with tempfile.TemporaryDirectory(prefix="agent-distill-page-") as tmp:
-            page = Path(tmp) / "index.html"
-            page.write_text(html, encoding="utf-8")
-            _CACHE[key] = await inspect_page(page, interaction=interaction)
-        if len(_CACHE) > 256:
+        report = await _inspect(html, "index.html", len(html.encode()), interaction=interaction, screenshots=True)
+        _CACHE[key] = report
+        while len(_CACHE) > CACHE_SIZE:
             _CACHE.pop(next(iter(_CACHE)))
     return _CACHE[key]
 

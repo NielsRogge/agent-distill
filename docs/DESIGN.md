@@ -90,7 +90,7 @@ task = "examples/paper-urls/task.py"
 teacher = "glm-5.3"
 student = "qwen3.5-4b"
 harness = "opencode@1.2.4"
-judge = "gemini-4-neon"            # only when the task has judge rubrics
+judge = "gemini-4-hydrogen"        # only when the task has judge rubrics
 stages = ["traces", "sft", "merge", "probe", "grpo", "eval", "publish"]
 
 [hub]
@@ -504,11 +504,12 @@ typography experiments and product pages. Output is visual, but **training is te
 
 ### Judge
 
-- **Primary judge, for the training reward and for evaluation:** Gemini 4 Neon through the Gemini API, with
-  Carbon as fallback.
+- **Primary judge, for evaluation and (once calibration supports it) the training reward:** Gemini 4 Hydrogen
+  through the Gemini API (the user's choice, 2026-11-23), with Neon and Carbon profiles kept as alternatives.
   - Its key (`GEMINI_API_KEY`) is visible only to the judge client.
-  - Status on 2026-11-23: the key is valid, but the project's prepaid credits are exhausted (HTTP 402).
-    Topping up is pending.
+  - It sees the page in motion: a filmstrip of a scripted visit, the phone view and an activity log
+    (`agent_distill/browser/observe.py`), all collected in the page sandbox (`browser/sandbox.py`).
+  - Its spend is priced from its profile and capped by `[budget] judge_usd`, split over a stage's jobs.
 - **Calibration:** Gemini's preferences are checked against about 100 pairs labelled by people, through a
   blind A/B page, before any GRPO spend.
 - **Second evaluation judge:** Qwen3.8-27B on the HF router. It is also the training judge if Gemini stays
@@ -658,6 +659,13 @@ budget pilot.
 
 ## 15. Open items
 
+- **Agent isolation.** Agents run as the stage's OS user. Each Pi episode has its own 0700 directory, removed
+  when it ends, but a concurrent episode (e.g. a sibling GRPO rollout of the same prompt) could still find and
+  read another's workspace under the temp directory, and any agent can read the stage process's environment
+  (`/proc/<pid>/environ`), which holds `HF_TOKEN` and judge keys. Records and sessions redact credentials, and
+  generated pages run in a credential-free browser, but the fix is one OS user per episode (jobs run as root),
+  which needs the episode's tools (Pi, Node, the `preview` Python and Chromium) installed where that user can read
+  them. Until then, check GRPO groups for copied pages.
 - **Gemini credits.** Top up the project's prepaid credits, then re-run the one-request check. Until then,
   Qwen3.8-27B is the fallback judge.
 - **Terms of use.** Check Gemini's terms for training on scalar judge scores.

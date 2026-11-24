@@ -32,8 +32,8 @@ import tarfile
 import tempfile
 import threading
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager, suppress
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -89,6 +89,18 @@ def install_node(profile: HarnessProfile, cache: Path) -> Path:
     return node
 
 
+@contextmanager
+def _file_lock(path: Path) -> Iterator[None]:
+    import fcntl
+
+    with path.open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def install(profile: HarnessProfile, cache: Path) -> tuple[Path, Path]:
     """(node, Pi's cli.js): Pi and its dependencies from the shipped lockfile (`npm ci` checks every package's
     integrity), with the pinned Node. The installed Pi must report the profile's version."""
@@ -97,7 +109,8 @@ def install(profile: HarnessProfile, cache: Path) -> tuple[Path, Path]:
     lock = HERE / f"pi@{profile.version}"
     if not (lock / "package-lock.json").exists():
         raise RuntimeError(f"{profile.id}: no lockfile shipped in {lock}")
-    with _INSTALL_LOCK:
+    # The thread lock covers episodes of one process; the file lock covers concurrent jobs or stages sharing a cache.
+    with _INSTALL_LOCK, _file_lock(cache / ".pi-install.lock"):
         node = install_node(profile, cache)
         root = cache / f"pi-{profile.version}"
         cli = root / CLI
@@ -430,7 +443,25 @@ class Pi:
         self, runner: Runner, task: Task, row: dict[str, Any], endpoint: Endpoint, limits: Limits, *, title: str = ""
     ) -> Episode:
         row_id = task.row_id(row)
-        episode_dir = Path(tempfile.mkdtemp(prefix="episode-", dir=runner.root))
+        # Each episode gets its own private directory (0700), not a folder in a shared one, and it is removed once the
+        # episode is read, so a finished episode's page is gone before the next starts. Concurrent episodes still run
+        # as the same OS user; DESIGN.md §15 (agent isolation) says what that leaves open.
+        episode_dir = Path(tempfile.mkdtemp(prefix="agent-distill-episode-"))
+        try:
+            return await self._run_in(episode_dir, runner, task, row, row_id, endpoint, limits)
+        finally:
+            await asyncio.to_thread(shutil.rmtree, episode_dir, True)
+
+    async def _run_in(
+        self,
+        episode_dir: Path,
+        runner: Runner,
+        task: Task,
+        row: dict[str, Any],
+        row_id: str,
+        endpoint: Endpoint,
+        limits: Limits,
+    ) -> Episode:
         workspace, agent_dir, sessions = episode_dir / "workspace", episode_dir / "agent", episode_dir / "sessions"
         for path in (workspace, agent_dir, sessions):
             path.mkdir()

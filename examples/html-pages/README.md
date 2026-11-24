@@ -17,11 +17,18 @@ model, in the Pi harness (`pi@1.6.0`). The design is in [docs/DESIGN.md](../../d
 - **Rubrics** (`rubrics.py`):
   - **`page_ok` (gate):** the same inspection as `./preview`: the page loads, has no errors, is not blank, makes
     no network requests and does not overflow.
-  - **`page_quality` (judge):** a vision judge scores three screenshots (desktop, desktop after the interaction,
-    phone) from 1 to 10 for visual quality, creativity, fit to the concept and interactivity, plus an overall score.
+  - **`submitted` (gate):** the agent ended the episode with `submit`; a page left by a timed-out or tool-limited
+    episode does not pass.
+  - **`page_quality` (judge):** a vision judge watches the page in motion: an 8-frame filmstrip of a scripted
+    ~10 s visit (wait, click, drag, controls, keys, scroll), the phone view and an activity log (sound, animation,
+    input listeners, controls). It scores 1 to 10 for visual quality, creativity, fit to the concept and
+    interactivity, plus an overall score. `page_quality_stills`, the earlier three-screenshot judge, is kept for
+    comparison.
+  - **Sandbox:** pages run in a browser with no files, no network (WebSockets included), no credentials and a
+    120 s limit (`agent_distill/browser/sandbox.py`); the activity log comes from counters the page cannot write.
   - **Metrics, recorded only:** page size, basic accessibility, and whether the agent previewed before submitting.
-  - **Reward and pass:** `reward = gate(page_ok, page_quality)`. An episode passes at an overall score of at least
-    7/10 on a page that is not broken.
+  - **Reward and pass:** `reward = gate(submitted, gate(page_ok, page_quality))`. An episode passes when the agent
+    submitted a page that is not broken and scores at least 7/10.
 - **Judges:**
   - **Gemini 4 Hydrogen** through the Gemini API is the default (`judge = "gemini-4-hydrogen"`). Its key is read
     only by the judge client.
@@ -79,27 +86,31 @@ the output limit are in the records but not in this column.
 - Datasets: `nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval`, `nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval`.
 
 **Judge calibration (2026-11-24, labelling closed):** the user labelled 50 same-concept page pairs blind (Kimi vs
-GLM, 36 with a preference, 14 about equal). Accuracy is on the decided pairs, a judge tie counting half; Spearman is
-between the judge's difference and the label over all 50. Of the 10 repeat pairs only one was labelled (a tie the
-first time, "clearly" the second), so the user's self-agreement is unmeasured.
+GLM; 36 with a preference, 14 about equal). Agreement is over the 36 decided pairs; a judge tie or an unscorable pair
+counts half in the accuracy. Spearman is between the judge's difference and the label over all 50; the sign test
+compares agreements with disagreements. Data and scripts: `calibration/` (`score.py` reproduces this table,
+`fetch_pages.py` rebuilds the pages from the published records, `calibrate.py` and `calibrate_motion.py` re-run the
+judges).
 
-| Judge setup | Agree / disagree / tie | Accuracy | Spearman |
-|---|---|---|---|
-| Hydrogen, per page, 3 screenshots (the baseline judge) | 16 / 9 / 11 | 0.60 | 0.15 |
-| Qwen3.8-27B, per page, 3 screenshots | 11 / 7 / 18 | 0.56 | 0.14 |
-| Hydrogen, defect list + appeal | 14 / 15 / 5 | 0.49 | 0.04 |
-| Hydrogen, pairwise, 3 screenshots each | 22 / 13 / 1 | 0.62 | 0.19 |
-| Hydrogen, per page, filmstrip + phone + activity log | 14 / 6 / 16 | 0.61 | 0.20 |
-| Hydrogen, pairwise, filmstrip + phone + activity log | 20 / 12 / 4 | 0.61 | 0.19 |
+| Judge setup | Agree / disagree / tie or unscorable | Accuracy (of 36) | Spearman | Sign test p |
+|---|---|---|---|---|
+| Hydrogen, per page, 3 screenshots (the baseline judge) | 16 / 9 / 11 | 0.60 | 0.15 | 0.23 |
+| Qwen3.8-27B, per page, 3 screenshots | 11 / 7 / 18 | 0.56 | 0.14 | 0.48 |
+| Hydrogen, defect list + appeal | 14 / 15 / 7 | 0.49 | 0.04 | 1.00 |
+| Hydrogen, pairwise, 3 screenshots each | 22 / 13 / 1 | 0.62 | 0.19 | 0.18 |
+| **Hydrogen, per page, filmstrip + phone + activity log (current)** | 14 / 6 / 16 | 0.61 | 0.20 | 0.12 |
+| Hydrogen, pairwise, filmstrip + phone + activity log | 20 / 12 / 4 | 0.61 | 0.19 | 0.22 |
 
-The user preferred Kimi in 21 pairs and GLM in 15 (14 ties), but three of their four saved favourites were GLM pages
-the judge had scored below the Kimi page beside them.
-
-None is clearly above chance on 36 decided pairs; when it disagrees with the user, the motion-aware judge
-mostly calls the pair even rather than picking the wrong page. `page_quality` now uses the per-page motion-aware setup
-(`agent_distill.browser.observe`: a scripted 10-second visit gives an 8-frame filmstrip, the phone view and a log of
-sound, animation, listeners and controls), because it is the best-correlated judge that still scores a single page,
-which GRPO needs. The old judge is kept as `page_quality_stills`.
+- **No setup is significantly better than chance.** The current judge disagrees least often (6 of 36), mostly calling
+  pairs even rather than picking the wrong page, but p = 0.12.
+- **Not measured:** the user's self-agreement (1 of 10 repeat pairs labelled, with different verdicts) and agreement
+  on different-concept pairs (2 of 50 same-category pairs labelled). So we do not know how close a judge could get.
+- **The judge is not validated as a GRPO reward.** It reliably separates broken or weak pages from good ones (gates
+  plus a 7/10 bar), which trace acceptance and the evaluation pass rate need. It barely ranks good pages against
+  great ones, which is what a GRPO reward on top of SFT would push on. GRPO with it is an experiment the user must
+  opt into; until then the run stops after SFT.
+- The user preferred Kimi in 21 pairs and GLM in 15 (14 ties), but three of their four saved favourites were GLM
+  pages the old judge had scored below the Kimi page beside them.
 
 **Rescore with the motion-aware judge** (`distill rescore`, all episodes in the published records, reruns included):
 
