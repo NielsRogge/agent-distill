@@ -152,12 +152,20 @@ class HarnessCaptureSession:
 
     # Loop-owning extensions ---------------------------------------------------------------------
     def wait_for_completion(self, timeout_s: float | None = None) -> int:
+        row_id, started = self.factory.task.row_id(self.row), time.monotonic()
+        print(f"[rollout] {row_id} {self.episode_id} started", file=sys.stderr, flush=True)
         try:
             asyncio.run(self._run())
         except Exception as exc:  # infrastructure failures make the rollout unscorable
             self.failure = f"infrastructure: {type(exc).__name__}: {exc}"
-            logger.warning("rollout %s failed: %s", self.factory.task.row_id(self.row), self.failure)
+            logger.warning("rollout %s failed: %s", row_id, self.failure)
             return 1
+        finally:
+            episode, result = self.episode, self.result
+            print(f"[rollout] {row_id} {self.episode_id} ended after {time.monotonic() - started:.0f} s: "
+                  f"reward={getattr(result, 'reward', None)} tools={self.tool_calls} "
+                  f"failure={self.failure or getattr(episode, 'failure', None)}",
+                  file=sys.stderr, flush=True)  # fmt: skip
         # A failed rollout (exit code 1) is dropped as unscorable; an invalid capture from a "successful" one would
         # stop the whole trainer, so validate it now.
         try:
