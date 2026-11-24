@@ -176,6 +176,16 @@ class Student:
     probe: ProbeSettings = field(default_factory=ProbeSettings)
     grpo: GRPOSettings = field(default_factory=GRPOSettings)
 
+    def hooks(self) -> dict[str, str]:
+        """Profile field -> the `module[:function]` hook it names (DESIGN.md §2): the modules must be staged with
+        the job code (`requires`) or ship in the agent_distill package."""
+        named = {
+            "lora.adapter_converter": self.lora.adapter_converter,
+            "sft.train_patch": self.sft.train_patch,
+            "merge.method": "" if self.merge.method == "peft" else self.merge.method,
+        }
+        return {key: value for key, value in named.items() if value}
+
 
 @dataclass
 class Download:
@@ -272,7 +282,7 @@ class EvalSettings:
 @dataclass
 class TracesRun:
     split: str = "train"
-    limit: int | None = None  # first N train rows after the task's train filter (None: all)
+    limit: int | None = None  # first N train rows after the task's train filter, in total over the shards (None: all)
     shards: int | None = None  # default: the teacher profile's
     attempts: int | None = None  # default: the teacher profile's
 
