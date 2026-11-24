@@ -123,3 +123,16 @@ judges).
   to 0.042. Pass rates barely move (gates are unchanged; the 7/10 bar now fails one more Kimi page and three more GLM
   pages).
 - Kimi stays the teacher: the gap that matters is in clean, submitted trajectories, not in judged quality.
+
+**Rescore with the `submitted` gate** (2026-11-24; same records, same motion-aware judge; a page now passes only if the
+agent ended with `submit`):
+
+| Teacher | Passed before → after | Submitted | Mean reward before → after |
+|---|---|---|---|
+| Kimi-K3.1-Pro | 58/63 → 58/63 | 59/63 | 0.753 → 0.748 |
+| GLM-5.3 | 44/80 → 10/80 | 14/80 | 0.476 → 0.124 |
+
+- Kimi is unchanged: its passing pages were all submitted.
+- GLM loses 34 of its 44 passes: they were pages left on disk by episodes that timed out or hit the tool-call limit.
+  Those trajectories never finish, so they would have been poor SFT traces; the gate now keeps them out of trace
+  acceptance and the GRPO reward, as well as the pass rate.
