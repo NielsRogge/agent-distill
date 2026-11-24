@@ -7,6 +7,9 @@ model = "Qwen/Qwen3.5-9B"
 [serve]
 max_model_len = 65536
 max_output_tokens = 32768
+# CUDA graphs on: in eager mode the smoke probe generated ~34 tokens/s per episode (4 concurrent on an H200), so
+# writing one ~20-30k-token page took the whole 900 s episode.
+enforce_eager = false
 
 [sft]
 args = ["--no-4bit", "--max-length", "40960", "--epochs", "1", "--full-trajectory", "--save-steps", "50"]
