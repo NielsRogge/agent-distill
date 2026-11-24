@@ -1,0 +1,314 @@
+"""The eval stage's harness-failure handling and publishing, and `distill publish`'s visibility rules (Hub mocked)."""
+
+from __future__ import annotations
+
+import asyncio
+import dataclasses
+from contextlib import asynccontextmanager
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+import httpx
+import pytest
+from huggingface_hub.utils import RepositoryNotFoundError
+
+from agent_distill import pipeline
+from agent_distill.config import load_run
+from agent_distill.episode import Episode, ToolEvent
+from agent_distill.harnesses.base import Endpoint, HarnessError
+from agent_distill.records import RecordWriter, read_jsonl
+from agent_distill.rubrics import RubricResult
+from agent_distill.stages import eval as eval_stage
+from agent_distill.task import Limits
+
+ENDPOINT = Endpoint(base_url="http://vllm/v1", model="policy")
+NOT_FOUND = httpx.Request("GET", "https://huggingface.co/api/repo")
+
+
+class Rubrics:
+    async def ascore(self, context: Any, mode: str = "eval") -> RubricResult:
+        return RubricResult(scores={"r": 1.0}, reward=1.0, passed=True, mode=mode)
+
+
+TASK = SimpleNamespace(name="t", row_id=lambda row: row["id"], rubrics=Rubrics())
+ROWS = [{"id": str(i)} for i in range(1, 6)]
+
+
+def episode(row_id: str, *, broken: bool = False) -> Episode:
+    output = "posix_spawn failed: ENOENT" if broken else "ok"
+    return Episode(task="t", row_id=row_id, harness="opencode", harness_version="2.3.2", model="local/policy",
+                   messages=[{"role": "user", "content": "q"}],
+                   tool_events=[ToolEvent(kind="shell", name="shell", input={}, success=not broken, output=output)],
+                   session_id=f"s{row_id}", raw=[{"id": row_id}])  # fmt: skip
+
+
+class FakeHarness:
+    """Fails `failures` (row id -> list of "dead" / "spawn" outcomes, consumed in order)."""
+
+    def __init__(self, failures: dict[str, list[str]] | None = None, *, start_failures: int = 0) -> None:
+        self.failures = {key: list(value) for key, value in (failures or {}).items()}
+        self.start_failures = start_failures
+        self.sessions = 0
+        self.runs: list[str] = []
+
+    @asynccontextmanager
+    async def session(self, endpoints, *, cache=None, task=None):
+        self.sessions += 1
+        if self.start_failures:
+            self.start_failures -= 1
+            raise HarnessError("OpenCode exited during startup with status 1")
+        yield "runner"
+
+    async def healthy(self, runner: Any) -> None:
+        pass
+
+    async def run_episode(self, runner, task, row, endpoint, limits):
+        self.runs.append(row["id"])
+        outcome = (self.failures.get(row["id"]) or ["ok"]).pop(0)
+        if outcome == "dead":
+            raise HarnessError("OpenCode stopped answering: ConnectError")
+        return episode(row["id"], broken=outcome == "spawn")
+
+    def native_trace(self, episode: Episode) -> None:
+        return None
+
+
+@pytest.fixture(autouse=True)
+def plain_context(monkeypatch):
+    monkeypatch.setattr(eval_stage, "episode_context", lambda episode, row, **kwargs: None)
+
+
+def run_label(harness: FakeHarness, writer: RecordWriter, **kwargs: Any) -> None:
+    asyncio.run(eval_stage.run_label(harness, TASK, ROWS, ENDPOINT, "base", writer, limits=Limits(), concurrency=1,
+                                     **kwargs))  # fmt: skip
+
+
+def test_run_label_skips_harness_failures_and_restarts(tmp_path) -> None:
+    harness = FakeHarness({"2": ["dead"], "4": ["spawn"]}, start_failures=1)
+    writer = RecordWriter(tmp_path / "eval", "base/test")
+    run_label(harness, writer)
+    records = read_jsonl(writer.episodes)
+    assert sorted(r["row_id"] for r in records) == ["1", "2", "3", "4", "5"]  # each recorded once, none broken
+    assert all("posix_spawn" not in str(r["tool_events"]) for r in records)
+    # session 1 does not start; 2 runs row 1 then breaks on 2; 3 runs 2, 3 and breaks on 4; 4 runs 4 and 5
+    assert harness.sessions == 4 and harness.runs == ["1", "2", "2", "3", "4", "4", "5"]
+    assert writer.done() == {("base", str(i)) for i in range(1, 6)}
+    raws = read_jsonl(writer.raw)
+    assert {r["row_id"] for r in raws} == {str(i) for i in range(1, 6)} and raws[0]["raw"] == [{"id": "1"}]
+
+
+def test_run_label_gives_up_after_max_restarts(tmp_path) -> None:
+    harness = FakeHarness({"1": ["dead"] * 10})
+    writer = RecordWriter(tmp_path / "eval", "base/test")
+    with pytest.raises(RuntimeError, match="kept failing"):
+        run_label(harness, writer, max_restarts=2)
+    assert harness.sessions == 3 and not writer.episodes.exists()
+
+
+def test_run_once_reports_a_broken_harness(tmp_path) -> None:
+    writer = RecordWriter(tmp_path / "eval", "base/test")
+
+    def run_once(harness: FakeHarness) -> bool:
+        return asyncio.run(eval_stage._run_once(harness, TASK, ROWS, ENDPOINT, "base", writer, Limits(), 4, None, None))
+
+    assert run_once(FakeHarness()) is False
+    assert run_once(FakeHarness({"3": ["dead"]})) is True
+    assert run_once(FakeHarness(start_failures=1)) is True
+
+    class Unhealthy(FakeHarness):
+        async def healthy(self, runner: Any) -> None:
+            raise ConnectionError("gone")
+
+    assert run_once(Unhealthy()) is True
+
+
+# --------------------------------------------------------------------------------------------------
+# Hub (mocked)
+# --------------------------------------------------------------------------------------------------
+
+
+class FakeHub:
+    def __init__(self, repos: dict[str, dict[str, Any]] | None = None) -> None:
+        self.repos = repos or {}  # repo -> {"private": bool, "files": [...]}
+        self.calls: list[tuple] = []
+
+    def repo_info(self, repo: str, repo_type: str = "model") -> Any:
+        if repo not in self.repos:
+            raise RepositoryNotFoundError(f"{repo} not found", response=httpx.Response(404, request=NOT_FOUND))
+        return SimpleNamespace(private=self.repos[repo]["private"])
+
+    def create_repo(self, repo: str, repo_type: str = "model", private: bool = False, exist_ok: bool = False) -> None:
+        self.calls.append(("create_repo", repo, private))
+        self.repos.setdefault(repo, {"private": private, "files": []})
+
+    def list_repo_files(self, repo: str, repo_type: str = "model") -> list[str]:
+        return list(self.repos[repo]["files"])
+
+    def upload_folder(self, *, folder_path: str, repo_id: str, repo_type: str, commit_message: str,
+                      ignore_patterns: list[str] | None = None) -> None:  # fmt: skip
+        files = sorted(str(p.relative_to(folder_path)) for p in Path(folder_path).rglob("*") if p.is_file())
+        files = [f for f in files if not any(f.startswith(i.rstrip("*")) for i in ignore_patterns or [])]
+        self.calls.append(("upload_folder", repo_id, files))
+        self.repos[repo_id]["files"] += files
+
+    def add_collection_item(self, collection: str, *, item_id: str, item_type: str, note: str, exists_ok: bool):
+        self.calls.append(("add_collection_item", item_id, note))
+
+    def update_repo_settings(self, repo: str, *, repo_type: str, private: bool) -> None:
+        self.calls.append(("update_repo_settings", repo, private))
+        self.repos[repo]["private"] = private
+
+
+@pytest.fixture
+def hub(monkeypatch) -> FakeHub:
+    import huggingface_hub
+
+    fake = FakeHub()
+    monkeypatch.setattr(huggingface_hub, "HfApi", lambda: fake)
+    return fake
+
+
+def written(tmp_path: Path) -> tuple[Path, Path]:
+    out = tmp_path / "eval"
+    writer = RecordWriter(out, "base/test")
+    writer.write(episode("1"), RubricResult(scores={"r": 1.0}, reward=1.0, passed=True), label="base")
+    return out, writer.raw_root
+
+
+def test_eval_publish_creates_private_repos_and_keeps_raw_logs_apart(tmp_path, hub) -> None:
+    out, raw = written(tmp_path)
+    eval_stage.publish(out, "org/run-eval", "opencode@2.3.2", "t", raw_dir=raw, raw_repo="org/run-eval-raw",
+                       collection="org/collection", note="t, opencode@2.3.2: evaluation episodes")  # fmt: skip
+    assert hub.repos["org/run-eval"]["private"] and hub.repos["org/run-eval-raw"]["private"]
+    assert ("add_collection_item", "org/run-eval", "t, opencode@2.3.2: evaluation episodes") in hub.calls
+    assert not any(call[0] == "add_collection_item" and call[1].endswith("-raw") for call in hub.calls)
+    eval_files, raw_files = hub.repos["org/run-eval"]["files"], hub.repos["org/run-eval-raw"]["files"]
+    assert not any(name.startswith("raw/") for name in eval_files)
+    assert any(name.startswith("sessions/") for name in eval_files) and "README.md" in eval_files
+    assert raw_files == ["raw/base/test.jsonl"]
+    assert "raw/" not in (out / "README.md").read_text().split("never published")[0].split("summaries")[1]
+
+
+@pytest.mark.parametrize("public", ["org/run-eval", "org/run-eval-raw"])
+def test_eval_publish_refuses_a_public_repo(tmp_path, hub, public) -> None:
+    out, raw = written(tmp_path)
+    hub.repos[public] = {"private": False, "files": []}
+    with pytest.raises(SystemExit, match="is public"):
+        eval_stage.publish(out, "org/run-eval", "opencode@2.3.2", "t", raw_dir=raw, raw_repo="org/run-eval-raw")
+    assert not any(call[0] == "upload_folder" and call[1] == public for call in hub.calls)
+    assert hub.repos[public]["private"] is False  # never changed by the eval stage
+
+
+def test_eval_main_publishes_what_finished_when_a_label_fails(tmp_path, monkeypatch) -> None:
+    published: list[tuple] = []
+
+    async def failing_run_label(harness, task, rows, endpoint, label, writer, **kwargs):
+        writer.write(episode("1"), RubricResult(scores={"r": 1.0}, reward=1.0, passed=True), label=label)
+        raise RuntimeError("the harness kept failing")
+
+    monkeypatch.setattr(eval_stage, "select_rows", lambda task, split, **kwargs: [{"arxiv_id": "1"}])
+    monkeypatch.setattr(eval_stage, "run_label", failing_run_label)
+    monkeypatch.setattr(eval_stage, "publish", lambda *args, **kwargs: published.append((args, kwargs)))
+    argv = ["--task", "examples/paper-urls", "--harness", "opencode@2.3.2", "--student", "qwen3.5-9b", "--model",
+            "Qwen/Qwen3.5-9B", "--split", "test", "--no-serve", "--output-dir", str(tmp_path / "eval"),
+            "--output-repo", "org/run-eval", "--answer-retry", "--cache", str(tmp_path / "cache")]  # fmt: skip
+    with pytest.raises(RuntimeError, match="kept failing"):
+        eval_stage.main(argv)
+    ((args, kwargs),) = published
+    assert args[:2] == (tmp_path / "eval", "org/run-eval") and kwargs["raw_repo"] == "org/run-eval-raw"
+    assert kwargs["raw_dir"] == tmp_path / "eval-raw"
+
+
+RUN_TOML = Path("examples/paper-urls/run.toml")
+
+
+def make_run(**overrides: Any) -> pipeline.Run:
+    return pipeline.make_run(load_run(RUN_TOML, overrides))
+
+
+@pytest.fixture
+def no_scan(monkeypatch) -> None:
+    monkeypatch.setattr(pipeline, "credential_files", lambda api, repo, files: [])
+
+
+def test_distill_publish_adds_to_the_collection_before_making_public(hub, no_scan) -> None:
+    run = make_run()
+    hub.repos[run.repo("eval")] = {"private": True, "files": ["sessions/a/b.jsonl", "episodes/a.jsonl"]}
+    hub.repos[run.repo("eval-raw")] = {"private": True, "files": ["raw/a.jsonl"]}
+    pipeline.publish(run, dry_run=False)
+    names = [call[0] for call in hub.calls]
+    assert names == ["add_collection_item", "update_repo_settings"]
+    assert not hub.repos[run.repo("eval")]["private"] and hub.repos[run.repo("eval-raw")]["private"]
+
+
+def test_distill_publish_never_publishes_raw_logs(hub, no_scan) -> None:
+    run = make_run()
+    hub.repos[run.repo("eval")] = {"private": True, "files": ["sessions/a.jsonl", "raw/base/test.jsonl"]}
+    with pytest.raises(SystemExit, match="raw harness logs"):
+        pipeline.publish(run, dry_run=False)
+    hub.repos[run.repo("eval")]["files"] = ["sessions/a.jsonl"]
+    hub.repos[run.repo("eval-raw")] = {"private": False, "files": ["raw/a.jsonl"]}
+    with pytest.raises(SystemExit, match="must stay private"):
+        pipeline.publish(run, dry_run=False)
+    assert hub.calls == []  # nothing changed, not even the public raw repo's visibility
+    hub.repos[run.repo("eval-raw")]["private"] = True
+    run = make_run(**{"repos": {"eval": "org/sneaky-raw"}})
+    with pytest.raises(SystemExit, match="never published"):
+        pipeline.publish(run, dry_run=False)
+
+
+def test_eval_jobs_install_locked_requirements() -> None:
+    run = make_run(**{"eval.answer_retry": True})
+    job = pipeline.eval_jobs(run, "REV")[0]
+    lines = job.command.splitlines()
+    locked = lines.index("uv pip install -q --python /work/venv/bin/python --require-hashes -r /work/requirements.txt")
+    wheel = lines.index('uv pip install -q --python /work/venv/bin/python --no-deps "$WHEEL"')
+    runtime = next(i for i, line in enumerate(lines) if "-c /work/constraints.txt" in line)
+    assert locked < wheel < runtime and "vllm==0.33.0" in lines[runtime]
+    assert lines[runtime + 1].startswith("/work/venv/bin/python -m agent_distill.stages.eval ")
+    assert "--answer-retry" in job.command and "uv run" not in job.command
+    assert f"--raw-repo {run.repo('eval-raw')}" in job.command
+    assert "--collection nielsr/agent-distillation-" in job.command
+
+
+def test_export_requirements_is_hash_pinned(tmp_path) -> None:
+    import shutil
+
+    from agent_distill import jobs
+
+    if shutil.which("uv") is None:
+        pytest.skip("uv is not installed")
+    requirements, constraints = jobs.export_requirements(tmp_path)
+    text = requirements.read_text()
+    assert "--hash=sha256:" in text and "datasets==" in text and "huggingface-hub==" in text
+    assert "agent-distill==" not in text and "-e " not in text and "pytest" not in text  # no project, no dev
+    assert "--hash" not in constraints.read_text() and "datasets==" in constraints.read_text()
+
+
+def test_dry_run_prints_staging_and_residual_risk(monkeypatch, capsys) -> None:
+    from agent_distill import jobs
+
+    monkeypatch.setattr(jobs, "hardware_prices", lambda: {"h200": 0.08})
+    assert pipeline.main([str(RUN_TOML), "--stages", "eval", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "requirements.txt" in out and "hash-pinned" in out and "residual risk" in out
+    assert "/proc/<pid>/environ" in out and "--require-hashes" in out
+
+
+def test_answer_retry_setting_is_in_eval_settings() -> None:
+    field_names = {field.name for field in dataclasses.fields(load_run(RUN_TOML).eval)}
+    assert "answer_retry" in field_names
+
+
+def test_run_label_stops_on_too_many_rubric_errors(tmp_path, monkeypatch) -> None:
+    from agent_distill.rubrics import ErrorBudget, RubricResult, TooManyErrors
+
+    async def failing(context, mode="eval"):
+        return RubricResult(scores={"j": None}, reward=None, passed=False, errors={"j": "HTTP 402"})
+
+    monkeypatch.setattr(TASK.rubrics, "ascore", failing)
+    writer = RecordWriter(tmp_path / "eval", "base/test")
+    with pytest.raises(TooManyErrors, match="HTTP 402"):
+        run_label(FakeHarness({}), writer, errors=ErrorBudget(max_rate=0.5, min_episodes=2))
+    assert len(read_jsonl(writer.episodes)) == 2  # recorded (as unscorable) before the stop

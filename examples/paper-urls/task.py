@@ -66,6 +66,11 @@ task = Task(
     tools=("shell", "fetch", "read", "search"),
     network=True,
     limits=Limits(timeout=180, max_tool_calls=15),
+    # OpenCode 2.x has no structured output: its prompt carries the JSON-only answer contract (url-extraction's
+    # harness/system_prompt_v2.txt from the OpenCode v2 experiment, "Shell" instead of "Bash").
+    system_prompts={"opencode@2": HERE / "system_prompt_v2.txt"},
+    # The agent runs `hf papers info/read` (anonymous: agents get no HF token).
+    job_setup=["command -v hf >/dev/null || uv tool install -q 'huggingface-hub>=1.13'"],
     record_limits=record_limits,
 )
 

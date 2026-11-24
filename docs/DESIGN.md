@@ -39,7 +39,8 @@ becomes the first example here.
   harness at the same pinned version. Training a separate LoRA per harness is a later step; the design keeps
   room for it but does not build it.
 - **Harnesses:** OpenCode 1.2.4, OpenCode 2.3.2 and Pi 1.6.0, nothing else for now. The first release (M3)
-  ships OpenCode 1.2.4 only; Pi follows in M4 and OpenCode 2.3.2 in M6.
+  ships the two OpenCode adapters (1.2.4 for parity, 2.3.2 for evaluation; 2.3.2 GRPO capture follows in M6);
+  Pi follows in M4.
 - **Compute:** HF Jobs only, for now.
 - **Parity:** the same rubric set accepts teacher traces, rewards GRPO rollouts and scores evaluation. The
   only allowed differences are explicitly tagged rubrics, and tests check them.
@@ -97,7 +98,7 @@ stages = ["traces", "sft", "merge", "probe", "grpo", "eval", "publish"]
 [hub]
 namespace = "nielsr"
 bill_to = "huggingface"            # X-HF-Bill-To for Inference Providers, --namespace for Jobs
-collection = "nielsr/paper-url-agent-frontier-to-small-distillation-6b01c8378db0ff55d524014e"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
 
 [budget]                           # see §8
 traces_usd = 150
@@ -355,7 +356,7 @@ class Harness(Protocol):
 | Adapter | Source | Notes |
 |---|---|---|
 | `opencode@1.2.4` | Port of url-extraction `harness/opencode.py` | Answer mode `native` (`format: json_schema`, with fallback to a JSON final message). Per-request `system` and `tools`. Session permissions as today. Watchdog for the tool-call limit. `strip_credentials` is on by default for students. |
-| `opencode@2.3.2` (`@opencode/cli`) | Port of the V2 runner on url-extraction `claude/opencode-v2-glm53-4b`, once it merges | Plain HTTP; the only SDK is JS/TS. Routes live under `/api/`. Prompts are asynchronous: wait with `/api/experimental/session/{id}/wait`, and page through messages. Basic auth uses a server-generated password read from stdout, so it never enters the agent's environment. The system prompt, permissions (deny `*`, then allow the needed tools) and `steps` are set in a config agent through `OPENCODE_CONFIG_CONTENT`. Answer mode `final_json`. Tool names: `shell`, `read.path`, `patch`, `subagent`. |
+| `opencode@2.3.2` (`@opencode/cli`) | Port of the V2 runner on url-extraction `claude/opencode-v2-glm53-4b` (pulled into M2) | Plain HTTP; the only SDK is JS/TS. Routes live under `/api/`. Prompts are asynchronous: wait with `/api/experimental/session/{id}/wait`, and page through messages. Basic auth uses a server-generated password read from stdout, so it never enters the agent's environment. The system prompt, permissions (deny `*`, then allow the needed tools) and `steps` are set in a config agent through `OPENCODE_CONFIG_CONTENT`. Answer mode `final_json`. Tool names: `shell`, `read.path`, `patch`, `subagent`. |
 | `pi@1.6.0` (`@earendil-works/pi-coding-agent`) | New | Runs `pi --mode json --no-context-files --session-dir <ws>` with `--no-extensions` apart from our own. `PI_CODING_AGENT_DIR` points to a per-episode directory whose `models.json` declares the endpoint (`api: openai-completions`). Tools come from `--tools`, and the system prompt from the task. Answer mode `submit_tool`. |
 
 **Pi extension.** The Pi adapter ships one small TypeScript extension that:
@@ -413,7 +414,7 @@ instead.
 
 **Hub settings.**
 
-- `[hub]` holds `namespace`, `bill_to` and an optional `collection`. Every repo the tool creates is added to
+- `[hub]` holds `namespace`, `bill_to` and an optional `collection` (the examples use the agent-distillation collection). Every repo the tool creates is added to
   the collection with a note naming its role (teacher traces, SFT adapter, GRPO adapter, evaluation, …).
   Nothing is hardcoded to `nielsr` or `huggingface`; the examples set those values.
 - **Visibility:**
@@ -675,11 +676,11 @@ budget pilot.
 |---|---|---|
 | M0 | **Skeleton:** layout, `pyproject`, CLI stub, CI, AGENTS.md (Hub, billing, credential and branch rules from url-extraction), this design doc | CI green on an empty test suite |
 | M1 | **Core and Tier 1 parity (CPU only):** `Task`, `Episode`/`ToolEvent` kinds, rubrics, `RubricSet` and combinators, credentials, Pi exporter, `opencode_v1_reader`, the `examples/paper-urls` task and rubrics, `distill rescore` | Every published url-extraction record rescores with zero per-episode differences |
-| M2 | **Jobs, OpenCode 1.2.4 and evaluation:** profiles, wheel staging, launcher, manifests, budget guard, `opencode@1.2.4` adapter, `eval` and `publish` stages | Tier 2 passes: Qwen3.5-9B base and the Kimi GRPO model within noise of 75.0% and 82.1% in V1 |
+| M2 | **Jobs, OpenCode 1.2.4 and 2.3.2, evaluation:** profiles, wheel staging, launcher, manifests, budget guard, `opencode@1.2.4` and `opencode@2.3.2` adapters, `eval` and `publish` stages; a 2.3.2 smoke evaluation on HF Jobs | Tier 2 passes: Qwen3.5-9B base and the Kimi GRPO model within noise of 75.0% and 82.1% in V1 |
 | M3 | **Training stages:** `traces`, `sft`, `merge`, `probe`, `grpo` (TRL and simple backends, V1 capture factory), `distill smoke` | A smoke run (a few traces, SFT for a few steps, 2 GRPO steps, a 5-paper eval) passes end to end on HF Jobs. **First release.** |
 | M4 | **Pi and HTML task infrastructure:** `pi@1.6.0` adapter and extension, Pi capture factory, `preview` CLI, HTML gates and judge rubrics (Gemini plus Qwen3.8-27B), concept generation, blind A/B calibration page, teacher baseline (GLM-5.3 vs Kimi-K3.1-Pro on about 100 concepts) | Teacher chosen; judge calibrated on about 100 human pairs; non-zero judge rate measured for base and teacher |
 | M5 | **HTML distillation run:** traces → SFT → probe → GRPO → eval for Qwen3.5-9B (and 4B if compute allows), "100 HTML files" run, gallery Space | Published models, evaluation, sessions and galleries; results in `examples/html-pages/README.md` |
-| M6 | **OpenCode 2.3.2:** port the V2 runner once the url-extraction branch merges; V2 capture | Tier 3 passes; optionally HTML pages in OpenCode V2 as the second-harness LoRA |
+| M6 | **OpenCode 2.3.2 parity:** V2 GRPO capture; Tier 3 once the url-extraction V2 experiment publishes | Tier 3 passes; optionally HTML pages in OpenCode V2 as the second-harness LoRA |
 | M7 | **Later:** rubric drafting (`draft`, `calibrate`, review gate), the full-recipe parity re-run (Tier 4), Tinker/verifiers compatibility shims and exporters if requested, vision students once TRL supports them | As scoped then |
 
 ## 15. Open items

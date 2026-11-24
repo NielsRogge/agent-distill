@@ -1,0 +1,3 @@
+# GLM-5.3 through HF Inference Providers (automatic routing). Text-only on the router.
+name = "glm-5.3"
+model = "zai-org/GLM-5.3"

@@ -1,0 +1,28 @@
+# Paper URL extraction in OpenCode 2.3.2. The students of url-extraction were trained in 1.2.4 and do not transfer
+# (tool names, argument schemas and the answer contract changed), so this run is a smoke test of the 2.3.2 adapter
+# on the base model until the url-extraction OpenCode v2 experiment publishes its models (parity tier 3).
+#
+#   distill run examples/paper-urls/run-opencode2.toml --stages eval --dry-run
+task = "."
+student = "qwen3.5-9b"
+harness = "opencode@2.3.2"
+name = "qwen35-9b-paper-urls-smoke-opencode-232"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+
+[eval]
+splits = ["test"]
+limit = 6
+concurrency = 6
+timeout = 180
+max_tool_calls = 15
+
+[eval.models]
+base = "Qwen/Qwen3.5-9B"
+
+[budget]
+gpu_usd = 25
