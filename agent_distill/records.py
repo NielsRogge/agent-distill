@@ -1,13 +1,17 @@
 """Episode records (DESIGN.md §5): the slim JSONL record, the raw harness log, the Pi session, the dataset card.
 
-Layout in a trace / evaluation dataset:
+Layout in a trace / evaluation dataset (`<root>`, published by `distill publish` after a credential scan):
 
     episodes/<prefix>.jsonl        one record per episode (scores, answer, messages, tool events); no raw logs
-    raw/<prefix>.jsonl             the harness-native messages per episode (for rescoring and debugging)
     sessions/<prefix>/*.jsonl      one Pi session per episode (the agent-traces viewer)
     summaries/<prefix>.json        the evaluation summary
 
-Every line is written through `credentials.record_line`, which redacts credentials.
+and in its raw dataset (`<raw root>`, default `<root>-raw`, uploaded to the always-private `<run>-...-raw` repo):
+
+    raw/<prefix>.jsonl             the harness-native messages per episode (for rescoring and debugging)
+
+Raw logs never share a folder or repo with anything that becomes public. Every line is written through
+`credentials.record_line`, which redacts credentials.
 """
 
 from __future__ import annotations
@@ -88,14 +92,23 @@ def episode_from_record_v2(record: dict[str, Any], answer_model: Any) -> Episode
     )
 
 
-class RecordWriter:
-    """Appends records, raw logs and Pi sessions for one (prefix) file set under `root`."""
+def raw_root_for(root: Path) -> Path:
+    """The default local folder of a dataset's raw logs: a sibling `<root>-raw`, never inside `root`."""
+    root = Path(root)
+    return root.with_name(root.name + "-raw")
 
-    def __init__(self, root: Path, prefix: str) -> None:
+
+class RecordWriter:
+    """Appends records and Pi sessions under `root`, and raw logs under `raw_root`, for one (prefix) file set."""
+
+    def __init__(self, root: Path, prefix: str, raw_root: Path | None = None) -> None:
         self.root = Path(root)
+        self.raw_root = Path(raw_root) if raw_root is not None else raw_root_for(self.root)
+        if self.raw_root.resolve().is_relative_to(self.root.resolve()):
+            raise ValueError(f"raw logs ({self.raw_root}) must not live inside the publishable {self.root}")
         self.prefix = prefix
         self.episodes = self.root / "episodes" / f"{prefix}.jsonl"
-        self.raw = self.root / "raw" / f"{prefix}.jsonl"
+        self.raw = self.raw_root / "raw" / f"{prefix}.jsonl"
         self.sessions = self.root / "sessions" / prefix
         for path in (self.episodes.parent, self.raw.parent, self.sessions):
             path.mkdir(parents=True, exist_ok=True)

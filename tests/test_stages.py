@@ -215,7 +215,7 @@ def test_checkpoint_uploads_a_consistent_copy(tmp_path):
     (tmp_path / "out" / "a.jsonl").write_text("1\n")
     uploads: list[list[str]] = []
 
-    def upload(folder):
+    def upload(folder, raw_folder=None):
         uploads.append(sorted(p.name for p in folder.iterdir()))
 
     async def main():

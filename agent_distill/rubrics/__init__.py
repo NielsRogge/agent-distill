@@ -2,9 +2,11 @@
 
 from agent_distill.rubrics.compat import from_callable, from_verifiers
 from agent_distill.rubrics.core import (
+    ErrorBudget,
     Rubric,
     RubricResult,
     RubricSet,
+    TooManyErrors,
     bonus_if,
     episode_context,
     gate,
@@ -18,12 +20,14 @@ from agent_distill.rubrics.core import (
 from agent_distill.rubrics.judge import JudgeCache, JudgeRunner, JudgeSpec, judge
 
 __all__ = [
+    "ErrorBudget",
     "JudgeCache",
     "JudgeRunner",
     "JudgeSpec",
     "Rubric",
     "RubricResult",
     "RubricSet",
+    "TooManyErrors",
     "bonus_if",
     "episode_context",
     "from_callable",

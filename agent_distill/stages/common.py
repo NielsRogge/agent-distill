@@ -16,10 +16,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from agent_distill.harnesses.base import Endpoint
+from agent_distill.harnesses.base import Endpoint, HarnessError
 from agent_distill.harnesses.opencode import harness_failure
 from agent_distill.records import RecordWriter, read_jsonl
-from agent_distill.rubrics import episode_context
+from agent_distill.rubrics import ErrorBudget, TooManyErrors, episode_context
 from agent_distill.task import Limits, Task
 
 
@@ -100,15 +100,18 @@ async def run_episodes(
     cache: Path,
     max_restarts: int = 3,
     checkpoint: Checkpoint | None = None,
+    errors: ErrorBudget | None = None,
 ) -> None:
     """Run the plan, resuming from what `writer` already holds and restarting the harness after a harness
     failure (such an episode says nothing about the model and is not recorded). Cut-short episodes are rerun
-    up to `plan.rerun_cut_short` times per row. A `checkpoint` uploads the records as they grow."""
+    up to `plan.rerun_cut_short` times per row. A `checkpoint` uploads the records as they grow. `errors` stops
+    the stage (`TooManyErrors`, after recording the episode) once too many episodes were unscorable because a
+    rubric errored, e.g. a judge outage; the stages still publish what finished."""
     restarts = 0
     try:
         while work := pending_work(task, rows, writer, plan):
             outcome = await _run_once(harness, task, work, endpoint, writer, plan, limits, concurrency, cache,
-                                      checkpoint)  # fmt: skip
+                                      checkpoint, errors)  # fmt: skip
             if outcome == "budget":
                 return
             if outcome == "broken":
@@ -134,10 +137,20 @@ async def _run_once(
     concurrency: int,
     cache: Path,
     checkpoint: Checkpoint | None = None,
+    errors: ErrorBudget | None = None,
 ) -> str:
     """Run `work` on one fresh harness: "broken" when the harness broke (the rest is left for a restart),
-    "budget" when the budget stopped it, else "done"."""
+    "budget" when the budget stopped it, else "done".
+
+    A harness failure (an episode's shell could not spawn, the server died, did not start or failed its health
+    check: `HarnessError`) is not recorded and stops this harness; episodes that finished are already written."""
     broken = asyncio.Event()
+    stopped = asyncio.Event()
+
+    def harness_broke(row_id: str, reason: str) -> None:
+        print(f"  [{plan.label}] {row_id}: harness failure, not recorded: {reason}", flush=True)
+        broken.set()
+
     semaphore = asyncio.Semaphore(concurrency)
     _, passed, spent = progress(writer, plan.label, plan.rerun_cut_short)
     state = {"spent": spent, "passed": set(passed), "over_budget": False}
@@ -146,21 +159,53 @@ async def _run_once(
     for row, attempt in work:
         by_row[task.row_id(row)].append((row, attempt))
 
+    try:
+        await _run_session(harness, task, by_row, endpoint, writer, plan, limits, cache, checkpoint, errors, semaphore,
+                           state, broken, stopped, harness_broke)  # fmt: skip
+    except HarnessError as exc:  # the harness did not start (or failed while stopping)
+        harness_broke("-", str(exc))
+    if state["over_budget"]:
+        print(f"[{plan.label}] stopped at the budget: ${state['spent']:.2f} of ${plan.budget_usd:.2f}", flush=True)
+    if broken.is_set():
+        return "broken"
+    return "budget" if state["over_budget"] else "done"
+
+
+async def _run_session(
+    harness: Any,
+    task: Task,
+    by_row: dict[str, list[tuple[dict, int]]],
+    endpoint: Endpoint,
+    writer: RecordWriter,
+    plan: Plan,
+    limits: Limits,
+    cache: Path,
+    checkpoint: Checkpoint | None,
+    errors: ErrorBudget | None,
+    semaphore: asyncio.Semaphore,
+    state: dict[str, Any],
+    broken: asyncio.Event,
+    stopped: asyncio.Event,
+    harness_broke: Callable[[str, str], None],
+) -> None:
     async with harness.session([endpoint], cache=cache, task=task) as runner:
 
         async def run_row(index: int, items: list[tuple[dict, int]]) -> None:
             for row, attempt in items:
                 row_id = task.row_id(row)
                 async with semaphore:
-                    if broken.is_set() or (plan.stop_when_passed and row_id in state["passed"]):
+                    if broken.is_set() or stopped.is_set() or (plan.stop_when_passed and row_id in state["passed"]):
                         return
                     if plan.budget_usd and state["spent"] >= plan.budget_usd:
                         state["over_budget"] = True
                         return
-                    episode = await harness.run_episode(runner, task, row, endpoint, limits)
+                    try:
+                        episode = await harness.run_episode(runner, task, row, endpoint, limits)
+                    except HarnessError as exc:
+                        harness_broke(row_id, str(exc))
+                        return
                     if failure := harness_failure(episode):
-                        print(f"  [{plan.label}] {row_id}: harness failure, not recorded: {failure}", flush=True)
-                        broken.set()
+                        harness_broke(row_id, failure)
                         return
                     episode.metadata["attempt"] = attempt
                     cut = cut_short(episode)
@@ -184,28 +229,40 @@ async def _run_once(
                     )
                     if checkpoint is not None:
                         checkpoint.maybe()
+                    if errors is not None:
+                        try:
+                            errors.record(result)
+                        except TooManyErrors:
+                            stopped.set()  # rows still waiting for the semaphore do not start
+                            raise
                     if cut and plan.rerun_cut_short and not result.passed:
                         return  # the rest of this row waits for the next pass, which reruns the cut episode
 
         await asyncio.gather(*(run_row(i, items) for i, items in enumerate(by_row.values(), 1)))
         if not broken.is_set():
-            await harness.healthy(runner)
-    if state["over_budget"]:
-        print(f"[{plan.label}] stopped at the budget: ${state['spent']:.2f} of ${plan.budget_usd:.2f}", flush=True)
-    if broken.is_set():
-        return "broken"
-    return "budget" if state["over_budget"] else "done"
+            try:
+                await harness.healthy(runner)
+            except Exception as exc:
+                harness_broke("-", f"health check failed: {type(exc).__name__}: {exc}")
 
 
 class Checkpoint:
     """Uploads a stage's output folder every `every_seconds` while it runs, so a job that dies (or hits its
     timeout) keeps what it recorded and a rerun of the job resumes from it (`resume_from_hub`).
 
-    The folder is copied first (writes happen on the event loop, so the copy is consistent) and the copy is
-    uploaded in a thread, off the event loop. A failed checkpoint upload is reported, never fatal."""
+    The folder (and the separate raw-log folder, `raw_dir`) is copied first (writes happen on the event loop, so the
+    copy is consistent) and the copies are uploaded in a thread, off the event loop, as `upload(folder, raw_folder)`.
+    A failed checkpoint upload is reported, never fatal."""
 
-    def __init__(self, output_dir: Path, upload: Callable[[Path], None], every_seconds: float) -> None:
+    def __init__(
+        self,
+        output_dir: Path,
+        upload: Callable[[Path, Path | None], None],
+        every_seconds: float,
+        raw_dir: Path | None = None,
+    ) -> None:
         self.output_dir = Path(output_dir)
+        self.raw_dir = Path(raw_dir) if raw_dir is not None else None
         self.upload = upload
         self.every_seconds = every_seconds
         self.last = time.monotonic()
@@ -225,8 +282,12 @@ class Checkpoint:
         with tempfile.TemporaryDirectory(prefix="agent-distill-checkpoint-") as tmp:
             copy = Path(tmp) / "out"
             shutil.copytree(self.output_dir, copy)
+            raw_copy = None
+            if self.raw_dir is not None and self.raw_dir.exists():
+                raw_copy = Path(tmp) / "raw-out"
+                shutil.copytree(self.raw_dir, raw_copy)
             try:
-                await asyncio.to_thread(self.upload, copy)
+                await asyncio.to_thread(self.upload, copy, raw_copy)
             except Exception as exc:  # the final publish retries; a checkpoint must not kill the stage
                 self.dirty = True
                 print(f"checkpoint upload failed ({type(exc).__name__}: {exc}); continuing", flush=True)
@@ -236,24 +297,36 @@ class Checkpoint:
             await self.task
 
 
-def resume_from_hub(repo: str, output_dir: Path, prefix: str) -> int:
-    """Download the records a previous run of this job checkpointed (episodes, raw logs, sessions under `prefix`)
-    into `output_dir`, so the stage resumes instead of starting over. Returns the number of files fetched."""
+def resume_from_hub(
+    repo: str, output_dir: Path, prefix: str, *, raw_repo: str = "", raw_dir: Path | None = None
+) -> int:
+    """Download the records a previous run of this job checkpointed (episodes and sessions under `prefix` from
+    `repo`, raw logs from the private `raw_repo`) into `output_dir` / `raw_dir`, so the stage resumes instead of
+    starting over. Raw logs an older run left in `repo` itself go to `raw_dir` too. Returns the files fetched."""
     from huggingface_hub import HfApi, hf_hub_download
     from huggingface_hub.errors import RepositoryNotFoundError
 
     api = HfApi()
-    try:
-        files = api.list_repo_files(repo, repo_type="dataset")
-    except RepositoryNotFoundError:
-        return 0
-    wanted = {f"episodes/{prefix}.jsonl", f"raw/{prefix}.jsonl"}
-    names = [name for name in files if name in wanted or name.startswith(f"sessions/{prefix}/")]
-    for name in names:
-        hf_hub_download(repo, name, repo_type="dataset", local_dir=str(output_dir))
-    if names:
-        print(f"resumed {len(names)} files of {prefix} from {repo}", flush=True)
-    return len(names)
+    fetched = 0
+    for source, kinds in ((repo, ("episodes", "sessions", "raw")), (raw_repo, ("raw",))):
+        if not source:
+            continue
+        try:
+            files = api.list_repo_files(source, repo_type="dataset")
+        except RepositoryNotFoundError:
+            continue
+        for name in files:
+            kind = name.split("/", 1)[0]
+            if kind not in kinds or not (name in (f"{kind}/{prefix}.jsonl",) or name.startswith(f"sessions/{prefix}/")):
+                continue
+            target = raw_dir if kind == "raw" else output_dir
+            if target is None:
+                continue
+            hf_hub_download(source, name, repo_type="dataset", local_dir=str(target))
+            fetched += 1
+    if fetched:
+        print(f"resumed {fetched} files of {prefix} from {repo}" + (f" and {raw_repo}" if raw_repo else ""), flush=True)
+    return fetched
 
 
 def shard(rows: list[dict], spec: str) -> list[dict]:

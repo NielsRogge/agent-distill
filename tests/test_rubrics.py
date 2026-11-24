@@ -8,6 +8,7 @@ from agent_distill.episode import Episode, ToolEvent
 from agent_distill.rubrics import (
     JudgeCache,
     JudgeRunner,
+    JudgeSpec,
     Rubric,
     RubricSet,
     bonus_if,
@@ -82,10 +83,55 @@ def test_async_none_metrics_and_errors():
         raise RuntimeError("boom")
 
     result = RubricSet([unscorable, with_metrics, broken]).score(context())
-    assert result.scores == {"unscorable": None, "with_metrics": 0.5, "broken": 0.0}
+    assert result.scores == {"unscorable": None, "with_metrics": 0.5, "broken": None}
     assert result.metrics == {"with_metrics/calls": 3.0}
     assert "RuntimeError: boom" in result.errors["broken"]
-    assert result.reward == 0.0  # weighted mean of non-metric, non-None scores: only `broken`
+    # A rubric error makes the episode unscorable (no reward, not passed), never a fake 0.
+    assert result.errored and result.reward is None and not result.passed
+
+
+def test_metric_errors_do_not_make_the_episode_unscorable():
+    @programmatic
+    def ok():
+        return 1.0
+
+    @metric
+    def broken_metric():
+        raise RuntimeError("boom")
+
+    result = RubricSet([ok, broken_metric]).score(context())
+    assert not result.errored and result.reward == 1.0 and result.passed
+
+
+@pytest.mark.parametrize("value", [float("nan"), 1.5, -0.1])
+def test_scores_outside_unit_interval_are_errors(value):
+    bad = Rubric(fn=lambda: value, name="bad")
+    result = RubricSet([bad]).score(context())
+    assert result.scores["bad"] is None and "must be in [0, 1]" in result.errors["bad"]
+    assert result.reward is None
+
+
+def test_inactive_rubrics_drop_out_of_the_default_reward():
+    a = Rubric(fn=lambda: 0.5, name="a")
+    b = Rubric(fn=lambda: 0.0, name="b", eval_only=True)
+    rubrics = RubricSet([a, b])
+    assert rubrics.score(context(), mode="train").reward == pytest.approx(0.5)  # not (0.5 + neutral 1) / 2
+    assert rubrics.score(context(), mode="eval").reward == pytest.approx(0.25)
+
+
+def test_error_budget_stops_after_too_many_unscorable_episodes():
+    from agent_distill.rubrics import ErrorBudget, RubricResult, TooManyErrors
+
+    ok = RubricResult(scores={}, reward=1.0, passed=True)
+    bad = RubricResult(scores={}, reward=None, passed=False, errors={"j": "HTTP 402"})
+    budget = ErrorBudget(max_rate=0.1, min_episodes=5)
+    for _ in range(4):
+        budget.record(bad)  # below min_episodes: no decision yet
+    with pytest.raises(TooManyErrors, match="HTTP 402"):
+        budget.record(ok)
+    calm = ErrorBudget(max_rate=0.5, min_episodes=2)
+    for result in (ok, bad, ok, ok):
+        calm.record(result)
 
 
 def test_default_reward_is_weighted_mean_and_passed_uses_threshold():
@@ -170,13 +216,48 @@ def test_judge_scaling_images_and_cache(tmp_path):
     assert rubrics.score(context(judge=fresh)).scores["visual"] == pytest.approx(0.75) and fresh.calls == 0
 
 
-def test_judge_unparseable_reply_scores_zero_with_error():
+def test_judge_unparseable_reply_is_unscorable_and_not_cached(tmp_path):
     @judge("x")
     def j():
         return {}
 
-    result = RubricSet([j]).score(context(judge=JudgeRunner(FakeClient("no number here"))))
-    assert result.scores["j"] == 0.0 and "no score" in result.errors["j"]
+    cache = JudgeCache(tmp_path / "verdicts.jsonl")
+    client = FakeClient("no number here")
+    result = RubricSet([j]).score(context(judge=JudgeRunner(client, cache)))
+    assert result.scores["j"] is None and "no score" in result.errors["j"] and result.reward is None
+    assert not (tmp_path / "verdicts.jsonl").exists()
+    # The next attempt asks again (and caches the parseable reply).
+    client.reply = "Score: 1"
+    assert RubricSet([j]).score(context(judge=JudgeRunner(client, cache))).scores["j"] == 1.0
+    assert client.calls == 2
+
+
+def test_cached_reply_that_no_longer_parses_is_asked_again(tmp_path):
+    @judge("x")
+    def j():
+        return {}
+
+    path = tmp_path / "verdicts.jsonl"
+    stale = JudgeCache(path)
+    stale.put(JudgeCache.key("judge-model", "x", []), "garbage")
+    client = FakeClient("Score: 1")
+    assert RubricSet([j]).score(context(judge=JudgeRunner(client, JudgeCache(path)))).scores["j"] == 1.0
+    assert client.calls == 1
+
+
+@pytest.mark.parametrize(
+    ("reply", "expected"),
+    [
+        ("Overall score: 6 for layout... SCORE: 9", 0.9),
+        ("**SCORE:** 8", 0.8),
+        ("Score = 7.5", 0.75),
+        ("final **Score**: 3", 0.3),
+    ],
+)
+def test_judge_score_parsing_takes_the_last_score(reply, expected):
+    from agent_distill.rubrics.judge import parse_score
+
+    assert parse_score(reply, JudgeSpec(prompt="", scale=(0, 10))) == pytest.approx(expected)
 
 
 def test_from_callable_accepts_tinker_reward_fn():

@@ -4,7 +4,7 @@ import sys
 import pytest
 
 import agent_distill
-from agent_distill.cli import COMMANDS, IMPLEMENTED, main
+from agent_distill.cli import COMMANDS, EXIT_NOT_IMPLEMENTED, IMPLEMENTED, main
 
 
 def test_version_is_set():
@@ -19,8 +19,9 @@ def test_no_command_prints_help(capsys):
 
 
 @pytest.mark.parametrize("command", sorted(set(COMMANDS) - set(IMPLEMENTED)))
-def test_unimplemented_commands_exit_2(command, capsys):
-    assert main([command, "--anything"]) == 2
+def test_unimplemented_commands_exit_distinct_code(command, capsys):
+    assert EXIT_NOT_IMPLEMENTED != 2  # argparse's usage-error status
+    assert main([command, "--anything"]) == EXIT_NOT_IMPLEMENTED
     assert "not implemented yet" in capsys.readouterr().err
 
 
@@ -35,3 +36,10 @@ def test_rescore_has_its_own_parser(capsys):
         main(["rescore", "--help"])
     assert exit_info.value.code == 0
     assert "--task" in capsys.readouterr().out
+
+
+def test_help_works_without_docstrings():
+    result = subprocess.run(
+        [sys.executable, "-OO", "-m", "agent_distill.cli", "--help"], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr

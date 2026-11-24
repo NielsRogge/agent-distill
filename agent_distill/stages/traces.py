@@ -3,14 +3,15 @@
     python -m agent_distill.stages.traces --task task --harness opencode@1.2.4 --teacher glm-5.2 \
         --split train --shard 0/3 --output-dir /traces --output-repo ORG/RUN-traces --bill-to huggingface
 
-The teacher is served by HF Inference Providers (billed to `--bill-to`); its harness process gets the HF token and
-nothing else. Rows come from the task's train filter; each row gets up to `--attempts` episodes and stops at its
-first pass. An episode cut short by the timeout or a provider error (no answer, often mid-tool-call) is kept in
-the records but rerun up to `--rerun-cut-short` times instead of using an attempt. Records are uploaded every
-`--upload-every` minutes, and a rerun of the same job resumes from them. An episode is accepted exactly when the
-task's rubric set passes it (eval mode), the same verdict the evaluation and the difficulty probe use. Records, raw
-logs and Pi sessions go to a private dataset; spend is tracked from the harness's cost (or the teacher profile's
-prices) and the stage stops starting episodes at `--budget-usd`.
+The teacher is served by HF Inference Providers (billed to `--bill-to`) through a key-injecting proxy in this
+process: the harness gets a per-episode session key, never the HF token. Rows come from the task's train filter;
+each row gets up to `--attempts` episodes and stops at its first pass. An episode cut short by the timeout or a
+provider error (no answer, often mid-tool-call) is kept in the records but rerun up to `--rerun-cut-short` times
+instead of using an attempt. Records are uploaded every `--upload-every` minutes, and a rerun of the same job
+resumes from them. An episode is accepted exactly when the task's rubric set passes it (eval mode), the same verdict
+the evaluation and the difficulty probe use. Records and Pi sessions go to a private dataset (public only after
+`distill publish`), raw harness logs to a separate always-private `-raw` dataset; spend is tracked from the
+harness's cost (or the teacher profile's prices) and the stage stops starting episodes at `--budget-usd`.
 
 With `--label teacher --purpose eval --attempts 1 --no-stop-when-passed` the same stage is the teacher's evaluation
 baseline, written next to the students' evaluations.
@@ -21,12 +22,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import tempfile
 from pathlib import Path
 
 from agent_distill.config import load_profile
-from agent_distill.harnesses.base import load_harness, teacher_endpoint
-from agent_distill.records import RecordWriter, read_jsonl, summarize_records
+from agent_distill.harnesses.base import default_cache, load_harness, teacher_endpoint
+from agent_distill.records import RecordWriter, raw_root_for, read_jsonl, summarize_records
+from agent_distill.rubrics import ErrorBudget
 from agent_distill.stages.common import Plan, progress, resume_from_hub, run_episodes
 from agent_distill.stages.eval import checkpoint, publish, select_rows
 from agent_distill.task import Limits, load_task
@@ -60,7 +61,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Minutes between checkpoint uploads to --output-repo (0: only at the end)")  # fmt: skip
     parser.add_argument("--rerun-cut-short", type=int, default=2,
                         help="Reruns per row of episodes cut short by a timeout or provider error")  # fmt: skip
-    parser.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "agent-distill-cache")
+    parser.add_argument("--raw-output-dir", type=Path, help="Raw harness logs (default: <output-dir>-raw)")
+    parser.add_argument("--raw-repo", default="", help="Always-private raw-log dataset (default: <output-repo>-raw)")
+    parser.add_argument("--collection", default="", help="Collection to add a newly created --output-repo to")
+    parser.add_argument("--collection-note", default="")
+    parser.add_argument("--max-error-rate", type=float, default=0.05,
+                        help="Stop once more than this share of episodes (after 20) had a rubric error")  # fmt: skip
+    parser.add_argument("--cache", type=Path, default=None, help="Binary cache (default: the per-user cache)")
     return parser.parse_args(argv)
 
 
@@ -89,9 +96,11 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(f"no rows selected from {task.dataset.repo}:{args.split}")
     shard_suffix = f"-{args.shard.replace('/', 'of')}" if args.shard else ""
     prefix = args.prefix or f"{args.label}/{args.split}{shard_suffix}"
+    raw_dir = args.raw_output_dir or raw_root_for(args.output_dir)
+    raw_repo = args.raw_repo or (f"{args.output_repo}-raw" if args.output_repo else "")
     if args.output_repo:
-        resume_from_hub(args.output_repo, args.output_dir, prefix)
-    writer = RecordWriter(args.output_dir, prefix)
+        resume_from_hub(args.output_repo, args.output_dir, prefix, raw_repo=raw_repo, raw_dir=raw_dir)
+    writer = RecordWriter(args.output_dir, prefix, raw_dir)
     price = (teacher.price.input, teacher.price.output) if teacher.price.input or teacher.price.output else None
     plan = Plan(
         label=args.label,
@@ -108,20 +117,38 @@ def main(argv: list[str] | None = None) -> None:
         f"{profile.id}; billed to {args.bill_to or 'the token owner'}",
         flush=True,
     )
-    asyncio.run(
-        run_episodes(
-            harness,
-            task,
-            rows,
-            endpoint,
-            writer,
-            plan,
-            limits=limits,
-            concurrency=args.concurrency or settings.concurrency,
-            cache=args.cache,
-            checkpoint=checkpoint(args.output_dir, args.output_repo, args.upload_every, profile.id, task.name),
+    try:
+        asyncio.run(
+            run_episodes(
+                harness,
+                task,
+                rows,
+                endpoint,
+                writer,
+                plan,
+                limits=limits,
+                concurrency=args.concurrency or settings.concurrency,
+                cache=args.cache or default_cache(),
+                checkpoint=checkpoint(
+                    args.output_dir,
+                    args.output_repo,
+                    args.upload_every,
+                    profile.id,
+                    task.name,
+                    raw_dir=raw_dir,
+                    raw_repo=raw_repo,
+                    collection=args.collection,
+                    note=args.collection_note,
+                ),
+                errors=ErrorBudget(max_rate=args.max_error_rate),
+            )
         )
-    )
+    finally:
+        finish(args, task, teacher, profile, rows, limits, writer, prefix, raw_dir, raw_repo)
+
+
+def finish(args, task, teacher, profile, rows, limits, writer, prefix, raw_dir, raw_repo) -> None:
+    """Write the summary and publish whatever finished, also when the stage failed part-way."""
     records = read_jsonl(writer.episodes) if writer.episodes.exists() else []
     _, passed, spent = progress(writer, args.label, args.rerun_cut_short)
     summary = summarize_records(records)
@@ -138,8 +165,9 @@ def main(argv: list[str] | None = None) -> None:
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     print(f"accepted {len(passed)}/{len(rows)} rows, spent ${spent:.2f}", flush=True)
-    if args.output_repo:
-        publish(args.output_dir, args.output_repo, profile.id, task.name)
+    if args.output_repo and writer.episodes.exists():
+        publish(args.output_dir, args.output_repo, profile.id, task.name, raw_dir=raw_dir, raw_repo=raw_repo,
+                collection=args.collection, note=args.collection_note)  # fmt: skip
 
 
 if __name__ == "__main__":

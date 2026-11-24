@@ -11,7 +11,11 @@ Ported from url-extraction `harness/opencode_v2.py` (branch `claude/opencode-v2-
   denies every resource.
 - There is no structured output: the agent ends with a JSON-only message (the contract and schema are in the system
   prompt, `Task.system_prompt_for(..., "final_json")`), validated by the task's answer model.
-- Prompts are asynchronous: post the prompt, then wait for the session to go idle.
+- Prompts are asynchronous: post the prompt, then wait for the session to go idle. With `answer_retry`, a session
+  that goes idle without a valid JSON answer is asked once for it (url-extraction `--answer-retry`).
+- Every episode runs on its own server, workspace and XDG data/config/state directories (`episode_server`):
+  OpenCode 2 spills long shell output into its data directory and the agent reads it back, so episodes sharing a
+  server read (and once deleted) each other's files.
 - Messages are flat (`{id, type, content: [...]}`, one assistant message per model step). `normalize_messages`
   converts them to the 1.x `{info, parts}` shape, so the Episode conversion, scoring and Pi export are shared with
   1.x. Tool names stay as OpenCode 2 reports them (`shell`, not `bash`); tool kinds normalize them.
@@ -24,8 +28,8 @@ import json
 import tempfile
 import time
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager, suppress
-from dataclasses import dataclass
+from contextlib import ExitStack, asynccontextmanager, suppress
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +38,7 @@ import httpx
 from agent_distill.config import HarnessProfile
 from agent_distill.episode import Episode
 from agent_distill.harnesses import opencode
-from agent_distill.harnesses.base import Endpoint
+from agent_distill.harnesses.base import Endpoint, HarnessError
 from agent_distill.harnesses.opencode_v1_reader import episode_from_messages
 from agent_distill.task import FileAnswer, Limits, Task
 
@@ -242,45 +246,113 @@ async def interrupt(client: httpx.AsyncClient, session_id: str) -> None:
         await api(client, "post", f"/api/session/{session_id}/interrupt")
 
 
+ANSWER_RETRY = (
+    "You stopped without the final answer. If the task is not finished, continue it with the tools. "
+    "Then end with only one JSON object with {fields} (no other text)."
+)
+
+
+def answer_retry_prompt(task: Task) -> str:
+    """Sent once (with `answer_retry`) when the session went idle without a valid JSON answer.
+
+    OpenCode 1.x could not end an episode on a text-only turn (its StructuredOutput tool forced a tool call); 2.x
+    ends the loop on the first turn without a tool call, often a one-line plan from a small model.
+    """
+    fields = list((task.answer_schema() or {}).get("properties", {}))
+    listed = ", ".join(fields[:-1]) + f", and {fields[-1]}" if len(fields) > 1 else "".join(fields) or "the answer"
+    return ANSWER_RETRY.format(fields=listed)
+
+
+def has_answer(task: Task, messages: list[dict[str, Any]]) -> bool:
+    """Whether the session's final assistant text parses as a valid answer."""
+    episode = episode_from_messages(normalize_messages(messages), answer_model=task.answer, task=task.name,
+                                    row_id="", model="")  # fmt: skip
+    return episode.answer is not None
+
+
 @dataclass
 class Runner:
-    server: opencode.Server
-    client: httpx.AsyncClient
+    """What every episode's own server is started from (`OpenCodeV2.session` yields it).
+
+    `server`/`client` attach every episode to one already running server instead (tests); `session` never sets
+    them, because concurrent episodes on one OpenCode 2 server read each other's spilled shell output.
+    """
+
     task: Task
+    executable: Path | None = None
+    endpoints: list[Endpoint] = field(default_factory=list)
+    request_timeout: float = 600
+    server: opencode.Server | None = None
+    client: httpx.AsyncClient | None = None
 
 
 class OpenCodeV2:
-    def __init__(self, profile: HarnessProfile) -> None:
+    def __init__(self, profile: HarnessProfile, *, answer_retry: bool = False) -> None:
         if not profile.version.startswith("2."):
             raise ValueError(f"OpenCodeV2 cannot run OpenCode {profile.version}")
         self.profile = profile
         self.name = profile.name
         self.version = profile.version
+        self.answer_retry = answer_retry
 
-    def install(self, cache: Path) -> Path:
+    def install(self, cache: Path | None = None) -> Path:
         return opencode.install(self.profile, cache)
 
     @asynccontextmanager
     async def session(
-        self, endpoints: list[Endpoint], *, cache: Path, task: Task, request_timeout: float = 600
+        self, endpoints: list[Endpoint], *, cache: Path | None = None, task: Task, request_timeout: float = 600
     ) -> AsyncIterator[Runner]:
-        """`opencode serve` (2.x) in a fresh workspace with the task's config agent; one server per task."""
+        """The verified binary and the task's server configuration; every episode then starts its own server.
+
+        One server is started and stopped here first, so a broken configuration fails before any episode runs.
+        """
         executable = await asyncio.to_thread(self.install, cache)
+        with opencode.key_proxies(endpoints) as routed:
+            runner = Runner(task, executable, routed, request_timeout)
+            async with self.episode_server(runner):
+                pass
+            yield runner
+
+    @asynccontextmanager
+    async def episode_server(self, runner: Runner) -> AsyncIterator[tuple[opencode.Server, httpx.AsyncClient]]:
+        """A fresh `opencode serve` for one episode: its own workspace, XDG data/config/state directories and
+        process group, stopped (with every shell it spawned) when the episode ends.
+
+        OpenCode 2 writes long shell output to files in its data directory and the agent reads them back. On a
+        server shared by concurrent episodes, agents read other episodes' output files, and one `rm -rf` of that
+        directory broke every episode beside it (url-extraction `isolated_episode_server`).
+        """
+        if runner.server is not None and runner.client is not None:
+            yield runner.server, runner.client
+            return
+        if runner.executable is None:
+            raise ValueError("the runner has neither an attached server nor an executable")
         workspace = tempfile.TemporaryDirectory(prefix="agent-distill-opencode2-")
-        root = Path(workspace.name)
-        env = server_env(task, endpoints, self.version, root)
-        server = await asyncio.to_thread(opencode.start_server, executable, self.version, root, env, startup_timeout=60)
+        stack = ExitStack()
         try:
-            async with httpx.AsyncClient(
-                base_url=server.url, auth=server.auth, timeout=httpx.Timeout(request_timeout, connect=10)
-            ) as client:
-                yield Runner(server, client, task)
+            root = Path(workspace.name)
+            endpoints = stack.enter_context(opencode.rekey(runner.endpoints))  # a key for this episode only
+            env = server_env(runner.task, endpoints, self.version, root)
+            server = await asyncio.to_thread(
+                opencode.start_server, runner.executable, self.version, root, env, startup_timeout=60
+            )
+            try:
+                async with httpx.AsyncClient(
+                    base_url=server.url, auth=server.auth, timeout=httpx.Timeout(runner.request_timeout, connect=10)
+                ) as client:
+                    yield server, client
+            finally:
+                await asyncio.to_thread(opencode.stop_server, server)
         finally:
-            await asyncio.to_thread(opencode.stop_server, server)
-            workspace.cleanup()
+            stack.close()
+            with suppress(OSError):
+                workspace.cleanup()
 
     async def healthy(self, runner: Runner) -> None:
-        (await runner.client.get("/api/info")).raise_for_status()
+        if runner.client is not None:
+            (await runner.client.get("/api/info")).raise_for_status()
+        elif runner.executable is None or not await asyncio.to_thread(Path(runner.executable).exists):
+            raise HarnessError("the OpenCode binary is gone")
 
     async def run_episode(
         self, runner: Runner, task: Task, row: dict[str, Any], endpoint: Endpoint, limits: Limits, *, title: str = ""
@@ -288,22 +360,41 @@ class OpenCodeV2:
         if isinstance(task.answer, FileAnswer):
             raise NotImplementedError("file answers in OpenCode 2 are not supported yet; use Pi")
         if task is not runner.task:
-            raise ValueError("an OpenCode 2 server is configured for one task (its config agent)")
-        client = runner.client
+            raise ValueError("an OpenCode 2 runner is configured for one task (its config agent)")
+        started = time.monotonic()
+        async with self.episode_server(runner) as (server, client):
+            episode = await self._run_session(server, client, task, row, endpoint, limits, title=title)
+        episode.elapsed_seconds = round(time.monotonic() - started, 3)
+        return episode
+
+    async def _run_session(
+        self,
+        server: opencode.Server,
+        client: httpx.AsyncClient,
+        task: Task,
+        row: dict[str, Any],
+        endpoint: Endpoint,
+        limits: Limits,
+        *,
+        title: str,
+    ) -> Episode:
         model = opencode.model_ref(endpoint)
         row_id = task.row_id(row)
-        started = time.monotonic()
         body = {
             "title": title or f"{task.name} {row_id}",
             "agent": AGENT_ID,
             "model": {"providerID": model[0], "id": model[1]},
             "permissions": permissions(task.tools),
-            "location": {"directory": str(runner.server.workspace)},
+            "location": {"directory": str(server.workspace)},
         }
-        session_id = str((await api(client, "post", "/api/session", body))["data"]["id"])
+        try:
+            session_id = str((await api(client, "post", "/api/session", body))["data"]["id"])
+        except Exception as exc:  # the server is gone: nothing about the model to record
+            raise HarnessError(f"OpenCode did not create a session: {type(exc).__name__}: {exc}") from exc
         failure: str | None = None
         timed_out = False
         watchdog_reason: str | None = None
+        retried = False
 
         async def watchdog() -> None:
             nonlocal watchdog_reason
@@ -322,6 +413,13 @@ class OpenCodeV2:
             async with asyncio.timeout(limits.timeout):
                 await api(client, "post", f"/api/session/{session_id}/prompt", {"text": task.render_prompt(row)})
                 await wait_idle(client, session_id)
+                # Within the same time and tool-call budget (the watchdog keeps counting).
+                if self.answer_retry and watchdog_reason is None:
+                    if not has_answer(task, await list_messages(client, session_id)):
+                        retried = True
+                        prompt = {"text": answer_retry_prompt(task)}
+                        await api(client, "post", f"/api/session/{session_id}/prompt", prompt)
+                        await wait_idle(client, session_id)
         except TimeoutError:
             timed_out = True
             failure = f"episode timed out after {limits.timeout:g} seconds"
@@ -336,7 +434,13 @@ class OpenCodeV2:
             with suppress(Exception):  # let the interrupt settle so the last tool call is recorded as stopped
                 async with asyncio.timeout(15):
                     await wait_idle(client, session_id)
-        raw = await list_messages(client, session_id)
+        try:
+            raw = await list_messages(client, session_id)
+        except Exception as exc:  # the server died mid-episode: a harness failure, not a model failure
+            raise HarnessError(f"OpenCode stopped answering: {type(exc).__name__}: {exc}") from exc
+        metadata: dict[str, Any] = {"cwd": str(server.workspace)}
+        if self.answer_retry:
+            metadata["answer_retry"] = retried
         episode = episode_from_messages(
             normalize_messages(raw),
             answer_model=task.answer,
@@ -347,8 +451,7 @@ class OpenCodeV2:
             system_prompt=task.system_prompt_for("opencode", self.version, "final_json"),
             failure=failure or watchdog_reason,
             session_id=session_id,
-            elapsed_seconds=round(time.monotonic() - started, 3),
-            metadata={"cwd": str(runner.server.workspace)},
+            metadata=metadata,
         )
         episode.harness_version = self.version
         episode.raw = raw

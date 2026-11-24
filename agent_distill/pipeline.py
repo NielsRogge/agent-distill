@@ -160,6 +160,17 @@ def eval_models(run: Run) -> dict[str, str]:
     return {variant: known[variant] for variant in settings.variants if variant in known}
 
 
+def output_args(run: Run, suffix: str) -> list[str]:
+    """Where an episode stage's raw logs go (the always-private `-raw` sibling of its dataset, never the dataset
+    itself), and the collection a newly created dataset joins at once."""
+    raw = "raw" if suffix == "traces" else f"{suffix}-raw"
+    args = ["--raw-repo", jobs.q(run.repo(raw))]
+    if run.config.hub.collection:
+        args += ["--collection", jobs.q(run.config.hub.collection), "--collection-note",
+                 jobs.q(collection_note(run, suffix))]  # fmt: skip
+    return args
+
+
 def served_job(
     run: Run,
     rev: str,
@@ -180,7 +191,8 @@ def served_job(
         vllm_binary = ["--vllm-binary", '"$(command -v vllm)"']
     else:
         deps.append(f"vllm=={serve.vllm_version}")
-    full = [*common_args(run), "--student", jobs.q(run.config.student), "--model", jobs.q(model), *vllm_binary, *args]
+    full = [*common_args(run), "--student", jobs.q(run.config.student), "--model", jobs.q(model), *vllm_binary, *args,
+            *output_args(run, "eval")]  # fmt: skip
     if adapter:
         full += ["--adapter", jobs.q(adapter), "--adapter-label", jobs.q(label), "--adapter-only"]
     else:
@@ -225,6 +237,8 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
                 "--output-repo",
                 jobs.q(run.repo("eval")),
             ]
+            if settings.answer_retry:
+                args.append("--answer-retry")
             minutes = VLLM_STARTUP_MINUTES + settings.limit * EVAL_MINUTES_PER_EPISODE / max(1, settings.concurrency)
             name = f"{run.name}-eval-{slugify(label)}-{slugify(split)}"
             built.append(served_job(run, rev, "eval", name, model, adapter, label, args, minutes))
@@ -235,7 +249,8 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
 
 def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minutes: float) -> jobs.Job:
     teacher = teacher_profile(run)
-    full = [*common_args(run), "--teacher", jobs.q(run.config.teacher), *args]
+    full = [*common_args(run), "--teacher", jobs.q(run.config.teacher), *args,
+            *output_args(run, "traces" if stage == "traces" else "eval")]  # fmt: skip
     if run.config.hub.bill_to:
         full += ["--bill-to", jobs.q(run.config.hub.bill_to)]
     command = "\n".join(
@@ -504,6 +519,16 @@ def artifacts(run: Run) -> list[tuple[str, str, str]]:
     ]
 
 
+def collection_note(run: Run, suffix: str) -> str:
+    """The collection note of the run's `suffix` repo (as in `artifacts`)."""
+    return next(text for repo, _, text in artifacts(run) if repo == run.repo(suffix))
+
+
+def private_repos(run: Run) -> list[tuple[str, str]]:
+    """(repo, type) of the repos that stay private forever: the code snapshots and the raw harness logs."""
+    return [(run.repo("code"), "model"), (run.repo("raw"), "dataset"), (run.repo("eval-raw"), "dataset")]
+
+
 def credential_files(api: Any, repo: str, files: list[str]) -> list[str]:
     """Text files of a dataset repo holding unredacted credential-shaped strings (streamed line by line)."""
     from huggingface_hub import hf_hub_download
@@ -521,14 +546,23 @@ def credential_files(api: Any, repo: str, files: list[str]) -> list[str]:
 
 
 def publish(run: Run, *, dry_run: bool) -> None:
-    """Credential-scan datasets, make models and datasets public, add everything to the collection; the code repo
-    must stay private. Nothing is ever deleted."""
+    """Credential-scan datasets, add everything to the collection, then make models and datasets public. Code and
+    raw-log repos must stay private and are never touched; a dataset holding raw logs is never made public. Nothing
+    is ever deleted."""
     from huggingface_hub import HfApi
     from huggingface_hub.utils import RepositoryNotFoundError
 
     api = HfApi()
     collection = run.config.hub.collection
+    for repo, kind in private_repos(run):
+        try:
+            if not api.repo_info(repo, repo_type=kind).private:
+                raise SystemExit(f"{repo} must stay private; make it private and revoke any token it may hold")
+        except RepositoryNotFoundError:
+            pass
     for repo, kind, note in artifacts(run):
+        if repo.endswith("-raw") or repo in {r for r, _ in private_repos(run)}:
+            raise SystemExit(f"{repo} holds raw logs or code and is never published")
         try:
             info = api.repo_info(repo, repo_type=kind)
         except RepositoryNotFoundError:
@@ -536,24 +570,21 @@ def publish(run: Run, *, dry_run: bool) -> None:
             continue
         if kind == "dataset":
             files = api.list_repo_files(repo, repo_type="dataset")
+            if any(name.startswith("raw/") for name in files):
+                raise SystemExit(f"{repo} contains raw harness logs (raw/); it stays private")
             if not any(name.startswith("sessions/") for name in files):
                 raise SystemExit(f"{repo} has no agent-trace sessions; it stays private")
             leaks = credential_files(api, repo, files)
             if leaks:
                 raise SystemExit(f"{repo} contains credential-shaped strings in {leaks[:5]}; it stays private")
         if dry_run:
-            print(f"[dry-run] {repo}: scan passed; private={info.private} -> public; collection note: {note}")
+            print(f"[dry-run] {repo}: scan passed; collection note: {note}; private={info.private} -> public")
             continue
+        if collection:  # in the collection before it becomes public
+            api.add_collection_item(collection, item_id=repo, item_type=kind, note=note, exists_ok=True)
         if info.private:
             api.update_repo_settings(repo, repo_type=kind, private=False)
-        if collection:
-            api.add_collection_item(collection, item_id=repo, item_type=kind, note=note, exists_ok=True)
         print(f"published {repo} ({kind})" + (f" in {collection}" if collection else ""), flush=True)
-    try:
-        if not api.repo_info(run.repo("code")).private:
-            raise SystemExit(f"{run.repo('code')} must stay private")
-    except RepositoryNotFoundError:
-        pass
 
 
 # --------------------------------------------------------------------------------------------------
@@ -678,14 +709,13 @@ def main(argv: list[str] | None = None) -> int:
     job_stages = [s for s in stages if s != "publish"]
     rev = ""
     if job_stages:
-        manifest = {
-            "run": dataclasses.asdict(config),
-            "name": run.name,
-            "git_commit": jobs.git_commit(),
-            "task": run.task.name,
-            "task_version": run.task.version,
-            "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        }
+        manifest = {"run": dataclasses.asdict(config), "name": run.name, "git_commit": jobs.git_commit(),
+                    "task": run.task.name, "task_version": run.task.version,
+                    "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "residual_risks": list(jobs.RESIDUAL_RISKS)}  # fmt: skip
+        if args.dry_run:
+            for risk in jobs.RESIDUAL_RISKS:
+                print(f"[dry-run] residual risk: {risk}")
         extra = []
         if not args.dry_run:
             import shutil

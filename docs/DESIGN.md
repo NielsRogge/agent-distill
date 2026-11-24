@@ -38,7 +38,9 @@ becomes the first example here.
 - **One harness per run.** Teacher traces, SFT data, GRPO rollouts and evaluation all happen in the same
   harness at the same pinned version. Training a separate LoRA per harness is a later step; the design keeps
   room for it but does not build it.
-- **Harnesses at launch:** OpenCode 1.2.4, OpenCode 2.3.2 and Pi 1.6.0. Nothing else for now.
+- **Harnesses:** OpenCode 1.2.4, OpenCode 2.3.2 and Pi 1.6.0, nothing else for now. The first release (M3)
+  ships the two OpenCode adapters (1.2.4 for parity, 2.3.2 for evaluation; 2.3.2 GRPO capture follows in M6);
+  Pi follows in M4.
 - **Compute:** HF Jobs only, for now.
 - **Parity:** the same rubric set accepts teacher traces, rewards GRPO rollouts and scores evaluation. The
   only allowed differences are explicitly tagged rubrics, and tests check them.
@@ -181,6 +183,7 @@ Task(
     rubrics=RUBRICS,                           # RubricSet (§4)
     tools=["shell", "fetch", "read", "search"],  # normalized kinds; adapters map them to native tools
     setup=None,                                # optional (row, workspace: Path) -> None
+    score_hooks=[],                            # optional (episode, workspace: Path) -> dict, run before scoring
     network=True,
     limits=Limits(timeout=180, max_tool_calls=15, max_model_calls=24),
     row_id=lambda row: row["arxiv_id"],
@@ -192,6 +195,10 @@ Task(
   Whatever the harness and answer mode, rubrics receive the parsed answer or `None` ("no answer").
 - **Workspaces.** `setup` fills a fresh temporary workspace for each episode, for example the HTML task's
   `preview` CLI.
+- **Scoring hooks.** `score_hooks` run once per episode after the agent stops and before the rubrics, in the
+  stage process (never in the agent's environment). Each returns a dict that is merged into the rubrics'
+  `artifacts` argument, for example the HTML task's screenshots and browser observations. A hook that raises
+  or times out makes the episode unscorable (see errors in §4).
 - **Limits.** `run.toml` can override `limits` and the dataset.
 
 ## 4. Rubrics
@@ -219,8 +226,17 @@ def shortcut_guard(tool_events) -> float: ...                 # the only kind of
 - **Arguments.** A rubric names the arguments it wants and gets them injected: `episode`, `row`, `answer`,
   `messages` (OpenAI format), `tool_events`, `workspace`, `artifacts` (e.g. screenshots produced by the
   task's scoring hooks) and `judge`.
-- **Sync, async and errors.** Rubrics can be sync or async. An exception is logged and the rubric scores 0.
-  Returning `None` marks the episode unscorable.
+- **Sync, async and errors.** Rubrics can be sync or async. Returning `None` marks the episode unscorable.
+  An exception (or a judge error: an HTTP 402, a timeout, an unparseable reply) is logged and also makes the
+  episode unscorable, never a 0, so an outage cannot reject every trace or hand GRPO a batch of zero rewards.
+  Each stage counts unscorable episodes caused by errors and stops cleanly once they exceed a threshold
+  (default 5% after at least 20 episodes, `[limits] max_error_rate`).
+- **Unscorable episodes.**
+  - Trace acceptance and the probe treat them as not passed and retry them on resume.
+  - GRPO drops them from the group baseline (as url-extraction does).
+  - Evaluation reports them separately: accuracy and pass@1 use every attempted episode as the denominator,
+    counting an unscorable episode as a failure, and the summary gives the unscorable count next to them.
+    Rescoring a record that was unscorable because of an error retries it.
 - **Combining scores.** A `RubricSet` holds the rubrics plus:
   - `reward(scores) -> float | None`. The default is a weighted sum, and built-in combinators cover the
     url-extraction reward: `gate(r)` (0 when the gate fails), `penalize(r, factor)` and `bonus_if(cond, r)`.
@@ -237,10 +253,11 @@ def shortcut_guard(tool_events) -> float: ...                 # the only kind of
 - **Parity.** Training and evaluation may differ only in rubrics tagged `train_only` or `eval_only`, and
   parity tests (§13) assert that.
 - **Judges.** Judge profiles (§2) call the model at temperature 0. Verdicts are cached by (episode hash,
-  rubric id, judge model), so trace filtering, GRPO, evaluation and rescoring never pay twice for the same
-  verdict. Judge keys are visible only to the judge client, which runs in the stage process, never in the
+  rubric id, judge model, and a hash of the judge prompt, scale, inputs and reply parser), so trace
+  filtering, GRPO, evaluation and rescoring never pay twice for the same verdict, and editing a prompt or
+  scale invalidates the old verdicts. Errors and unparseable replies are never cached. Judge keys are visible only to the judge client, which runs in the stage process, never in the
   agent's environment. A judge rubric that is too slow for rollouts can be tagged `eval_only`.
-- **Compatibility shims.**
+- **Compatibility shims (M7, if requested).**
   - `Rubric.from_callable(fn)` accepts Tinker's `RewardFn`, i.e. `async (messages) -> float | (float, metrics)`.
   - A Tinker judge `Rubric` (rubric text, extraction regex, output-format instruction) maps onto `@judge`.
   - `verifiers_compat.wrap(fn)` accepts classic verifiers functions `(prompt, completion, answer, state,
@@ -273,8 +290,10 @@ Where an episode is written:
 |---|---|---|
 | Slim record (scores, metadata, the portable trajectory used for SFT) | `episodes/*.jsonl` | Private until the credential scan passes |
 | Pi v3 session per episode, with `harness` in the header and the verification as a final custom message | `sessions/<prefix>/` | Opens in the agent-traces viewer |
-| Raw harness logs, kept for rescoring | `raw/` | Always private |
+| Raw harness logs, kept for rescoring | `raw/` in a separate `<run>-raw` dataset | Always private, never published |
 
+- Raw logs are unredacted harness output, so they never share a repo with anything that becomes public:
+  `publish` never changes the visibility of a `-raw` repo, and refuses to publish any repo containing `raw/`.
 - Pi episodes are published as Pi's own session file after redaction. OpenCode episodes go through the
   generic Episode-to-Pi exporter, which is the generalization of url-extraction's `trace_export.py`.
 - Never upload episodes with full trajectories without their sessions. That rule is carried over from
@@ -306,12 +325,20 @@ class Harness(Protocol):
   environment variable holding its key.
   - Teachers use `router.huggingface.co/v1`, sending `X-HF-Bill-To`.
   - Students use local vLLM, or the capture proxy during GRPO.
-  - The harness process receives only the credential its endpoint needs. Student runs get none.
+  - The harness process never receives a real credential. Teachers are reached through a key-injecting proxy
+    in the stage process (the same pattern as GRPO capture): the harness gets the proxy's local URL and a
+    random per-episode session key, and the proxy adds the real key and `X-HF-Bill-To`. Student runs get
+    no key at all.
+  - The HF Jobs container also holds the job's own HF token (environment and token cache). The harness
+    therefore runs as a separate unprivileged user where the image allows it, so it cannot read
+    `/proc/<pid>/environ` of the stage process or its files, and each episode gets its own workspace and
+    home directory. Where a separate user is not available, the residual risk (an agent that reads the stage
+    process's environment or the token cache) is printed by the dry run and recorded in the run manifest.
 - **Pinned versions.** Every binary or package is downloaded at the pinned version into a per-run cache and
   its `--version` is checked. `harness@version` is recorded in every manifest, record, session header and
   card. Rescoring across versions prints a warning.
 - **No mixing of versions.**
-  - Repo names contain the harness.
+  - Repo names contain the harness and its version.
   - The `sft` stage refuses traces from different `harness@version` pairs.
   - `grpo` and `eval` refuse to run a student in a harness other than the one its traces came from, unless
     `--allow-harness-mismatch` is passed (which still prints a warning).
@@ -358,12 +385,12 @@ The stage graph is the one in url-extraction's `pipeline.py`, rewritten around a
 
 | Stage | What it does | Output |
 |---|---|---|
-| `traces` | Sharded teacher episodes. Accepted when `passed`. | `<run>-traces` (episodes, sessions, raw) |
+| `traces` | Sharded teacher episodes. Accepted when `passed`. | `<run>-traces` (episodes, sessions), `<run>-raw` (raw logs, always private) |
 | `sft` | LoRA SFT on accepted traces of one `harness@version`, with loss on assistant turns only. | `<run>-lora` |
 | `merge` | Merges the SFT adapter into the student. | `<run>-sft-merged` |
 | `probe` | K attempts per row under rollout conditions; keeps rows solved on some attempts but not all. | `qualified-ids.txt` in `<run>-eval/difficulty/` |
 | `grpo` | GRPO in the harness with `reward` from the rubric set, then a merge. | `<run>-grpo-lora`, `<run>-grpo-merged` |
-| `eval` | Base, SFT, GRPO and teacher variants over the splits, with summaries and McNemar tests. | `<run>-eval` |
+| `eval` | Base, SFT, GRPO and teacher variants over the splits, with summaries and McNemar tests. | `<run>-eval`, `<run>-eval-raw` (always private) |
 | `publish` | Credential scan, visibility changes, collection notes, cards. | (Hub settings) |
 | `rescore` | Recomputes every record's scores from stored episodes. | a report |
 
@@ -378,13 +405,18 @@ or a provider error (no answer, usually mid-tool-call). Such an episode is kept,
 counts, but it does not use one of the row's attempts. Evaluation never reruns: a student's timeout counts against
 it.
 
-Run naming defaults to `<student>-<task>-<teacher>-<harness>`, e.g. `qwen3.5-9b-html-pages-kimi-k3.1-pro-pi`.
+Run naming defaults to `<student>-<task>-<teacher>-<harness>-<harness version>`, e.g.
+`qwen35-9b-html-pages-kimi-k31-pro-pi-160`, so runs of the same pair in two harness versions never share
+repos.
 
 **Code staging.** Before jobs are launched:
 
-1. A wheel of the current checkout is built.
-2. The wheel and the task folder are uploaded to the private `<run>-code` Hub repo, under `code/<rev>/`.
-3. Every job runs `uv pip install` on that wheel.
+1. A wheel of the current checkout is built, and `uv export --frozen --no-dev` writes a hash-pinned
+   `requirements.txt` from `uv.lock` for the extras the job needs.
+2. The wheel, the requirements file and the task folder are uploaded to the private `<run>-code` Hub repo,
+   under `code/<rev>/`.
+3. Every job runs `uv pip install --require-hashes -r requirements.txt`, then installs the wheel with
+   `--no-deps`, so jobs get exactly the locked dependency versions.
 
 This keeps GitHub credentials out of jobs. Once the package is on PyPI, a released version can be pinned
 instead.
@@ -400,13 +432,13 @@ instead.
   - Models are public.
   - Datasets are created private and made public only by `publish`, after a credential scan of every text
     file passes. The scan looks for `hf_`, `sk-`, `ghp_`, `github_pat_` and Google API keys.
-  - `-code` repos are always private.
+  - `-code` and `-raw` repos are always private, and `publish` never touches them.
 - **Never deleted.** The tool never deletes Hub repos or files.
 
 **Credentials.**
 
-- Agent processes get no credentials they do not need. Students get none, and teachers get only their
-  endpoint's key.
+- Agent processes get no real credentials: students get none, and teachers reach their endpoint through
+  the key-injecting proxy (§6). The residual exposure to the job's own token is handled as in §6.
 - Records go through `record_line`, which redacts credentials. Pi sessions are redacted before upload.
 - Judge and critic keys live in the stage process only.
 
@@ -443,10 +475,16 @@ and `passed` = every verified field is correct and the episode is complete.
 
 1. **Rescore** (CPU only). Every published url-extraction record (the evaluation repos, the teacher
    baselines and the accepted train traces in docs/pipeline.md's validation table) is rescored through
-   `opencode_v1_reader` and the ported rubrics, with zero per-episode differences. This also becomes a test
-   fixture.
+   `opencode_v1_reader` and the ported rubrics, with zero per-episode differences against the
+   `verification`, `accepted` and `attempt_complete` stored in each record. Those stored values were
+   written by url-extraction's scorer at the revision each record's job ran (recorded in its card or
+   manifest where available); records written before a scorer change are compared after url-extraction's
+   own `report.rescore` at the revision the port is taken from, and the parity report names that revision.
+   A small redacted fixture of real records becomes a CI test.
 2. **V1 evaluation re-run.** `opencode@1.2.4` evaluates the Qwen3.5-9B base and
-   `qwen35-9b-url-agent-grpo-merged-kimi` on test. They must land within ±5 points of 75.0% and 82.1%.
+   `qwen35-9b-url-agent-grpo-merged-kimi` on test. They must land within ±5 points of 75.0% and 82.1%, and
+   the ordering must hold on the paired episodes: the GRPO model beats the base on the same rows (more
+   base-wrong/GRPO-right than base-right/GRPO-wrong discordant pairs, as in url-extraction's McNemar).
 3. **V2 cross-check**, once the url-extraction V2 experiment (GLM-5.3 → Qwen3.5-4B) publishes. Our
    rubrics must accept exactly the same teacher traces, and our V2 adapter's evaluation of its SFT and GRPO
    models must match url-extraction's numbers within noise.
@@ -648,13 +686,13 @@ budget pilot.
 | # | Milestone | Done when |
 |---|---|---|
 | M0 | **Skeleton:** layout, `pyproject`, CLI stub, CI, AGENTS.md (Hub, billing, credential and branch rules from url-extraction), this design doc | CI green on an empty test suite |
-| M1 | **Core and Tier 1 parity (CPU only):** `Task`, `Episode`/`ToolEvent` kinds, rubrics, `RubricSet` and combinators, compatibility shims, credentials, Pi exporter, `opencode_v1_reader`, the `examples/paper-urls` task and rubrics, `distill rescore` | Every published url-extraction record rescores with zero per-episode differences |
+| M1 | **Core and Tier 1 parity (CPU only):** `Task`, `Episode`/`ToolEvent` kinds, rubrics, `RubricSet` and combinators, credentials, Pi exporter, `opencode_v1_reader`, the `examples/paper-urls` task and rubrics, `distill rescore` | Every published url-extraction record rescores with zero per-episode differences |
 | M2 | **Jobs, OpenCode 1.2.4 and 2.3.2, evaluation:** profiles, wheel staging, launcher, manifests, budget guard, `opencode@1.2.4` and `opencode@2.3.2` adapters, `eval` and `publish` stages; a 2.3.2 smoke evaluation on HF Jobs | Tier 2 passes: Qwen3.5-9B base and the Kimi GRPO model within noise of 75.0% and 82.1% in V1 |
 | M3 | **Training stages:** `traces`, `sft`, `merge`, `probe`, `grpo` (TRL and simple backends, V1 capture factory), `distill smoke` | A smoke run (a few traces, SFT for a few steps, 2 GRPO steps, a 5-paper eval) passes end to end on HF Jobs. **First release.** |
 | M4 | **Pi and HTML task infrastructure:** `pi@1.6.0` adapter and extension, Pi capture factory, `preview` CLI, HTML gates and judge rubrics (Gemini plus Qwen3.8-27B), concept generation, blind A/B calibration page, teacher baseline (GLM-5.3 vs Kimi-K3.1-Pro on about 100 concepts) | Teacher chosen; judge calibrated on about 100 human pairs; non-zero judge rate measured for base and teacher |
 | M5 | **HTML distillation run:** traces → SFT → probe → GRPO → eval for Qwen3.5-9B (and 4B if compute allows), "100 HTML files" run, gallery Space | Published models, evaluation, sessions and galleries; results in `examples/html-pages/README.md` |
 | M6 | **OpenCode 2.3.2 parity:** V2 GRPO capture; Tier 3 once the url-extraction V2 experiment publishes | Tier 3 passes; optionally HTML pages in OpenCode V2 as the second-harness LoRA |
-| M7 | **Later:** rubric drafting (`draft`, `calibrate`, review gate), the full-recipe parity re-run (Tier 4), Tinker/verifiers exporters if requested, vision students once TRL supports them | As scoped then |
+| M7 | **Later:** rubric drafting (`draft`, `calibrate`, review gate), the full-recipe parity re-run (Tier 4), Tinker/verifiers compatibility shims and exporters if requested, vision students once TRL supports them | As scoped then |
 
 ## 15. Open items
 

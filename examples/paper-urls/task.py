@@ -38,6 +38,13 @@ def user_prompt(row: dict[str, Any]) -> str:
     )
 
 
+def record_limits(name: str) -> Limits:
+    """url-extraction's teacher trace generation (`train*`, `distill*` files) ran with 20 tool calls, its
+    evaluations and baselines with 15."""
+    stem = name.rsplit("/", 1)[-1]
+    return Limits(timeout=180, max_tool_calls=20 if stem.startswith(("train", "distill")) else 15)
+
+
 task = Task(
     name="paper-urls",
     dataset=DatasetSpec(
@@ -47,6 +54,12 @@ task = Task(
         # Traces, the probe and GRPO use every row with a verified requested label; unverified fields are never
         # scored (url-extraction's --accept-partial, its teacher-trace default).
         train_filter=partly_scoreable,
+        # As parity/tier1.py: v1 labels first, later datasets only for papers v1 lacks (test_hard in v2).
+        label_repos=(
+            "nielsr/paper-url-extraction-v1",
+            "nielsr/paper-url-extraction-v1-validated",
+            "nielsr/paper-url-extraction-v2",
+        ),
     ),
     system_prompt=SYSTEM_PROMPT,
     prompt=user_prompt,
@@ -61,6 +74,7 @@ task = Task(
     system_prompts={"opencode@2": HERE / "system_prompt_v2.txt"},
     # The agent runs `hf papers info/read` (anonymous: agents get no HF token).
     job_setup=["command -v hf >/dev/null || uv tool install -q 'huggingface-hub>=1.13'"],
+    record_limits=record_limits,
 )
 
 __all__ = ["FIELDS", "SYSTEM_PROMPT", "PaperCandidate", "URLFindings", "candidate_from_row", "task", "user_prompt"]

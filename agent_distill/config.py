@@ -266,6 +266,7 @@ class EvalSettings:
     variants: list[str] = field(default_factory=lambda: ["base", "sft", "grpo", "teacher"])
     # ... or explicit models, label -> "model[+adapter]" (replaces `variants`)
     models: dict[str, str] = field(default_factory=dict)
+    answer_retry: bool = False  # OpenCode 2.x: ask once for the JSON answer when an episode ends without one
 
 
 @dataclass
