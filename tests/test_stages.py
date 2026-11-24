@@ -69,13 +69,18 @@ def test_sft_reads_accepted_records_of_one_harness(tmp_path, capsys):
     write(writer, "1", passed=True)
     write(writer, "1", passed=True, attempt=2)  # a second accepted attempt of the same row: first one wins
     write(writer, "2", passed=False)
-    write(writer, "3", passed=True, harness_version="1.2.4")
     accepted = load_accepted([writer.episodes], harness="opencode@2.3.2")
     assert [r["row_id"] for r in accepted] == ["1"] and accepted[0]["attempt"] == 1
-    assert "opencode@1.2.4" in capsys.readouterr().out
-    assert len(load_accepted([writer.episodes], harness="opencode@2.3.2", allow_mismatch=True)) == 2
+    failed = RecordWriter(tmp_path, "failed")
+    write(failed, "2", passed=False)
     with pytest.raises(ValueError, match="no accepted"):
-        load_accepted([writer.episodes], harness="pi@1.6.0")
+        load_accepted([failed.episodes], harness="opencode@2.3.2")
+    # DESIGN.md §6: traces of another harness@version refuse SFT unless --allow-harness-mismatch (still warned)
+    write(writer, "3", passed=True, harness_version="1.2.4")
+    with pytest.raises(SystemExit, match=r"opencode@1\.2\.4.*--allow-harness-mismatch"):
+        load_accepted([writer.episodes], harness="opencode@2.3.2")
+    assert len(load_accepted([writer.episodes], harness="opencode@2.3.2", allow_mismatch=True)) == 2
+    assert "WARNING" in capsys.readouterr().out
 
 
 def test_sft_trajectory_stops_at_the_submission_and_strips_metadata(tmp_path):
@@ -219,7 +224,7 @@ def test_checkpoint_uploads_a_consistent_copy(tmp_path):
     (tmp_path / "out" / "a.jsonl").write_text("1\n")
     uploads: list[list[str]] = []
 
-    def upload(folder):
+    def upload(folder, raw_folder=None):
         uploads.append(sorted(p.name for p in folder.iterdir()))
 
     async def main():

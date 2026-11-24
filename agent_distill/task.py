@@ -32,6 +32,9 @@ class DatasetSpec:
     filter: Callable[[Row], bool] | None = None  # evaluation rows
     train_filter: Callable[[Row], bool] | None = None  # rows for traces, the probe and GRPO (default: `filter`)
     revision: str | None = None
+    # Label datasets `distill rescore` reads rows from, in precedence order (the first dataset holding a row id
+    # wins); default: `repo` alone. E.g. v1 labels first, then a later dataset for rows v1 lacks (test_hard).
+    label_repos: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -64,6 +67,9 @@ class Task:
     judge: str = ""
     # agent-distill extras the task's episode stages need beyond `hub`, e.g. ("browser",) for the `preview` tool.
     extras: tuple[str, ...] = ()
+    # The limits a stored record ran with when the record does not say (`distill rescore`), from its file name,
+    # e.g. url-extraction's teacher trace files ran with 20 tool calls, its evaluations with 15. None: `limits`.
+    record_limits: Callable[[str], Limits | None] | None = None
 
     def render_prompt(self, row: Row) -> str:
         if callable(self.prompt):

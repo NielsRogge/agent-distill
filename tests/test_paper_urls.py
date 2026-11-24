@@ -253,3 +253,54 @@ def test_rescore_and_summarize_records() -> None:
         metrics["url_correctness/github_scored"] + metrics["url_correctness/project_page_scored"]
     )
     assert field_accuracy == pytest.approx(3 / 6)
+
+
+def test_tool_call_limit_comes_from_the_task_when_limits_are_not_passed() -> None:
+    """The 15-call incompleteness rule must not be skipped when a caller forgets `limits`."""
+    data, ep = episode("correct_and_complete")
+    ep.tool_events = ep.tool_events + [ep.tool_events[-1]] * 20
+    with_limits = TASK.rubrics.score(episode_context(ep, data, limits=Limits(max_tool_calls=15)))
+    from_task = TASK.rubrics.score(episode_context(ep, data, task=TASK))
+    assert with_limits.scores["protocol"] == 0.0 and from_task.scores["protocol"] == 0.0
+
+
+def test_rescore_limits_per_file_and_record() -> None:
+    from agent_distill.rescore import limits_for
+
+    assert limits_for(TASK, "data/train-00000.jsonl", {}).max_tool_calls == 20  # teacher trace generation
+    assert limits_for(TASK, "data/distill-kimi.jsonl", {}).max_tool_calls == 20
+    assert limits_for(TASK, "eval/test.jsonl", {}).max_tool_calls == 15
+    assert limits_for(TASK, "x.jsonl", {"limits": {"max_tool_calls": 30}}).max_tool_calls == 30
+    assert limits_for(TASK, "data/train.jsonl", {}, override=12).max_tool_calls == 12
+
+
+def test_rescore_label_precedence_matches_tier1(monkeypatch) -> None:
+    import sys
+    import types
+
+    from agent_distill.rescore import load_rows
+
+    tables = {
+        "nielsr/paper-url-extraction-v1": {"test": [{"paper_id": 1, "v": "v1"}]},
+        "nielsr/paper-url-extraction-v1-validated": {"test": [{"paper_id": 1, "v": "validated"}]},
+        "nielsr/paper-url-extraction-v2": {"test_hard": [{"paper_id": 2, "v": "v2"}, {"paper_id": 1, "v": "v2"}]},
+    }
+    fake = types.ModuleType("datasets")
+    fake.get_dataset_split_names = lambda repo, revision=None: list(tables[repo])
+    fake.load_dataset = lambda repo, split, revision=None: tables[repo][split]
+    monkeypatch.setitem(sys.modules, "datasets", fake)
+    rows = load_rows(TASK)
+    assert rows["1"]["v"] == "v1" and rows["2"]["v"] == "v2"  # v1 wins; test_hard rows come from v2
+
+
+def test_rescore_reports_pooled_field_accuracy() -> None:
+    from agent_distill.rescore import rescore, summarize
+
+    records = []
+    for case in ("correct_and_complete", "wrong_github", "no_answer"):
+        _, messages, structured = CASES[case]
+        records.append({"paper_id": 1, "arxiv_id": ARXIV, "model": "p/m", "findings": structured,
+                        "opencode_messages": messages, "evaluation_model": "adapter"})  # fmt: skip
+    summary = summarize(rescore(records, TASK, {"1": row()}, name="eval/test.jsonl"))["adapter"]
+    assert summary["pooled"]["url_correctness"] == pytest.approx(3 / 6)
+    assert summary["unscorable"] == 0

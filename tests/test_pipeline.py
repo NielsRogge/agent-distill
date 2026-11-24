@@ -114,16 +114,22 @@ def episode(row_id: str) -> Episode:
 
 
 def test_record_writer_layout_and_summary(tmp_path):
-    writer = RecordWriter(tmp_path, "base/test")
+    out = tmp_path / "eval"
+    writer = RecordWriter(out, "base/test")
     for row_id, passed in (("1", True), ("2", False)):
         result = RubricResult(scores={"r": float(passed)}, reward=float(passed), passed=passed, metrics={"m": 1.0})
         writer.write(episode(row_id), result, label="base")
-    other = RecordWriter(tmp_path, "grpo/test")
+    other = RecordWriter(out, "grpo/test")
     for row_id in ("1", "2"):
         other.write(episode(row_id), RubricResult(scores={"r": 1.0}, reward=1.0, passed=True), label="grpo")
     assert writer.done() == {("base", "1"), ("base", "2")}
-    assert len(list((tmp_path / "sessions" / "base" / "test").glob("*.jsonl"))) == 2
-    assert (tmp_path / "raw" / "base" / "test.jsonl").exists()
+    assert len(list((out / "sessions" / "base" / "test").glob("*.jsonl"))) == 2
+    # Raw logs live outside the publishable folder (they go to the always-private -raw dataset).
+    assert not (out / "raw").exists()
+    (raw,) = read_jsonl(tmp_path / "eval-raw" / "raw" / "base" / "test.jsonl")[:1]
+    assert raw["raw"] == [{"info": {}}] and raw["label"] == "base"
+    with pytest.raises(ValueError, match="must not live inside"):
+        RecordWriter(out, "x", out / "raw")
     records = read_jsonl(writer.episodes) + read_jsonl(other.episodes)
     assert records[0]["version"] == 2 and records[0]["harness_version"] == "1.2.4" and "raw" not in records[0]
     summary = summarize_records(records)
@@ -143,7 +149,7 @@ def test_v2_records_rescore(tmp_path):
     ep = episode_from_messages(messages, answer_model=TASK.answer, task=TASK.name, row_id="1", model="m",
                                structured=structured)  # fmt: skip
     result = TASK.rubrics.score(episode_context(ep, row, limits=Limits(max_tool_calls=15)))
-    writer = RecordWriter(tmp_path, "x")
+    writer = RecordWriter(tmp_path / "out", "x")
     writer.write(ep, result, label="base")
     (item,) = rescore(read_jsonl(writer.episodes), TASK, {"1": row}, limits=Limits(max_tool_calls=15))
     assert item.result.scores == result.scores and item.result.passed is True

@@ -1,8 +1,12 @@
 """HF Jobs: code staging, job commands, launching, waiting, cost estimates (DESIGN.md §7, §8).
 
-Code staging: a wheel of the current checkout plus the task folder go to the run's private `<run>-code` model repo
-under `code/<rev>/`; every job downloads them and installs the wheel, so no GitHub credential ever enters a job.
-Jobs run in the `[hub] bill_to` namespace with the caller's token as the only secret.
+Code staging: a wheel of the current checkout, a hash-pinned `requirements.txt` exported from `uv.lock` (plus the
+same pins without hashes as `constraints.txt`) and the task folder go to the run's private `<run>-code` model repo
+under `code/<rev>/`. Every job downloads them, installs the locked dependencies with `--require-hashes`, then the
+wheel with `--no-deps`, so jobs get exactly the locked versions and no GitHub credential ever enters a job. A job's
+extra runtime packages (e.g. `vllm==<version>` from the student profile) are installed afterwards under
+`constraints.txt`, so they cannot move a locked package. Jobs run in the `[hub] bill_to` namespace with the
+caller's token as the only secret.
 """
 
 from __future__ import annotations
@@ -20,6 +24,14 @@ from typing import Any
 
 HF_CLI = "uvx --from 'huggingface-hub>=1.13' hf"
 REPO_ROOT = Path(__file__).resolve().parent.parent
+JOB_EXTRAS = ("hub",)  # the package extras every job installs (from uv.lock)
+VENV_PYTHON = "/work/venv/bin/python"
+# Printed by every dry run and recorded in the run manifest (DESIGN.md §6, credentials).
+RESIDUAL_RISKS = (
+    "the job's own HF token (its HF_TOKEN secret) is in the stage process's environment and token cache; the "
+    "harness runs as the same user, so an agent could read it from /proc/<pid>/environ although the harness's own "
+    "environment is stripped (teacher keys reach the harness only as key-proxy session keys)",
+)
 
 
 @dataclass
@@ -57,6 +69,20 @@ def build_wheel(out_dir: Path) -> Path:
     return wheels[-1]
 
 
+def export_requirements(out_dir: Path, extras: tuple[str, ...] = JOB_EXTRAS) -> tuple[Path, Path]:
+    """`requirements.txt` (hash-pinned) and `constraints.txt` (the same pins, no hashes) from this checkout's
+    uv.lock, for the package's dependencies and `extras` (without the package itself and the dev group)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    base = ["uv", "export", "--frozen", "--no-dev", "--no-emit-project", "--no-header", "--format", "requirements-txt",
+            "--project", str(REPO_ROOT), *(f"--extra={extra}" for extra in extras)]  # fmt: skip
+    requirements, constraints = out_dir / "requirements.txt", out_dir / "constraints.txt"
+    subprocess.run([*base, "--output-file", str(requirements)], check=True, capture_output=True)
+    subprocess.run([*base, "--no-hashes", "--output-file", str(constraints)], check=True, capture_output=True)
+    if "--hash=sha256:" not in requirements.read_text():
+        raise RuntimeError("uv export wrote requirements without hashes")
+    return requirements, constraints
+
+
 def git_commit() -> str:
     try:
         commit = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
@@ -68,11 +94,21 @@ def git_commit() -> str:
         return "unknown"
 
 
-def stage_code(code_repo: str, task_dir: Path, extra: list[Path], *, dry_run: bool, manifest: dict[str, Any]) -> str:
-    """Upload the wheel, the task folder, extra files and the run manifest under code/<rev>/; returns <rev>."""
+def stage_code(
+    code_repo: str,
+    task_dir: Path,
+    extra: list[Path],
+    *,
+    dry_run: bool,
+    manifest: dict[str, Any],
+    extras: tuple[str, ...] = JOB_EXTRAS,
+) -> str:
+    """Upload the wheel, the hash-pinned requirements (the package plus `extras`, e.g. a task's `browser`), the task
+    folder, extra files and the run manifest under code/<rev>/; returns <rev>."""
     rev = time.strftime("%Y%m%d-%H%M%S")
     if dry_run:
-        print(f"[dry-run] would stage the agent-distill wheel, {task_dir} and {len(extra)} files to {code_repo} "
+        print(f"[dry-run] would stage the agent-distill wheel, requirements.txt (uv export --frozen --no-dev "
+              f"--extra {','.join(extras)}, hash-pinned), {task_dir} and {len(extra)} files to {code_repo} "
               f"(private) under code/{rev}/")  # fmt: skip
         return rev
     from huggingface_hub import HfApi
@@ -84,6 +120,7 @@ def stage_code(code_repo: str, task_dir: Path, extra: list[Path], *, dry_run: bo
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         build_wheel(root)
+        export_requirements(root, extras)
         shutil.copytree(task_dir, root / "task", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         for path in extra:
             if path.is_dir():
@@ -110,18 +147,23 @@ def prelude(code_repo: str, rev: str, setup: list[str] = ()) -> str:
             f"{HF_CLI} download {q(code_repo)} --include 'code/{rev}/*' --local-dir /work/stage >/dev/null",
             f"cp -r /work/stage/code/{rev}/. /work/",
             "WHEEL=$(ls /work/agent_distill-*.whl)",
+            "uv venv -q --python 3.12 --python-preference only-managed /work/venv",
+            f"uv pip install -q --python {VENV_PYTHON} --require-hashes -r /work/requirements.txt",
+            f'uv pip install -q --python {VENV_PYTHON} --no-deps "$WHEEL"',
             *setup,
         ]
     )
 
 
-def python_module(module: str, args: list[str], *, extras: str = "hub", deps: list[str] = ()) -> str:
-    """Run `python -m module` in a fresh uv environment with the staged wheel (and `deps`)."""
-    withs = " ".join(f"--with {q(dep)}" for dep in deps)
-    return (
-        f'uv run --no-project --python 3.12 --python-preference only-managed --with "$WHEEL[{extras}]" {withs} '
-        f"python -m {module} {' '.join(args)}"
-    )
+def python_module(module: str, args: list[str], *, deps: list[str] = ()) -> str:
+    """Run `python -m module` in the job's locked environment (see `prelude`), after installing `deps` (job
+    runtime packages outside uv.lock, e.g. vLLM) under the locked constraints."""
+    lines = []
+    if deps:
+        packages = " ".join(q(dep) for dep in deps)
+        lines.append(f"uv pip install -q --python {VENV_PYTHON} -c /work/constraints.txt {packages}")
+    lines.append(f"{VENV_PYTHON} -m {module} {' '.join(args)}")
+    return "\n".join(lines)
 
 
 def hardware_prices() -> dict[str, float]:

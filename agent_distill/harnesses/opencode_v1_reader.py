@@ -204,8 +204,9 @@ def episode_from_messages(
     session_id: str | None = None,
     elapsed_seconds: float | None = None,
     metadata: dict[str, Any] | None = None,
+    version: str = VERSION,
 ) -> Episode:
-    """One OpenCode 1.2.4 session as an `Episode`.
+    """One OpenCode 1.x session as an `Episode` (`version`: the OpenCode version that produced it).
 
     `structured` is OpenCode's validated structured output (`info.structured` of the prompt response, or the
     `findings` a record stored); without a valid one, the answer is recovered from a JSON final message.
@@ -237,7 +238,7 @@ def episode_from_messages(
         task=task,
         row_id=row_id,
         harness=HARNESS,
-        harness_version=VERSION,
+        harness_version=version,
         model=model,
         messages=chat_messages(messages, system_prompt),
         tool_events=tool_events(messages),
@@ -291,6 +292,8 @@ def episode_from_record(record: dict[str, Any], *, answer_model: Any, task: str,
         session_id=record.get("session_id"),
         elapsed_seconds=record.get("elapsed_seconds"),
         metadata={key: record.get(key) for key in RECORD_METADATA if key in record},
+        # url-extraction records name the OpenCode version they ran with; the oldest ones predate the field.
+        version=str(record.get("opencode_version") or VERSION),
     )
     if not messages and record.get("tool_events"):  # slim records without raw messages
         episode.tool_events = [

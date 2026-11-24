@@ -10,10 +10,10 @@ Pi (`@earendil-works/pi-coding-agent`) runs one process per episode:
   lockfile shipped next to this module (`npm ci`, which checks every package's integrity). Never a `pi` or `node`
   found on PATH.
 - **Endpoint.** `PI_CODING_AGENT_DIR` is a per-episode directory whose `models.json` declares one OpenAI-compatible
-  provider (`agent-distill`) with the endpoint's model. A key is referenced by its environment variable name
-  (`"$HF_TOKEN"`), never written to disk; a non-secret literal key (the GRPO capture session id) is written as is.
-- **Credentials.** The Pi process gets a credential-free environment plus the one key its endpoint names. The
-  extension's `bash` drops that key again, so the agent's commands never see it.
+  provider (`agent-distill`) with the endpoint's model. An endpoint with a key (a teacher) is reached through a
+  per-episode `KeyProxy` in the stage process: `models.json` gets the proxy's URL and a session key that is
+  worthless outside it. A non-secret literal key (the GRPO capture session id) is written as is.
+- **Credentials.** The Pi process gets a credential-free environment: no real key, not even the teacher's.
 - **Extension** (`extension.ts`): the `submit` tool (the answer schema, or no arguments for a `FileAnswer`), the
   exact tool-call limit, the credential-free `bash`.
 - **Records.** Pi's own session file is the episode's native trace (the agent-traces viewer reads it as is); the
@@ -42,6 +42,7 @@ from agent_distill.config import HarnessProfile
 from agent_distill.credentials import strip_credentials
 from agent_distill.episode import Episode, ToolEvent
 from agent_distill.harnesses.base import Endpoint, architecture, download_verified
+from agent_distill.harnesses.opencode import key_proxies
 from agent_distill.harnesses.opencode_v1_reader import answer_from_text, json_text
 from agent_distill.task import FileAnswer, Limits, Task
 
@@ -144,9 +145,8 @@ def pi_base_env() -> dict[str, str]:
 
 def models_json(endpoint: Endpoint) -> dict[str, Any]:
     if endpoint.key_env:
-        api_key = f"${endpoint.key_env}"  # interpolated by Pi from its environment; never written to disk
-    else:
-        api_key = endpoint.api_key or "EMPTY"
+        raise ValueError(f"{endpoint.model}: an endpoint with a key must go through key_proxies()")
+    api_key = endpoint.session_key or endpoint.api_key or "EMPTY"
     model = {
         "id": endpoint.model,
         "name": endpoint.name or endpoint.model,
@@ -177,7 +177,8 @@ def extension_config(task: Task, limits: Limits, endpoint: Endpoint) -> dict[str
     return {
         "submit": submit,
         "max_tool_calls": limits.max_tool_calls or 0,
-        "strip_env": [endpoint.key_env] if endpoint.key_env else [],
+        # Pi never holds a real key (keyed endpoints go through the key proxy); kept for the extension's interface.
+        "strip_env": [],
     }
 
 
@@ -448,7 +449,8 @@ class Pi:
         # as the same OS user; DESIGN.md §15 (agent isolation) says what that leaves open.
         episode_dir = Path(tempfile.mkdtemp(prefix="agent-distill-episode-"))
         try:
-            return await self._run_in(episode_dir, runner, task, row, row_id, endpoint, limits)
+            with key_proxies([endpoint]) as (routed,):  # a teacher's real key stays in this process
+                return await self._run_in(episode_dir, runner, task, row, row_id, routed, limits)
         finally:
             await asyncio.to_thread(shutil.rmtree, episode_dir, True)
 
@@ -471,8 +473,6 @@ class Pi:
         config = agent_dir / "agent-distill.json"
         config.write_text(json.dumps(extension_config(task, limits, endpoint)))
         env = pi_base_env()
-        if endpoint.key_env and endpoint.key_env in os.environ:
-            env[endpoint.key_env] = os.environ[endpoint.key_env]
         env.update(PI_CODING_AGENT_DIR=str(agent_dir), AGENT_DISTILL_PI_CONFIG=str(config))
         system_prompt = task.system_prompt_for("pi", self.version, "submit_tool")
         command = pi_command(runner.node, runner.cli, task, endpoint, sessions, task.render_prompt(row), system_prompt)

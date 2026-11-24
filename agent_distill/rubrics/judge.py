@@ -2,8 +2,10 @@
 
 A judge rubric's function returns the template variables for its prompt (and optional `images`, as PNG bytes);
 the judge runner (passed to the rubric set as `judge` in the context) sends the rendered prompt to the judge
-model and the score is parsed from the reply and scaled to [0, 1]. Verdicts are cached by (judge model, prompt,
-images), so trace filtering, GRPO, evaluation and rescoring never pay twice for the same judgement.
+model and the score is parsed from the reply and scaled to [0, 1]. Verdicts are cached by (judge model, rendered
+prompt, images); the rendered prompt contains the template, so editing a prompt invalidates old verdicts, and the
+scale and pattern are applied to the cached reply each time, so editing them never returns a stale score. Only
+replies that parse are cached. Trace filtering, GRPO, evaluation and rescoring never pay twice for a judgement.
 
 Concrete clients (HF router, Gemini) are in `rubrics.clients`, selected by judge profiles; any object with
 `async complete(prompt: str, images: list[bytes]) -> str` and a `model` attribute works.
@@ -34,7 +36,9 @@ class JudgeClient(Protocol):
 class JudgeSpec:
     prompt: str  # str.format template
     scale: tuple[float, float] = (0.0, 1.0)
-    pattern: str = r"(?i)score\s*[:=]\s*(-?\d+(?:\.\d+)?)"  # first group is the score
+    # First group is the score. The *last* match in the reply counts (a reply may discuss sub-scores first, e.g.
+    # "Overall score: 6 ... SCORE: 9"), and Markdown emphasis around the label is allowed ("**SCORE:** 8").
+    pattern: str = r"(?i)\bscore\s*\**\s*[:=]\s*\**\s*(-?\d+(?:\.\d+)?)"
     # Named sub-scores in the same reply ("creativity: 7"), recorded as metrics `<rubric>/<criterion>`, scaled
     # like the score.
     criteria: tuple[str, ...] = ()
@@ -80,17 +84,33 @@ class JudgeRunner:
         self.cache = cache or JudgeCache()
         self.calls = 0  # uncached calls (for the budget)
 
-    async def __call__(self, prompt: str, images: list[bytes] | None = None) -> str:
+    async def __call__(
+        self, prompt: str, images: list[bytes] | None = None, *, check: Callable[[str], Any] | None = None
+    ) -> str:
+        """The judge's reply. With `check` (e.g. the score parser), only replies it accepts are cached; a cached
+        reply it rejects (written before a parser change) is asked again. Errors are never cached."""
         images = images or []
         key = JudgeCache.key(self.client.model, prompt, images)
         cached = self.cache.get(key)
-        if cached is not None:
+        if cached is not None and _accepted(cached, check):
             return cached
         reply = await self.client.complete(prompt, images)
         self.calls += 1
-        if reply.strip():  # an empty reply (e.g. reasoning used up the output budget) is a failure, never cached
+        if _accepted(reply, check):
             self.cache.put(key, reply)
         return reply
+
+
+def _accepted(reply: str, check: Callable[[str], Any] | None) -> bool:
+    if not reply.strip():
+        return False
+    if check is None:
+        return True
+    try:
+        check(reply)
+    except ValueError:
+        return False
+    return True
 
 
 def judge(
@@ -122,7 +142,8 @@ def judge(
 
 
 def parse_score(reply: str, spec: JudgeSpec) -> float:
-    match = re.search(spec.pattern, reply)
+    matches = list(re.finditer(spec.pattern, reply))
+    match = matches[-1] if matches else None
     if not match:
         raise ValueError(f"no score in judge reply: {reply[:200]!r}")
     low, high = spec.scale
@@ -144,8 +165,11 @@ async def run_judge_rubric(rubric: Rubric, context: Mapping[str, Any]) -> tuple[
     variables = dict(variables)
     images = list(variables.pop("images", []) or [])
     prompt = rubric.judge_spec.prompt.format(**variables)
-    reply = await runner(prompt, images)
     spec = rubric.judge_spec
+    if isinstance(runner, JudgeRunner):
+        reply = await runner(prompt, images, check=lambda text: parse_score(text, spec))
+    else:  # any `async (prompt, images) -> str`
+        reply = await runner(prompt, images)
     metrics = {f"{rubric.name}/{name}": value for name, value in parse_criteria(reply, spec).items()}
     return parse_score(reply, spec), metrics
 

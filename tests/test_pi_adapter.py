@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from agent_distill.config import load_profile
 from agent_distill.harnesses.base import Endpoint, load_harness, teacher_endpoint
+from agent_distill.harnesses.opencode import key_proxies
 from agent_distill.harnesses.pi import (
     EXTENSION,
     HERE,
@@ -60,16 +63,19 @@ def test_profile_and_wheel_data():
 def test_models_json_names_the_key_never_its_value(monkeypatch):
     monkeypatch.setenv("HF_TOKEN", "hf_secretsecretsecretsecret")
     teacher = teacher_endpoint(load_profile("teachers", "glm-5.3"), PROFILE, "org")
-    provider = models_json(teacher)["providers"]["agent-distill"]
-    assert provider["apiKey"] == "$HF_TOKEN" and provider["headers"] == {"X-HF-Bill-To": "org"}
-    assert "hf_secret" not in str(models_json(teacher))
+    with pytest.raises(ValueError, match="key_proxies"):
+        models_json(teacher)  # a real key never reaches Pi's config
+    with key_proxies([teacher]) as (routed,):
+        provider = models_json(routed)["providers"]["agent-distill"]
+        assert provider["apiKey"] == routed.session_key and provider["baseUrl"].startswith("http://127.0.0.1:")
+        assert "headers" not in provider and "hf_secret" not in str(models_json(routed))  # the proxy adds them
     assert provider["models"][0]["maxTokens"] == 65536 and provider["models"][0]["input"] == ["text"]
     student = Endpoint("http://127.0.0.1:8000/v1", "student", max_output_tokens=2048)
     assert models_json(student)["providers"]["agent-distill"]["apiKey"] == "EMPTY"
     capture = Endpoint("http://127.0.0.1:9000/v1", "policy", api_key="capture-123")
     assert models_json(capture)["providers"]["agent-distill"]["apiKey"] == "capture-123"
     assert extension_config(html_task(), Limits(max_tool_calls=7), teacher) == {
-        "submit": {"mode": "file", "path": "index.html"}, "max_tool_calls": 7, "strip_env": ["HF_TOKEN"]
+        "submit": {"mode": "file", "path": "index.html"}, "max_tool_calls": 7, "strip_env": []
     }  # fmt: skip
     schema = extension_config(PAPERS, Limits(), student)["submit"]
     assert (

@@ -47,12 +47,17 @@ class Run:
         return self.config.repos.get(suffix) or f"{self.namespace}/{self.name}-{suffix}"
 
 
+def default_name(config: RunConfig, task: Task) -> str:
+    """`<student>-<task>-<teacher>-<harness>`, slugified (DESIGN.md §7)."""
+    harness = load_profile("harnesses", config.harness, config.profile_paths)
+    parts = [config.student, task.name, config.teacher, harness.id]
+    return slugify("-".join(part for part in parts if part))
+
+
 def make_run(config: RunConfig) -> Run:
     task_dir = config.path(config.task)
     task = load_task(task_dir)
-    harness = load_profile("harnesses", config.harness, config.profile_paths)
-    parts = [config.student, task.name, config.teacher, harness.id]
-    name = config.name or slugify("-".join(part for part in parts if part))
+    name = config.name or default_name(config, task)
     namespace = config.hub.namespace
     if not namespace:
         from huggingface_hub import whoami
@@ -103,6 +108,85 @@ def profile_files(run: Run) -> dict[str, Path]:
                 files[f"profiles/{kind}/{name}.toml"] = folder / f"{name}.toml"
                 break
     return files
+
+
+def requires_files(run: Run) -> dict[str, Path]:
+    """The student profile's `requires` (hook modules: `.py` files or package folders), staged at the top of each
+    job's working directory so `module:function` hooks import. Looked up next to the run.toml, then in the project
+    profile folders, then next to the student profile; refuses the run when one is missing."""
+    student = student_profile(run)
+    profile = profile_files(run).get(f"profiles/students/{run.config.student}.toml")
+    roots = [Path(run.config.base_dir), *run.config.profile_paths, *([profile.parent] if profile else [])]
+    found: dict[str, Path] = {}
+    missing = []
+    for entry in student.requires:
+        path = next((root / entry for root in roots if (root / entry).exists()), None)
+        if path is None:
+            missing.append(entry)
+            continue
+        if path.name in found or path.name in ("task", "profiles", "manifest.json"):
+            raise SystemExit(f"student {student.name}: `requires` entry {entry!r} clashes with another staged file")
+        found[path.name] = path
+    if missing:
+        raise SystemExit(
+            f"student {student.name} requires {missing}, not found in {[str(r) for r in roots]}; copy the hook "
+            "modules into the project (next to the run.toml)"
+        )
+    return found
+
+
+def defines(path: Path, name: str) -> bool:
+    """Whether a staged Python module (file or package `__init__.py`) defines `name` at top level."""
+    import ast
+
+    source = path / "__init__.py" if path.is_dir() else path
+    if not source.is_file():
+        return False
+    for node in ast.parse(source.read_text()).body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) and node.name == name:
+            return True
+        if isinstance(node, ast.Assign | ast.AnnAssign):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(isinstance(t, ast.Name) and t.id == name for t in targets):
+                return True
+        if isinstance(node, ast.ImportFrom | ast.Import) and any(
+            (alias.asname or alias.name.split(".")[0]) == name for alias in node.names
+        ):
+            return True
+    return False
+
+
+def check_hooks(run: Run, staged: dict[str, Path]) -> None:
+    """Every `module[:function]` hook of the student profile resolves from the staged `requires` files or the
+    agent_distill package; otherwise the run (and its dry run) refuses before anything is launched."""
+    import importlib.util
+
+    student = student_profile(run)
+    problems = []
+    for key, spec in student.hooks().items():
+        module, _, attribute = spec.partition(":")
+        top, _, rest = module.partition(".")
+        local = staged.get(f"{top}.py") if not rest else None
+        local = local or staged.get(top)
+        if local is not None:
+            target = local
+            for part in rest.split(".") if rest else []:
+                target = target / part if (target / part).is_dir() else target / f"{part}.py"
+            if not target.exists():
+                problems.append(f"{key} = {spec!r}: {module} is not in the staged {local.name}")
+            elif attribute and not defines(target, attribute):
+                problems.append(f"{key} = {spec!r}: {target.name} defines no {attribute!r}")
+            continue
+        if top == "agent_distill":
+            try:
+                found = importlib.util.find_spec(module) is not None
+            except ModuleNotFoundError:
+                found = False
+            if found:
+                continue
+        problems.append(f"{key} = {spec!r}: module {top!r} is neither in `requires` nor in the agent_distill package")
+    if problems:
+        raise SystemExit(f"student {student.name}: unresolved hooks:\n  " + "\n  ".join(problems))
 
 
 # --------------------------------------------------------------------------------------------------
@@ -190,6 +274,22 @@ def eval_models(run: Run) -> dict[str, str]:
     return {variant: known[variant] for variant in settings.variants if variant in known}
 
 
+def output_args(run: Run, suffix: str) -> list[str]:
+    """Where an episode stage's raw logs go (the always-private `-raw` sibling of its dataset, never the dataset
+    itself), and the collection a newly created dataset joins at once."""
+    raw = "raw" if suffix == "traces" else f"{suffix}-raw"
+    args = ["--raw-repo", jobs.q(run.repo(raw))]
+    if run.config.hub.collection:
+        args += ["--collection", jobs.q(run.config.hub.collection), "--collection-note",
+                 jobs.q(collection_note(run, suffix))]  # fmt: skip
+    return args
+
+
+def image_vllm(student: Any) -> list[str]:
+    """`--vllm-binary` for students whose image ships its own vLLM (`[serve] vllm = "image"`), else nothing."""
+    return ["--vllm-binary", '"$(command -v vllm)"'] if student.serve.vllm == "image" else []
+
+
 def served_job(
     run: Run,
     rev: str,
@@ -205,12 +305,10 @@ def served_job(
     student = student_profile(run)
     serve = student.serve
     deps = list(serve.deps)
-    vllm_binary: list[str] = []
-    if serve.vllm == "image":
-        vllm_binary = ["--vllm-binary", '"$(command -v vllm)"']
-    else:
+    if serve.vllm != "image":
         deps.append(f"vllm=={serve.vllm_version}")
-    full = [*common_args(run), "--student", jobs.q(run.config.student), "--model", jobs.q(model), *vllm_binary, *args,
+    full = [*common_args(run), "--student", jobs.q(run.config.student), "--model", jobs.q(model),
+            *image_vllm(student), *args, *output_args(run, "eval"),
             *judge_args(run)]  # fmt: skip
     if adapter:
         full += ["--adapter", jobs.q(adapter), "--adapter-label", jobs.q(label), "--adapter-only"]
@@ -219,7 +317,7 @@ def served_job(
     command = "\n".join(
         [
             jobs.prelude(run.repo("code"), rev, run.task.job_setup),
-            jobs.python_module("agent_distill.stages.eval", full, deps=deps, extras=episode_extras(run)),
+            jobs.python_module("agent_distill.stages.eval", full, deps=deps),
             f"echo {stage.upper()}_DONE",
         ]
     )
@@ -257,6 +355,8 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
                 "--output-repo",
                 jobs.q(run.repo("eval")),
             ]
+            if settings.answer_retry:
+                args.append("--answer-retry")
             minutes = VLLM_STARTUP_MINUTES + settings.limit * EVAL_MINUTES_PER_EPISODE / max(1, settings.concurrency)
             name = f"{run.name}-eval-{slugify(label)}-{slugify(split)}"
             built.append(served_job(run, rev, "eval", name, model, adapter, label, args, minutes))
@@ -267,13 +367,15 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
 
 def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minutes: float) -> jobs.Job:
     teacher = teacher_profile(run)
-    full = [*common_args(run), "--teacher", jobs.q(run.config.teacher), *args, *judge_args(run, bill_to=False)]
+    full = [*common_args(run), "--teacher", jobs.q(run.config.teacher), *args,
+            *output_args(run, "traces" if stage == "traces" else "eval"),
+            *judge_args(run, bill_to=False)]  # fmt: skip
     if run.config.hub.bill_to:
         full += ["--bill-to", jobs.q(run.config.hub.bill_to)]
     command = "\n".join(
         [
             jobs.prelude(run.repo("code"), rev, run.task.job_setup),
-            jobs.python_module("agent_distill.stages.traces", full, extras=episode_extras(run)),
+            jobs.python_module("agent_distill.stages.traces", full),
             f"echo {stage.upper()}_DONE",
         ]
     )
@@ -449,19 +551,25 @@ def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
         str(run.config.eval.timeout),
         "--max-tool-calls",
         str(run.config.eval.max_tool_calls),
+        "--traces-repo",
+        jobs.q(run.repo("traces")),
+        *image_vllm(student),
+        *([] if student.serve.vllm == "image" else ["--vllm-version", jobs.q(student.serve.vllm_version)]),
         *GRPO_RECIPE,
         *judge_args(run),
         *[jobs.q(a) for a in grpo.args],
         *[jobs.q(a) for a in settings.args],
         "--launch",
     ]
-    if settings.use_probe:
+    if settings.use_probe:  # the qualified ids of this run's probe (its configured split and shards) only
+        probe_files = [f"difficulty/{prefix}-qualified-ids.txt" for prefix in probe_prefixes(run)]
         args[-1:-1] = ["--include-ids-repo", jobs.q(run.repo("eval"))]
+        args[-1:-1] = [arg for name in probe_files for arg in ("--include-ids-repo-file", jobs.q(name))]
     deps = grpo.deps or GRPO_DEPS
     command = "\n".join(
         [
             jobs.prelude(run.repo("code"), rev, run.task.job_setup),
-            jobs.python_module("agent_distill.stages.grpo", args, deps=deps, extras=episode_extras(run)),
+            jobs.python_module("agent_distill.stages.grpo", args, deps=deps),
             "echo GRPO_DONE",
         ]
     )
@@ -484,15 +592,22 @@ def grpo_merge_jobs(run: Run, rev: str) -> list[jobs.Job]:
     return merge_jobs(run, rev, "grpo-lora", "grpo-merged", base=run.repo("sft-merged"))
 
 
+def probe_prefixes(run: Run) -> list[str]:
+    """The probe jobs' record prefixes; each writes `difficulty/<prefix>-qualified-ids.txt` in the eval dataset."""
+    shards = run.config.probe.shards or student_profile(run).probe.shards
+    return [f"probe/{run.config.probe.split}-{index}of{shards}" for index in range(shards)]
+
+
 def probe_jobs(run: Run, rev: str) -> list[jobs.Job]:
     """The difficulty probe: the merged SFT policy, K attempts per train row at the GRPO sampling temperature."""
     student = student_profile(run)
     settings, probe = run.config.probe, student.probe
-    shards = settings.shards or probe.shards
+    prefixes = probe_prefixes(run)
+    shards = len(prefixes)
     k = settings.k or probe.k
     sample = settings.sample or probe.sample
     built = []
-    for index in range(shards):
+    for index, prefix in enumerate(prefixes):
         args = [
             "--split",
             jobs.q(settings.split),
@@ -517,7 +632,7 @@ def probe_jobs(run: Run, rev: str) -> list[jobs.Job]:
             "--output-dir",
             "/eval",
             "--prefix",
-            f"probe/{settings.split}-{index}of{shards}",
+            prefix,
             "--output-repo",
             jobs.q(run.repo("eval")),
             *probe.args,
@@ -545,6 +660,16 @@ def artifacts(run: Run) -> list[tuple[str, str, str]]:
     ]
 
 
+def collection_note(run: Run, suffix: str) -> str:
+    """The collection note of the run's `suffix` repo (as in `artifacts`)."""
+    return next(text for repo, _, text in artifacts(run) if repo == run.repo(suffix))
+
+
+def private_repos(run: Run) -> list[tuple[str, str]]:
+    """(repo, type) of the repos that stay private forever: the code snapshots and the raw harness logs."""
+    return [(run.repo("code"), "model"), (run.repo("raw"), "dataset"), (run.repo("eval-raw"), "dataset")]
+
+
 def credential_files(api: Any, repo: str, files: list[str]) -> list[str]:
     """Text files of a dataset repo holding unredacted credential-shaped strings (streamed line by line)."""
     from huggingface_hub import hf_hub_download
@@ -562,14 +687,23 @@ def credential_files(api: Any, repo: str, files: list[str]) -> list[str]:
 
 
 def publish(run: Run, *, dry_run: bool) -> None:
-    """Credential-scan datasets, make models and datasets public, add everything to the collection; the code repo
-    must stay private. Nothing is ever deleted."""
+    """Credential-scan datasets, add everything to the collection, then make models and datasets public. Code and
+    raw-log repos must stay private and are never touched; a dataset holding raw logs is never made public. Nothing
+    is ever deleted."""
     from huggingface_hub import HfApi
     from huggingface_hub.utils import RepositoryNotFoundError
 
     api = HfApi()
     collection = run.config.hub.collection
+    for repo, kind in private_repos(run):
+        try:
+            if not api.repo_info(repo, repo_type=kind).private:
+                raise SystemExit(f"{repo} must stay private; make it private and revoke any token it may hold")
+        except RepositoryNotFoundError:
+            pass
     for repo, kind, note in artifacts(run):
+        if repo.endswith("-raw") or repo in {r for r, _ in private_repos(run)}:
+            raise SystemExit(f"{repo} holds raw logs or code and is never published")
         try:
             info = api.repo_info(repo, repo_type=kind)
         except RepositoryNotFoundError:
@@ -577,24 +711,21 @@ def publish(run: Run, *, dry_run: bool) -> None:
             continue
         if kind == "dataset":
             files = api.list_repo_files(repo, repo_type="dataset")
+            if any(name.startswith("raw/") for name in files):
+                raise SystemExit(f"{repo} contains raw harness logs (raw/); it stays private")
             if not any(name.startswith("sessions/") for name in files):
                 raise SystemExit(f"{repo} has no agent-trace sessions; it stays private")
             leaks = credential_files(api, repo, files)
             if leaks:
                 raise SystemExit(f"{repo} contains credential-shaped strings in {leaks[:5]}; it stays private")
         if dry_run:
-            print(f"[dry-run] {repo}: scan passed; private={info.private} -> public; collection note: {note}")
+            print(f"[dry-run] {repo}: scan passed; collection note: {note}; private={info.private} -> public")
             continue
+        if collection:  # in the collection before it becomes public
+            api.add_collection_item(collection, item_id=repo, item_type=kind, note=note, exists_ok=True)
         if info.private:
             api.update_repo_settings(repo, repo_type=kind, private=False)
-        if collection:
-            api.add_collection_item(collection, item_id=repo, item_type=kind, note=note, exists_ok=True)
         print(f"published {repo} ({kind})" + (f" in {collection}" if collection else ""), flush=True)
-    try:
-        if not api.repo_info(run.repo("code")).private:
-            raise SystemExit(f"{run.repo('code')} must stay private")
-    except RepositoryNotFoundError:
-        pass
 
 
 # --------------------------------------------------------------------------------------------------
@@ -670,8 +801,17 @@ SMOKE = {
     "eval.limit": 5,
     "eval.concurrency": 5,
     "eval.variants": ["base", "sft", "grpo", "teacher"],
+    "eval.models": {},  # evaluate what the smoke run trained, never a run.toml's explicit models
+    "repos": {},  # the smoke run's own repos, never a run.toml's overrides
     "budget.traces_usd": 2,
 }
+
+
+def smoke_name(config: RunConfig) -> str:
+    """The run's name (explicit or default) with a `-smoke` suffix, so a smoke run never writes into (or resumes
+    from) the real run's repos."""
+    name = config.name or default_name(config, load_task(config.path(config.task)))
+    return name if name.endswith("-smoke") else f"{name}-smoke"
 
 
 def smoke_main(argv: list[str] | None = None) -> int:
@@ -681,11 +821,7 @@ def smoke_main(argv: list[str] | None = None) -> int:
     items = list(sys.argv[1:] if argv is None else argv)
     if not items or items[0].startswith("-"):
         raise SystemExit("usage: distill smoke RUN.toml [--dry-run] [--over-budget] [--set KEY=JSON ...]")
-    config = load_run(items[0])
-    name = (config.name or "") + "-smoke" if config.name else ""
-    sets = [f"{key}={json.dumps(value)}" for key, value in SMOKE.items()]
-    if name:
-        sets.append(f"name={json.dumps(name)}")
+    sets = [f"{key}={json.dumps(value)}" for key, value in {**SMOKE, "name": smoke_name(load_run(items[0]))}.items()]
     return main([items[0], *(arg for pair in sets for arg in ("--set", pair)), *items[1:]])
 
 
@@ -734,15 +870,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     job_stages = [s for s in stages if s != "publish"]
     rev = ""
+    hook_files: dict[str, Path] = {}
+    if any(s != "traces" for s in job_stages):  # student stages: hook modules staged and resolvable, or refuse
+        hook_files = requires_files(run)
+        check_hooks(run, hook_files)
     if job_stages:
-        manifest = {
-            "run": dataclasses.asdict(config),
-            "name": run.name,
-            "git_commit": jobs.git_commit(),
-            "task": run.task.name,
-            "task_version": run.task.version,
-            "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        }
+        manifest = {"run": dataclasses.asdict(config), "name": run.name, "git_commit": jobs.git_commit(),
+                    "task": run.task.name, "task_version": run.task.version,
+                    "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "residual_risks": list(jobs.RESIDUAL_RISKS)}  # fmt: skip
+        if args.dry_run:
+            for risk in jobs.RESIDUAL_RISKS:
+                print(f"[dry-run] residual risk: {risk}")
         extra = []
         if not args.dry_run:
             import shutil
@@ -752,8 +891,11 @@ def main(argv: list[str] | None = None) -> int:
             for target, source in profile_files(run).items():
                 (tmp / target).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, tmp / target)
-            extra = [tmp / "profiles"]
-        rev = jobs.stage_code(run.repo("code"), run.task_dir, extra, dry_run=args.dry_run, manifest=manifest)
+            extra = [tmp / "profiles", *hook_files.values()]  # hook modules land in each job's working directory
+        elif hook_files:
+            print(f"[dry-run] would stage the student's hook modules {sorted(hook_files)}")
+        rev = jobs.stage_code(run.repo("code"), run.task_dir, extra, dry_run=args.dry_run, manifest=manifest,
+                              extras=tuple(episode_extras(run).split(",")))  # fmt: skip
     for stage in stages:
         if stage == "publish":
             publish(run, dry_run=args.dry_run)
