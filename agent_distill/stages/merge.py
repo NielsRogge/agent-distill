@@ -5,7 +5,7 @@
 Ported from url-extraction's `merge_adapter.py`. The default merges with PEFT (Qwen3.5, kept with its processor so
 vLLM can boot from the merged repo alone). A student profile can name another merge method (`[merge] method =
 "module:function(args, adapter_snapshot, token) -> output_dir"`), e.g. a merge straight into a quantized checkpoint's
-BF16 attention tensors. The merged model is created private; `distill publish` makes it public.
+BF16 attention tensors. The merged model is created public (models hold no episode data; private storage is capped).
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_distill.config import load_profile
+from agent_distill.hub_collection import join_collection
 
 
 def adapter_files(snapshot: Path) -> list[Path]:
@@ -86,7 +87,7 @@ def publish_merged(output: Path, repo: str) -> None:
     from huggingface_hub import HfApi
 
     api = HfApi()
-    api.create_repo(repo, repo_type="model", private=True, exist_ok=True)
+    api.create_repo(repo, repo_type="model", private=False, exist_ok=True)
     api.upload_folder(
         folder_path=str(output), repo_id=repo, repo_type="model", commit_message="agent-distill: merged checkpoint"
     )
@@ -96,7 +97,7 @@ def publish_merged(output: Path, repo: str) -> None:
     missing = [name for name, size in local.items() if remote.get(name) != size]
     if missing:
         raise RuntimeError(f"upload did not land for {missing}")
-    print(f"published {repo} at {info.sha} ({len(local)} files verified, private)", flush=True)
+    print(f"published {repo} at {info.sha} ({len(local)} files verified)", flush=True)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -109,6 +110,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--max-shard-size", default="4GB")
     parser.add_argument("--note", default="Trained with agent-distill.")
+    parser.add_argument("--collection", default="", help="Collection the pushed model joins")
+    parser.add_argument("--collection-note", default="", help="Its one-line note in the collection")
     return parser.parse_args(argv)
 
 
@@ -128,6 +131,7 @@ def main(argv: list[str] | None = None) -> None:
     (output / "README.md").write_text(model_card(args.base_model, args.adapter, args.note))
     if args.hub_model_id:
         publish_merged(output, args.hub_model_id)
+        join_collection(args.hub_model_id, "model", args.collection, args.collection_note)
     else:
         print(f"merged checkpoint in {output}", flush=True)
 
