@@ -1,12 +1,16 @@
 """HF Jobs: code staging, job commands, launching, waiting, cost estimates (DESIGN.md §7, §8).
 
 Code staging: a wheel of the current checkout, a hash-pinned `requirements.txt` exported from `uv.lock` (plus the
-same pins without hashes as `constraints.txt`) and the task folder go to the run's private `<run>-code` model repo
-under `code/<rev>/`. Every job downloads them, installs the locked dependencies with `--require-hashes`, then the
-wheel with `--no-deps`, so jobs get exactly the locked versions and no GitHub credential ever enters a job. A job's
-extra runtime packages (e.g. `vllm==<version>` from the student profile) are installed afterwards under
-`constraints.txt`, so they cannot move a locked package. Jobs run in the `[hub] bill_to` namespace with the
-caller's token as the only secret.
+same pins without hashes as `constraints.txt`, for reference) and the task folder go to the run's private
+`<run>-code` model repo under `code/<rev>/`. Every job downloads them, installs the locked dependencies with
+`--require-hashes`, then the wheel with `--no-deps`, so jobs that need nothing else run exactly the locked versions
+and no GitHub credential ever enters a job.
+
+A job's runtime stack (`vllm==<version>`, or a student profile's pinned training packages such as
+`transformers==5.14.1`) is authoritative for that job: it is installed afterwards together with the wheel, so the
+resolver may move a locked package the stack needs at another version (e.g. `huggingface-hub` below 2.0 for
+`transformers` 5.14) while still honouring the package's own requirements. Under the lock's constraints those stacks
+are unsatisfiable. Jobs run in the `[hub] bill_to` namespace with the caller's token as the only secret.
 """
 
 from __future__ import annotations
@@ -144,12 +148,14 @@ def prelude(code_repo: str, rev: str, setup: list[str] = ()) -> str:
 
 
 def python_module(module: str, args: list[str], *, deps: list[str] = ()) -> str:
-    """Run `python -m module` in the job's locked environment (see `prelude`), after installing `deps` (job
-    runtime packages outside uv.lock, e.g. vLLM) under the locked constraints."""
+    """Run `python -m module` in the job's locked environment (see `prelude`), after installing `deps` (the job's
+    runtime stack outside uv.lock, e.g. vLLM or a student's pinned transformers/TRL). The stack is resolved together
+    with the wheel, not under the lock's constraints: its pins win where they conflict with the lock, and the
+    package's own requirements still hold."""
     lines = []
     if deps:
         packages = " ".join(q(dep) for dep in deps)
-        lines.append(f"uv pip install -q --python {VENV_PYTHON} -c /work/constraints.txt {packages}")
+        lines.append(f'uv pip install -q --python {VENV_PYTHON} "$WHEEL" {packages}')
     lines.append(f"{VENV_PYTHON} -m {module} {' '.join(args)}")
     return "\n".join(lines)
 
