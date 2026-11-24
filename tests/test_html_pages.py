@@ -44,7 +44,13 @@ def score(monkeypatch, page: PageReport, judge: FakeJudge, events=(), answer="<h
     async def fake_inspect(html, **kw):
         return page
 
+    async def fake_observe(html):
+        from agent_distill.browser.observe import Observation
+
+        return Observation(filmstrip=b"film", phone=b"phone", log="Sound: 2 sound sources started.")
+
     monkeypatch.setattr(RUBRICS, "inspect_html", fake_inspect)
+    monkeypatch.setattr(RUBRICS, "observe_html", fake_observe)
     episode = Episode(task="html-pages", row_id="c1", harness="pi", harness_version="1.6.0", model="m",
                       answer=answer, answer_mode="file", tool_events=list(events))  # fmt: skip
     context = episode_context(episode, ROW, limits=TASK.limits, task=TASK, judge=JudgeRunner(judge))
@@ -75,7 +81,7 @@ def test_good_page_is_judged_and_passes(monkeypatch):
     assert result.metrics["page_quality/creativity"] == pytest.approx(8 / 9)
     assert result.scores["previewed"] == 1.0 and result.scores["accessibility_basics"] == pytest.approx(2 / 3 + 1 / 3)
     ((prompt, images),) = judge.calls
-    assert "Tide Clock" in prompt and images == [b"d", b"a", b"p"]
+    assert "Tide Clock" in prompt and "2 sound sources started" in prompt and images == [b"film", b"phone"]
 
 
 def test_broken_page_is_not_judged(monkeypatch):

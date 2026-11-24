@@ -6,4 +6,4 @@ model = "gemini-4-hydrogen"
 api = "gemini"
 key_env = "GEMINI_API_KEY"
 capabilities = ["image_input"]
-max_tokens = 4096
+max_tokens = 16384  # its reasoning counts against this; at 4096 longer prompts got empty replies
