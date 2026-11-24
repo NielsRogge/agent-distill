@@ -33,21 +33,25 @@ SUBMIT_TOOLS = {"structuredoutput", "submit"}
 
 
 def load_accepted(paths: list[Path], *, harness: str, allow_mismatch: bool = False) -> list[dict[str, Any]]:
-    """Accepted records (first per row) from episode JSONL files, all from `harness` (`name@version`)."""
+    """Accepted records (first per row) from episode JSONL files, all from `harness` (`name@version`).
+
+    DESIGN.md §6 "No mixing of versions": records from another `harness@version` refuse the run, unless
+    `allow_mismatch` (`--allow-harness-mismatch`), which keeps them and warns."""
     by_row: dict[str, dict[str, Any]] = {}
-    other: set[str] = set()
+    other: dict[str, int] = {}
     for path in paths:
         for record in read_jsonl(path):
             if not record.get("passed"):
                 continue
             harness_id = f"{record.get('harness')}@{record.get('harness_version')}"
             if harness_id != harness:
-                other.add(harness_id)
-                if not allow_mismatch:
-                    continue
+                other[harness_id] = other.get(harness_id, 0) + 1
             by_row.setdefault(str(record["row_id"]), record)
-    if other and not allow_mismatch:
-        print(f"skipped accepted records from other harnesses: {sorted(other)}", flush=True)
+    if other:
+        message = f"accepted traces from other harnesses than {harness}: {dict(sorted(other.items()))}"
+        if not allow_mismatch:
+            raise SystemExit(f"{message}; pass --allow-harness-mismatch to train on them anyway")
+        print(f"WARNING: {message} (--allow-harness-mismatch: training on them)", flush=True)
     if not by_row:
         raise ValueError(f"no accepted {harness} trajectories in {[str(p) for p in paths]}")
     return list(by_row.values())

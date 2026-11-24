@@ -23,11 +23,12 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from agent_distill.config import load_profile
 from agent_distill.harnesses.base import load_harness, teacher_endpoint
 from agent_distill.records import RecordWriter, read_jsonl, summarize_records
-from agent_distill.stages.common import Plan, progress, resume_from_hub, run_episodes
+from agent_distill.stages.common import Plan, progress, resume_from_hub, run_episodes, shard
 from agent_distill.stages.eval import checkpoint, publish, select_rows
 from agent_distill.task import Limits, load_task
 
@@ -41,7 +42,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--split", default="train")
     parser.add_argument("--purpose", choices=("train", "eval"), default="train", help="Which task filter selects rows")
     parser.add_argument("--start", type=int, default=0)
-    parser.add_argument("--limit", type=int)
+    parser.add_argument("--limit", type=int, help="First N rows in total (split across --shard jobs)")
     parser.add_argument("--sample", type=int, default=0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--shard", default="", help="i/n: this job's disjoint slice of the rows")
@@ -64,6 +65,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def trace_rows(task: Any, args: argparse.Namespace) -> list[dict]:
+    """`--start`/`--limit` select the run's rows, then `--shard` splits them: the limit is the total over all shards
+    (what the pipeline's cost estimate assumes), not a per-shard count."""
+    rows = select_rows(
+        task, args.split, start=args.start, limit=args.limit, purpose=args.purpose, sample=args.sample, seed=args.seed
+    )
+    return shard(rows, args.shard) if args.shard else rows
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     task = load_task(args.task)
@@ -75,16 +85,7 @@ def main(argv: list[str] | None = None) -> None:
         timeout=args.timeout or settings.episode_timeout,
         max_tool_calls=args.max_tool_calls or settings.max_tool_calls,
     )
-    rows = select_rows(
-        task,
-        args.split,
-        start=args.start,
-        limit=args.limit,
-        purpose=args.purpose,
-        sample=args.sample,
-        seed=args.seed,
-        shard_spec=args.shard,
-    )
+    rows = trace_rows(task, args)
     if not rows:
         raise SystemExit(f"no rows selected from {task.dataset.repo}:{args.split}")
     shard_suffix = f"-{args.shard.replace('/', 'of')}" if args.shard else ""

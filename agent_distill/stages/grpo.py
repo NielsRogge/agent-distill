@@ -351,6 +351,8 @@ def rollout_reward(outcome: Any) -> float | None:
 
 
 def training_rows(args: argparse.Namespace) -> list[dict[str, Any]]:
+    """The prompt pool: train rows (optionally only the current probe's qualified ones), without excluded tiers, with
+    weighted tiers repeated; refuses a pool with fewer distinct rows than the planned steps draw."""
     from agent_distill.stages.eval import select_rows
     from agent_distill.task import load_task
 
@@ -361,13 +363,74 @@ def training_rows(args: argparse.Namespace) -> list[dict[str, Any]]:
         rows = [row for row in rows if task.row_id(row) in include]
     if args.n_prompts:
         rows = random.Random(args.seed).sample(rows, min(args.n_prompts, len(rows)))
+    rows = weight_by_tier(rows, args.exclude_tiers, args.tier_weights, args.seed, field=args.tier_field)
     if not rows:
         raise SystemExit("no training rows")
+    check_pool(args, len({task.row_id(row) for row in rows}))
     return rows
 
 
+def parse_tiers(exclude: str, weights: str) -> tuple[set[int], dict[int, int]]:
+    """`--exclude-tiers "7"` and `--tier-weights "3:2,5:3"` (tier:repeat factor), as in url-extraction."""
+    drop = {int(tier) for tier in exclude.split(",") if tier.strip()}
+    repeat: dict[int, int] = {}
+    for item in weights.split(","):
+        if not item.strip():
+            continue
+        tier, sep, factor = item.partition(":")
+        if not sep or int(factor) < 1:
+            raise SystemExit(f"bad --tier-weights entry {item!r} (expected TIER:REPEATS, repeats >= 1)")
+        repeat[int(tier)] = int(factor)
+    return drop, repeat
+
+
+def weight_by_tier(
+    rows: list[dict[str, Any]], exclude: str, weights: str, seed: int, *, field: str = "difficulty_tier"
+) -> list[dict[str, Any]]:
+    """url-extraction's `weight_by_tier`: drop rows of excluded difficulty tiers and repeat rows of weighted tiers so
+    RL draws them more often (rows without a tier are kept once). The pool is shuffled when either is set."""
+    drop, repeat = parse_tiers(exclude, weights)
+    if not drop and not repeat:
+        return rows
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        tier = row.get(field)
+        if tier is not None and int(tier) in drop:
+            continue
+        out.extend([row] * repeat.get(int(tier) if tier is not None else -1, 1))
+    random.Random(seed).shuffle(out)
+    counts: dict[str, int] = {}
+    for row in out:
+        counts[str(row.get(field))] = counts.get(str(row.get(field)), 0) + 1
+    print(f"[grpo] prompt pool by {field} (after weighting): {dict(sorted(counts.items()))}", flush=True)
+    return out
+
+
+def prompts_per_step(args: argparse.Namespace) -> int:
+    """Distinct prompts one optimizer step draws: `--prompts-per-step` for the simple backend; for TRL, one prompt
+    group per gradient-accumulation micro-step (per-device batch 1)."""
+    return args.prompts_per_step if args.trainer == "simple" else args.gradient_accumulation_steps
+
+
+def check_pool(args: argparse.Namespace, distinct: int) -> None:
+    """Refuse a pool too small for the planned steps (steps x prompts per step), which trains on the same rows over
+    and over (url-extraction: a 136-row probe pool for 150 steps), unless `--allow-small-pool`."""
+    needed = args.max_steps * prompts_per_step(args)
+    if distinct >= needed:
+        print(f"[grpo] prompt pool: {distinct} distinct rows for {needed} prompt draws", flush=True)
+        return
+    message = (
+        f"the prompt pool has {distinct} distinct rows, but {args.max_steps} steps x {prompts_per_step(args)} "
+        f"prompts per step draw {needed}"
+    )
+    if not args.allow_small_pool:
+        raise SystemExit(f"{message}; widen the pool (probe more rows) or pass --allow-small-pool")
+    print(f"[grpo] WARNING: {message} (--allow-small-pool: rows repeat)", flush=True)
+
+
 def include_ids(args: argparse.Namespace) -> set[str] | None:
-    """Row ids from `--include-ids` files and/or the union of a dataset's `--include-ids-repo` qualified-id files."""
+    """Row ids from `--include-ids` files and/or the current probe's qualified-id files in `--include-ids-repo`
+    (exactly the `--include-ids-repo-file` names; other probes' results in the same dataset are never read)."""
     ids: set[str] = set()
     found = False
     for path in args.include_ids or []:
@@ -376,18 +439,54 @@ def include_ids(args: argparse.Namespace) -> set[str] | None:
     if args.include_ids_repo:
         from huggingface_hub import HfApi, hf_hub_download
 
-        names = [
-            name
-            for name in HfApi().list_repo_files(args.include_ids_repo, repo_type="dataset")
-            if name.startswith("difficulty/") and name.endswith("-qualified-ids.txt")
-        ]
-        if not names:
-            raise SystemExit(f"no difficulty-probe results in {args.include_ids_repo}")
-        for name in names:
+        wanted = list(args.include_ids_repo_file or [])
+        if not wanted:
+            raise SystemExit("--include-ids-repo needs --include-ids-repo-file (the current probe's qualified ids)")
+        present = set(HfApi().list_repo_files(args.include_ids_repo, repo_type="dataset"))
+        missing = [name for name in wanted if name not in present]
+        if missing:
+            raise SystemExit(f"difficulty-probe results missing in {args.include_ids_repo}: {missing}")
+        for name in wanted:
             text = Path(hf_hub_download(args.include_ids_repo, name, repo_type="dataset")).read_text()
             ids |= {line.strip() for line in text.splitlines() if line.strip()}
+        print(f"[grpo] {len(ids)} qualified rows from {len(wanted)} probe files", flush=True)
         found = True
     return ids if found else None
+
+
+def trace_harnesses(repo: str) -> set[str] | None:
+    """`harness@version` of every traces-stage summary in `repo` (None: no repo or no summaries)."""
+    from huggingface_hub import HfApi, hf_hub_download
+    from huggingface_hub.utils import RepositoryNotFoundError
+
+    try:
+        names = [n for n in HfApi().list_repo_files(repo, repo_type="dataset") if n.startswith("summaries/")]
+    except RepositoryNotFoundError:
+        return None
+    found = set()
+    for name in names:
+        if name.endswith(".json"):
+            harness = json.loads(Path(hf_hub_download(repo, name, repo_type="dataset")).read_text()).get("harness")
+            if harness:
+                found.add(str(harness))
+    return found or None
+
+
+def check_harness(args: argparse.Namespace) -> None:
+    """DESIGN.md §6 "No mixing of versions": GRPO runs the student in the harness its SFT traces came from, unless
+    `--allow-harness-mismatch` (which still warns)."""
+    if not args.traces_repo:
+        return
+    found = trace_harnesses(args.traces_repo)
+    if found is None:
+        print(f"[grpo] WARNING: no traces summaries in {args.traces_repo}; cannot check the harness", flush=True)
+        return
+    if found == {args.harness}:
+        return
+    message = f"the SFT traces in {args.traces_repo} came from {sorted(found)}, but GRPO runs in {args.harness}"
+    if not args.allow_harness_mismatch:
+        raise SystemExit(f"{message}; pass --allow-harness-mismatch to train anyway")
+    print(f"[grpo] WARNING: {message} (--allow-harness-mismatch)", flush=True)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -490,6 +589,18 @@ def lora_targets(args: argparse.Namespace, student: Any) -> Any:
     return value or QWEN35_LANGUAGE_LORA_REGEX
 
 
+def relocate_lora_dir(trainer: Any, args: argparse.Namespace) -> None:
+    """TRL saves every hot-loaded adapter version under <output_dir>/.vllm_lora, and the checkpoint pushes would
+    upload them all; keep them outside the output directory (vLLM reads them by absolute path on this machine).
+    `_lora_dir` is TRL's private attribute: refuse to train (and push) if a TRL upgrade renamed it."""
+    if not hasattr(trainer, "_lora_dir"):
+        raise RuntimeError(
+            f"{type(trainer).__name__} has no `_lora_dir` (TRL changed it); its checkpoint pushes would upload every "
+            "hot-loaded adapter version. Update agent_distill.stages.grpo.relocate_lora_dir for this TRL version."
+        )
+    trainer._lora_dir = str(Path(args.scratch_dir or tempfile.gettempdir()).resolve() / "agent-distill-vllm-lora")
+
+
 def train_trl(args: argparse.Namespace, student: Any) -> None:
     from functools import partial
 
@@ -552,10 +663,7 @@ def train_trl(args: argparse.Namespace, student: Any) -> None:
             r=args.lora_r, lora_alpha=2 * args.lora_r, lora_dropout=0.0, target_modules=lora_targets(args, student)
         ),
     )
-    if hasattr(trainer, "_lora_dir"):
-        # TRL saves every hot-loaded adapter version under <output_dir>/.vllm_lora and the checkpoint pushes would
-        # upload them; keep them outside the output directory (vLLM reads them by absolute path on this machine).
-        trainer._lora_dir = str(Path(args.scratch_dir or tempfile.gettempdir()).resolve() / "agent-distill-vllm-lora")
+    relocate_lora_dir(trainer, args)
     trainer.train()
     trainer.save_model(args.output_dir)
     if args.hub_model_id:
@@ -821,8 +929,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--model", required=True, help="Starting policy (the merged SFT checkpoint)")
     parser.add_argument("--split", default="train")
     parser.add_argument("--include-ids", action="append", type=Path, help="Only these row ids (files, one per line)")
-    parser.add_argument("--include-ids-repo", default="", help="Dataset with difficulty/*-qualified-ids.txt")
+    parser.add_argument("--include-ids-repo", default="", help="Dataset holding the difficulty probe's results")
+    parser.add_argument("--include-ids-repo-file", action="append",
+                        help="A qualified-ids file of the current probe in that dataset (repeatable)")  # fmt: skip
     parser.add_argument("--n-prompts", type=int)
+    parser.add_argument("--exclude-tiers", default="", help="Difficulty tiers to drop, e.g. '7'")
+    parser.add_argument("--tier-weights", default="", help="Repeat factors per tier, e.g. '3:2,4:2,5:3,6:2'")
+    parser.add_argument("--tier-field", default="difficulty_tier", help="Row field holding the difficulty tier")
+    parser.add_argument("--allow-small-pool", action="store_true",
+                        help="Train even with fewer distinct rows than steps x prompts per step")  # fmt: skip
+    parser.add_argument("--traces-repo", default="", help="The SFT traces (their harness@version must match)")
+    parser.add_argument("--allow-harness-mismatch", action="store_true")
     parser.add_argument("--trainer", choices=("trl", "simple"), default="trl")
     parser.add_argument("--num-generations", type=int, default=8)
     parser.add_argument("--max-concurrent-rollouts", type=int, default=16)
@@ -837,7 +954,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--lora-target-modules", default="")
     parser.add_argument("--max-completion-length", type=int, default=1024)
     parser.add_argument("--max-model-calls", type=int, default=24)
-    parser.add_argument("--timeout", type=float, default=180.0, help="Episode timeout (as in evaluation)")
+    parser.add_argument("--timeout", "--episode-timeout", dest="timeout", type=float, default=180.0,
+                        help="Episode timeout in seconds (as in evaluation)")  # fmt: skip
     parser.add_argument("--max-tool-calls", type=int, default=15, help="Tool-call limit (as in evaluation)")
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.85)
     parser.add_argument("--vllm-port", type=int, default=8000)
@@ -873,6 +991,9 @@ def main(argv: list[str] | None = None) -> None:
     if not args.launch:
         (train_simple if args.trainer == "simple" else train_trl)(args, student)
         return
+    # Refuse before any GPU time is spent: a harness other than the traces', or a prompt pool too small.
+    check_harness(args)
+    training_rows(args)
     # Install the pinned harness once, before any rollout starts many at a time.
     from agent_distill.harnesses.base import load_harness
 

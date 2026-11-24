@@ -47,12 +47,17 @@ class Run:
         return self.config.repos.get(suffix) or f"{self.namespace}/{self.name}-{suffix}"
 
 
+def default_name(config: RunConfig, task: Task) -> str:
+    """`<student>-<task>-<teacher>-<harness>`, slugified (DESIGN.md §7)."""
+    harness = load_profile("harnesses", config.harness, config.profile_paths)
+    parts = [config.student, task.name, config.teacher, harness.id]
+    return slugify("-".join(part for part in parts if part))
+
+
 def make_run(config: RunConfig) -> Run:
     task_dir = config.path(config.task)
     task = load_task(task_dir)
-    harness = load_profile("harnesses", config.harness, config.profile_paths)
-    parts = [config.student, task.name, config.teacher, harness.id]
-    name = config.name or slugify("-".join(part for part in parts if part))
+    name = config.name or default_name(config, task)
     namespace = config.hub.namespace
     if not namespace:
         from huggingface_hub import whoami
@@ -73,6 +78,85 @@ def profile_files(run: Run) -> dict[str, Path]:
                 files[f"profiles/{kind}/{name}.toml"] = folder / f"{name}.toml"
                 break
     return files
+
+
+def requires_files(run: Run) -> dict[str, Path]:
+    """The student profile's `requires` (hook modules: `.py` files or package folders), staged at the top of each
+    job's working directory so `module:function` hooks import. Looked up next to the run.toml, then in the project
+    profile folders, then next to the student profile; refuses the run when one is missing."""
+    student = student_profile(run)
+    profile = profile_files(run).get(f"profiles/students/{run.config.student}.toml")
+    roots = [Path(run.config.base_dir), *run.config.profile_paths, *([profile.parent] if profile else [])]
+    found: dict[str, Path] = {}
+    missing = []
+    for entry in student.requires:
+        path = next((root / entry for root in roots if (root / entry).exists()), None)
+        if path is None:
+            missing.append(entry)
+            continue
+        if path.name in found or path.name in ("task", "profiles", "manifest.json"):
+            raise SystemExit(f"student {student.name}: `requires` entry {entry!r} clashes with another staged file")
+        found[path.name] = path
+    if missing:
+        raise SystemExit(
+            f"student {student.name} requires {missing}, not found in {[str(r) for r in roots]}; copy the hook "
+            "modules into the project (next to the run.toml)"
+        )
+    return found
+
+
+def defines(path: Path, name: str) -> bool:
+    """Whether a staged Python module (file or package `__init__.py`) defines `name` at top level."""
+    import ast
+
+    source = path / "__init__.py" if path.is_dir() else path
+    if not source.is_file():
+        return False
+    for node in ast.parse(source.read_text()).body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) and node.name == name:
+            return True
+        if isinstance(node, ast.Assign | ast.AnnAssign):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(isinstance(t, ast.Name) and t.id == name for t in targets):
+                return True
+        if isinstance(node, ast.ImportFrom | ast.Import) and any(
+            (alias.asname or alias.name.split(".")[0]) == name for alias in node.names
+        ):
+            return True
+    return False
+
+
+def check_hooks(run: Run, staged: dict[str, Path]) -> None:
+    """Every `module[:function]` hook of the student profile resolves from the staged `requires` files or the
+    agent_distill package; otherwise the run (and its dry run) refuses before anything is launched."""
+    import importlib.util
+
+    student = student_profile(run)
+    problems = []
+    for key, spec in student.hooks().items():
+        module, _, attribute = spec.partition(":")
+        top, _, rest = module.partition(".")
+        local = staged.get(f"{top}.py") if not rest else None
+        local = local or staged.get(top)
+        if local is not None:
+            target = local
+            for part in rest.split(".") if rest else []:
+                target = target / part if (target / part).is_dir() else target / f"{part}.py"
+            if not target.exists():
+                problems.append(f"{key} = {spec!r}: {module} is not in the staged {local.name}")
+            elif attribute and not defines(target, attribute):
+                problems.append(f"{key} = {spec!r}: {target.name} defines no {attribute!r}")
+            continue
+        if top == "agent_distill":
+            try:
+                found = importlib.util.find_spec(module) is not None
+            except ModuleNotFoundError:
+                found = False
+            if found:
+                continue
+        problems.append(f"{key} = {spec!r}: module {top!r} is neither in `requires` nor in the agent_distill package")
+    if problems:
+        raise SystemExit(f"student {student.name}: unresolved hooks:\n  " + "\n  ".join(problems))
 
 
 # --------------------------------------------------------------------------------------------------
@@ -160,6 +244,11 @@ def eval_models(run: Run) -> dict[str, str]:
     return {variant: known[variant] for variant in settings.variants if variant in known}
 
 
+def image_vllm(student: Any) -> list[str]:
+    """`--vllm-binary` for students whose image ships its own vLLM (`[serve] vllm = "image"`), else nothing."""
+    return ["--vllm-binary", '"$(command -v vllm)"'] if student.serve.vllm == "image" else []
+
+
 def served_job(
     run: Run,
     rev: str,
@@ -175,12 +264,10 @@ def served_job(
     student = student_profile(run)
     serve = student.serve
     deps = list(serve.deps)
-    vllm_binary: list[str] = []
-    if serve.vllm == "image":
-        vllm_binary = ["--vllm-binary", '"$(command -v vllm)"']
-    else:
+    if serve.vllm != "image":
         deps.append(f"vllm=={serve.vllm_version}")
-    full = [*common_args(run), "--student", jobs.q(run.config.student), "--model", jobs.q(model), *vllm_binary, *args]
+    full = [*common_args(run), "--student", jobs.q(run.config.student), "--model", jobs.q(model),
+            *image_vllm(student), *args]  # fmt: skip
     if adapter:
         full += ["--adapter", jobs.q(adapter), "--adapter-label", jobs.q(label), "--adapter-only"]
     else:
@@ -410,13 +497,19 @@ def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
         str(run.config.eval.timeout),
         "--max-tool-calls",
         str(run.config.eval.max_tool_calls),
+        "--traces-repo",
+        jobs.q(run.repo("traces")),
+        *image_vllm(student),
+        *([] if student.serve.vllm == "image" else ["--vllm-version", jobs.q(student.serve.vllm_version)]),
         *GRPO_RECIPE,
         *[jobs.q(a) for a in grpo.args],
         *[jobs.q(a) for a in settings.args],
         "--launch",
     ]
-    if settings.use_probe:
+    if settings.use_probe:  # the qualified ids of this run's probe (its configured split and shards) only
+        probe_files = [f"difficulty/{prefix}-qualified-ids.txt" for prefix in probe_prefixes(run)]
         args[-1:-1] = ["--include-ids-repo", jobs.q(run.repo("eval"))]
+        args[-1:-1] = [arg for name in probe_files for arg in ("--include-ids-repo-file", jobs.q(name))]
     deps = grpo.deps or GRPO_DEPS
     command = "\n".join(
         [
@@ -443,15 +536,22 @@ def grpo_merge_jobs(run: Run, rev: str) -> list[jobs.Job]:
     return merge_jobs(run, rev, "grpo-lora", "grpo-merged", base=run.repo("sft-merged"))
 
 
+def probe_prefixes(run: Run) -> list[str]:
+    """The probe jobs' record prefixes; each writes `difficulty/<prefix>-qualified-ids.txt` in the eval dataset."""
+    shards = run.config.probe.shards or student_profile(run).probe.shards
+    return [f"probe/{run.config.probe.split}-{index}of{shards}" for index in range(shards)]
+
+
 def probe_jobs(run: Run, rev: str) -> list[jobs.Job]:
     """The difficulty probe: the merged SFT policy, K attempts per train row at the GRPO sampling temperature."""
     student = student_profile(run)
     settings, probe = run.config.probe, student.probe
-    shards = settings.shards or probe.shards
+    prefixes = probe_prefixes(run)
+    shards = len(prefixes)
     k = settings.k or probe.k
     sample = settings.sample or probe.sample
     built = []
-    for index in range(shards):
+    for index, prefix in enumerate(prefixes):
         args = [
             "--split",
             jobs.q(settings.split),
@@ -476,7 +576,7 @@ def probe_jobs(run: Run, rev: str) -> list[jobs.Job]:
             "--output-dir",
             "/eval",
             "--prefix",
-            f"probe/{settings.split}-{index}of{shards}",
+            prefix,
             "--output-repo",
             jobs.q(run.repo("eval")),
             *probe.args,
@@ -629,8 +729,17 @@ SMOKE = {
     "eval.limit": 5,
     "eval.concurrency": 5,
     "eval.variants": ["base", "sft", "grpo", "teacher"],
+    "eval.models": {},  # evaluate what the smoke run trained, never a run.toml's explicit models
+    "repos": {},  # the smoke run's own repos, never a run.toml's overrides
     "budget.traces_usd": 2,
 }
+
+
+def smoke_name(config: RunConfig) -> str:
+    """The run's name (explicit or default) with a `-smoke` suffix, so a smoke run never writes into (or resumes
+    from) the real run's repos."""
+    name = config.name or default_name(config, load_task(config.path(config.task)))
+    return name if name.endswith("-smoke") else f"{name}-smoke"
 
 
 def smoke_main(argv: list[str] | None = None) -> int:
@@ -640,11 +749,7 @@ def smoke_main(argv: list[str] | None = None) -> int:
     items = list(sys.argv[1:] if argv is None else argv)
     if not items or items[0].startswith("-"):
         raise SystemExit("usage: distill smoke RUN.toml [--dry-run] [--over-budget] [--set KEY=JSON ...]")
-    config = load_run(items[0])
-    name = (config.name or "") + "-smoke" if config.name else ""
-    sets = [f"{key}={json.dumps(value)}" for key, value in SMOKE.items()]
-    if name:
-        sets.append(f"name={json.dumps(name)}")
+    sets = [f"{key}={json.dumps(value)}" for key, value in {**SMOKE, "name": smoke_name(load_run(items[0]))}.items()]
     return main([items[0], *(arg for pair in sets for arg in ("--set", pair)), *items[1:]])
 
 
@@ -677,6 +782,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     job_stages = [s for s in stages if s != "publish"]
     rev = ""
+    hook_files: dict[str, Path] = {}
+    if any(s != "traces" for s in job_stages):  # student stages: hook modules staged and resolvable, or refuse
+        hook_files = requires_files(run)
+        check_hooks(run, hook_files)
     if job_stages:
         manifest = {
             "run": dataclasses.asdict(config),
@@ -695,7 +804,9 @@ def main(argv: list[str] | None = None) -> int:
             for target, source in profile_files(run).items():
                 (tmp / target).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, tmp / target)
-            extra = [tmp / "profiles"]
+            extra = [tmp / "profiles", *hook_files.values()]  # hook modules land in each job's working directory
+        elif hook_files:
+            print(f"[dry-run] would stage the student's hook modules {sorted(hook_files)}")
         rev = jobs.stage_code(run.repo("code"), run.task_dir, extra, dry_run=args.dry_run, manifest=manifest)
     for stage in stages:
         if stage == "publish":
