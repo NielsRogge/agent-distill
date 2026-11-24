@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import platform
 import tarfile
 import urllib.request
@@ -20,12 +21,23 @@ if TYPE_CHECKING:
     from agent_distill.task import Limits, Task
 
 
+class HarnessError(RuntimeError):
+    """The harness itself broke (its server died, did not start or stopped answering), not the model.
+
+    Episodes that hit it say nothing about the model: stages do not record them, restart the harness and run the
+    rows again.
+    """
+
+
 @dataclass(frozen=True)
 class Endpoint:
     """An OpenAI-compatible model endpoint.
 
     `key_env` names the environment variable holding the API key (never the key itself); `None` means the
-    endpoint needs no key (local vLLM). `context` / `max_output_tokens` are what the harness is told.
+    endpoint needs no key (local vLLM). Adapters never hand that key to the harness: such an endpoint is reached
+    through a `KeyProxy` in the stage process, and the harness gets the proxy's URL and a random session key
+    (`session_key`), which is worthless outside the proxy. `context` / `max_output_tokens` are what the harness is
+    told.
     """
 
     base_url: str
@@ -37,17 +49,21 @@ class Endpoint:
     headers: Mapping[str, str] = field(default_factory=dict)  # e.g. {"X-HF-Bill-To": "huggingface"}
     native_id: str = ""  # harness-native model id, e.g. OpenCode's "huggingface/zai-org/GLM-5.2"
     native_entry: Mapping[str, Any] = field(default_factory=dict)  # harness-native model declaration
+    session_key: str = ""  # a KeyProxy session key (set by the adapters, never a real credential)
 
 
 class Harness(Protocol):
     name: str
     version: str
 
-    def install(self, cache: Path) -> Path:
-        """The pinned binary (downloaded and verified into `cache`); never a binary found on PATH."""
+    def install(self, cache: Path | None = None) -> Path:
+        """The pinned binary (downloaded into `cache`, default the per-user cache, and re-verified against the
+        profile's sha256 on every call); never a binary found on PATH."""
         ...
 
-    def session(self, endpoints: list[Endpoint], *, cache: Path, task: Task, request_timeout: float = 600) -> Any:
+    def session(
+        self, endpoints: list[Endpoint], *, cache: Path | None = None, task: Task, request_timeout: float = 600
+    ) -> Any:
         """An async context manager yielding a runner: a running harness configured for `endpoints` and `task`.
 
         Agent processes get no credentials except the keys the endpoints name (a teacher's HF token).
@@ -61,7 +77,9 @@ class Harness(Protocol):
     async def run_episode(
         self, runner: Any, task: Task, row: dict[str, Any], endpoint: Endpoint, limits: Limits, *, title: str = ""
     ) -> Episode:
-        """Run one episode of `task` on `row` with the model at `endpoint`, inside a running `session`."""
+        """Run one episode of `task` on `row` with the model at `endpoint`, inside a running `session`.
+
+        Raises `HarnessError` when the harness itself broke (e.g. its server stopped answering)."""
         ...
 
     def native_trace(self, episode: Episode) -> list[dict[str, Any]] | None:
@@ -69,9 +87,10 @@ class Harness(Protocol):
         ...
 
 
-def load_harness(profile: HarnessProfile) -> Harness:
+def load_harness(profile: HarnessProfile, **options: Any) -> Harness:
+    """The profile's adapter; `options` are adapter options (e.g. OpenCode 2's `answer_retry`)."""
     cls = resolve(profile.adapter)
-    return cls(profile)
+    return cls(profile, **options)
 
 
 def architecture() -> str:
@@ -79,6 +98,12 @@ def architecture() -> str:
     if arch is None:
         raise RuntimeError(f"Unsupported architecture: {platform.machine()}")
     return arch
+
+
+def default_cache() -> Path:
+    """The per-user download cache: `$XDG_CACHE_HOME/agent-distill`, else `~/.cache/agent-distill`."""
+    root = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+    return Path(root) / "agent-distill"
 
 
 def download_verified(url: str, sha256: str, timeout: float = 180) -> bytes:
@@ -90,12 +115,19 @@ def download_verified(url: str, sha256: str, timeout: float = 180) -> bytes:
     return data
 
 
-def extract_member(archive: bytes, member: str, destination: Path) -> Path:
+def member_bytes(archive: bytes, member: str) -> bytes:
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
         handle = tar.extractfile(member)
         if handle is None:
             raise RuntimeError(f"archive has no {member}")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(handle.read())
-    destination.chmod(0o755)
+        return handle.read()
+
+
+def extract_member(archive: bytes, member: str, destination: Path) -> Path:
+    data = member_bytes(archive, member)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(destination.name + ".tmp")
+    temporary.write_bytes(data)
+    temporary.chmod(0o755)
+    temporary.replace(destination)
     return destination

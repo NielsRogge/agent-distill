@@ -99,6 +99,12 @@ on HF Jobs. 5 of 6 papers have every URL right, but only 1 episode follows the r
 calls name tools that do not exist (e.g. a tool called `hf papers info 2510.00406 --format json`); in OpenCode 1.2.4
 the same model made no such calls (0 of 189). A student trained in 1.2.4 is not a 2.3.2 student (DESIGN.md §6).
 
+These smoke numbers came from the first 2.3.2 adapter, which ran all concurrent episodes on one shared OpenCode
+server, workspace and data directory. url-extraction found that agents on a shared 2.x server read each other's
+spilled shell output (and one `rm -rf` of it broke every episode beside it), so the adapter now starts a server
+with its own workspace and XDG directories per episode. Re-run the smoke test before comparing against these
+numbers.
+
 Rescore published records with agent-distill alone:
 
 ```bash

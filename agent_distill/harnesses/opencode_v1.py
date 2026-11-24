@@ -25,7 +25,7 @@ import httpx
 from agent_distill.config import HarnessProfile
 from agent_distill.episode import Episode
 from agent_distill.harnesses import opencode
-from agent_distill.harnesses.base import Endpoint
+from agent_distill.harnesses.base import Endpoint, HarnessError
 from agent_distill.harnesses.opencode_v1_reader import episode_from_messages
 from agent_distill.task import FileAnswer, Limits, Task
 
@@ -95,37 +95,47 @@ class Runner:
 
 
 class OpenCodeV1:
-    def __init__(self, profile: HarnessProfile) -> None:
+    def __init__(self, profile: HarnessProfile, *, answer_retry: bool = False) -> None:
         if not profile.version.startswith("1."):
             raise ValueError(f"OpenCodeV1 cannot run OpenCode {profile.version}")
+        if answer_retry:
+            raise ValueError("answer_retry is for OpenCode 2.x (1.x forces a tool call on every turn)")
         self.profile = profile
         self.name = profile.name
         self.version = profile.version
 
-    def install(self, cache: Path) -> Path:
+    def install(self, cache: Path | None = None) -> Path:
         return opencode.install(self.profile, cache)
 
     @asynccontextmanager
     async def session(
-        self, endpoints: list[Endpoint], *, cache: Path, task: Task | None = None, request_timeout: float = 600
+        self,
+        endpoints: list[Endpoint],
+        *,
+        cache: Path | None = None,
+        task: Task | None = None,
+        request_timeout: float = 600,
     ) -> AsyncIterator[Runner]:
-        """`opencode serve` in a fresh temporary workspace, configured for `endpoints`, without credentials
-        other than the endpoints' own keys."""
+        """`opencode serve` in a fresh temporary workspace, configured for `endpoints`, without credentials: keyed
+        endpoints are reached through a key proxy with a session key (one per session: 1.x shares the server)."""
         executable = await asyncio.to_thread(self.install, cache)
         workspace = tempfile.TemporaryDirectory(prefix="agent-distill-opencode-")
-        env = opencode.server_env(
-            endpoints, {"OPENCODE_CONFIG_CONTENT": json.dumps(opencode.provider_config(endpoints))}
-        )
-        server = await asyncio.to_thread(
-            opencode.start_server, executable, self.version, Path(workspace.name), env, startup_timeout=30
-        )
         try:
-            async with httpx.AsyncClient(
-                base_url=server.url, timeout=httpx.Timeout(request_timeout, connect=10)
-            ) as client:
-                yield Runner(server, client)
+            with opencode.key_proxies(endpoints) as routed:
+                env = opencode.server_env(
+                    routed, {"OPENCODE_CONFIG_CONTENT": json.dumps(opencode.provider_config(routed))}
+                )
+                server = await asyncio.to_thread(
+                    opencode.start_server, executable, self.version, Path(workspace.name), env, startup_timeout=30
+                )
+                try:
+                    async with httpx.AsyncClient(
+                        base_url=server.url, timeout=httpx.Timeout(request_timeout, connect=10)
+                    ) as client:
+                        yield Runner(server, client)
+                finally:
+                    await asyncio.to_thread(opencode.stop_server, server)
         finally:
-            await asyncio.to_thread(opencode.stop_server, server)
             workspace.cleanup()
 
     async def healthy(self, runner: Runner) -> None:
@@ -140,9 +150,11 @@ class OpenCodeV1:
         model = opencode.model_ref(endpoint)
         row_id = task.row_id(row)
         started = time.monotonic()
-        session = await raw_json(
-            client, "post", "/session", {"title": title or f"{task.name} {row_id}", "permission": SESSION_PERMISSIONS}
-        )
+        try:
+            body = {"title": title or f"{task.name} {row_id}", "permission": SESSION_PERMISSIONS}
+            session = await raw_json(client, "post", "/session", body)
+        except Exception as exc:  # the server is gone: nothing about the model to record
+            raise HarnessError(f"OpenCode did not create a session: {type(exc).__name__}: {exc}") from exc
         session_id = session["id"]
         failure: str | None = None
         response: dict[str, Any] = {}
@@ -178,8 +190,11 @@ class OpenCodeV1:
             watchdog_task.cancel()
             with suppress(asyncio.CancelledError):
                 await watchdog_task
-        messages = await raw_json(client, "get", f"/session/{session_id}/message")
-        return episode_from_messages(
+        try:
+            messages = await raw_json(client, "get", f"/session/{session_id}/message")
+        except Exception as exc:  # the server died mid-episode: a harness failure, not a model failure
+            raise HarnessError(f"OpenCode stopped answering: {type(exc).__name__}: {exc}") from exc
+        episode = episode_from_messages(
             messages,
             answer_model=task.answer,
             task=task.name,
@@ -192,6 +207,8 @@ class OpenCodeV1:
             elapsed_seconds=round(time.monotonic() - started, 3),
             metadata={"cwd": str(runner.server.workspace)},
         )
+        episode.raw = messages  # the harness-native messages, written to the private raw dataset
+        return episode
 
     def native_trace(self, episode: Episode) -> None:
         return None
