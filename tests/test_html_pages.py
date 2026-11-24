@@ -135,3 +135,27 @@ def test_jobs_pass_the_gemini_judge_key_as_a_secret():
     assert pipeline.eval_jobs(other, "R")[0].secret_envs == ()
     env = {"MY_JUDGE_API_KEY": "x", "GEMINI_API_KEY": "y", "PATH": "/bin", "CI_TOKEN": "z"}
     assert strip_credentials(env) == {"PATH": "/bin"}
+
+
+@pytest.mark.skipif(not chromium(), reason="needs a Chromium (AGENT_DISTILL_CHROMIUM)")
+def test_observer_reports_sound_motion_and_controls(tmp_path):
+    pytest.importorskip("playwright")
+    from agent_distill.browser.observe import observe_page
+
+    page = tmp_path / "toy.html"
+    page.write_text(
+        "<!doctype html><title>toy</title><body style='margin:0;background:#123'>"
+        "<button id=b aria-label='Play a tone'>play</button><canvas id=c width=1440 height=800></canvas><script>"
+        "const g=c.getContext('2d');let t=0;(function f(){g.fillStyle='#123';g.fillRect(0,0,1440,800);"
+        "g.fillStyle='#fc0';g.fillRect(100+(t++%900),300,120,120);requestAnimationFrame(f)})();"
+        "b.onclick=()=>{const a=new AudioContext(),o=a.createOscillator();o.connect(a.destination);o.start()};"
+        "</script>"
+    )
+    obs = asyncio.run(observe_page(page))
+    assert (
+        obs.probe["audioContexts"] >= 1 and obs.probe["sourcesStarted"] == obs.probe["audioContexts"]
+    )  # one per press
+    assert obs.probe["toDestination"] == obs.probe["audioContexts"]
+    assert "connected to the speakers" in obs.log and "'Play a tone'" in obs.log and "click" in obs.log
+    assert obs.probe["raf"] > 10 and obs.filmstrip.startswith(b"\x89PNG") and obs.phone.startswith(b"\x89PNG")
+    assert len(obs.steps) == 7
