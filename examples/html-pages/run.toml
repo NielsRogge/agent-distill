@@ -10,9 +10,10 @@ teacher = "kimi-k3.1-pro"
 student = "qwen3.5-9b-pages"
 harness = "pi@1.6.0"
 name = "qwen35-9b-html-pages-kimi-k31-pro-pi-160"
-# GRPO is left out until the judge is validated as a reward (README, "Judge calibration"); opt in with
-# --stages grpo,grpo-merge and add "grpo" to [eval] variants.
-stages = ["traces", "sft", "merge", "eval", "probe"]
+# GRPO is left out until the judge is validated as a reward (README, "Judge calibration") and GRPO with Pi works
+# (the smoke's GRPO made no step in 2 h); the probe only feeds GRPO. Opt in with --stages probe,grpo,grpo-merge and
+# add "grpo" to [eval] variants.
+stages = ["traces", "sft", "merge", "eval"]
 profiles = ["profiles"]
 
 [hub]
