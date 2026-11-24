@@ -179,6 +179,15 @@ def test_judge_unparseable_reply_is_unscorable_with_error():
     assert result.scores["j"] is None and result.reward is None and "no score" in result.errors["j"]
 
 
+def test_empty_judge_reply_is_not_cached(tmp_path):
+    import asyncio
+
+    client = FakeClient("")
+    runner = JudgeRunner(client, JudgeCache(tmp_path / "verdicts.jsonl"))
+    assert asyncio.run(runner("p")) == "" and asyncio.run(runner("p")) == ""
+    assert client.calls == 2 and not (tmp_path / "verdicts.jsonl").exists()
+
+
 def test_judge_criteria_become_metrics():
     @judge("x", scale=(1, 10), criteria=("creativity", "polish"))
     def j():

@@ -88,7 +88,8 @@ class JudgeRunner:
             return cached
         reply = await self.client.complete(prompt, images)
         self.calls += 1
-        self.cache.put(key, reply)
+        if reply.strip():  # an empty reply (e.g. reasoning used up the output budget) is a failure, never cached
+            self.cache.put(key, reply)
         return reply
 
 

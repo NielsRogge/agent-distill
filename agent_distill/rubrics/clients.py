@@ -102,9 +102,13 @@ class RouterJudge:
         self.usage.add(int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0), self.price,
                        float(cost) if isinstance(cost, int | float) else None)  # fmt: skip
         try:
-            return str(reply["choices"][0]["message"]["content"] or "")
+            choice = reply["choices"][0]
+            text = str(choice["message"]["content"] or "")
         except (KeyError, IndexError) as exc:
             raise JudgeError(f"unexpected reply: {str(reply)[:300]}") from exc
+        if not text.strip():
+            raise JudgeError(f"empty reply (finish_reason {choice.get('finish_reason')})")
+        return text
 
 
 @dataclass
@@ -132,9 +136,13 @@ class GeminiJudge:
         self.usage.add(int(usage.get("promptTokenCount") or 0), int(usage.get("candidatesTokenCount") or 0),
                        self.price)  # fmt: skip
         try:
-            return "".join(part.get("text", "") for part in reply["candidates"][0]["content"]["parts"])
+            candidate = reply["candidates"][0]
+            text = "".join(part.get("text", "") for part in (candidate.get("content") or {}).get("parts", []))
         except (KeyError, IndexError) as exc:
             raise JudgeError(f"unexpected reply: {str(reply)[:300]}") from exc
+        if not text.strip():
+            raise JudgeError(f"empty reply (finishReason {candidate.get('finishReason')})")
+        return text
 
 
 def judge_client(profile: Any, bill_to: str = "") -> RouterJudge | GeminiJudge:
