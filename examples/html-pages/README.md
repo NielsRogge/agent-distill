@@ -78,24 +78,28 @@ the output limit are in the records but not in this column.
   weak pages well and great pages poorly. Calibration against human labels comes next.
 - Datasets: `nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval`, `nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval`.
 
-**Judge calibration (2026-11-24):** the user labelled 41 same-concept page pairs blind (29 with a preference, 12
-about equal). Accuracy is on the decided pairs, a judge tie counting half; Spearman is between the judge's difference
-and the label over all 41.
+**Judge calibration (2026-11-24, labelling closed):** the user labelled 50 same-concept page pairs blind (Kimi vs
+GLM, 36 with a preference, 14 about equal). Accuracy is on the decided pairs, a judge tie counting half; Spearman is
+between the judge's difference and the label over all 50. Of the 10 repeat pairs only one was labelled (a tie the
+first time, "clearly" the second), so the user's self-agreement is unmeasured.
 
 | Judge setup | Agree / disagree / tie | Accuracy | Spearman |
 |---|---|---|---|
-| Hydrogen, per page, 3 screenshots (the baseline judge) | 13 / 8 / 8 | 0.59 | 0.13 |
-| Qwen3.8-27B, per page, 3 screenshots | 10 / 5 / 14 | 0.59 | 0.19 |
-| Hydrogen, defect list + appeal | 10 / 14 / 3 | 0.43 | -0.07 |
-| Hydrogen, pairwise, 3 screenshots each | 18 / 10 / 1 | 0.64 | 0.24 |
-| Hydrogen, per page, filmstrip + phone + activity log | 12 / 5 / 12 | 0.62 | 0.26 |
-| Hydrogen, pairwise, filmstrip + phone + activity log | 17 / 9 / 3 | 0.64 | 0.27 |
+| Hydrogen, per page, 3 screenshots (the baseline judge) | 16 / 9 / 11 | 0.60 | 0.15 |
+| Qwen3.8-27B, per page, 3 screenshots | 11 / 7 / 18 | 0.56 | 0.14 |
+| Hydrogen, defect list + appeal | 14 / 15 / 5 | 0.49 | 0.04 |
+| Hydrogen, pairwise, 3 screenshots each | 22 / 13 / 1 | 0.62 | 0.19 |
+| Hydrogen, per page, filmstrip + phone + activity log | 14 / 6 / 16 | 0.61 | 0.20 |
+| Hydrogen, pairwise, filmstrip + phone + activity log | 20 / 12 / 4 | 0.61 | 0.19 |
 
-None is clearly above chance on 29 decided pairs. `page_quality` now uses the per-page motion-aware setup
+The user preferred Kimi in 21 pairs and GLM in 15 (14 ties), but three of their four saved favourites were GLM pages
+the judge had scored below the Kimi page beside them.
+
+None is clearly above chance on 36 decided pairs; when it disagrees with the user, the motion-aware judge
+mostly calls the pair even rather than picking the wrong page. `page_quality` now uses the per-page motion-aware setup
 (`agent_distill.browser.observe`: a scripted 10-second visit gives an 8-frame filmstrip, the phone view and a log of
 sound, animation, listeners and controls), because it is the best-correlated judge that still scores a single page,
-which GRPO needs. The old judge is kept as `page_quality_stills`. Ten repeated pairs in the labeller will measure the
-user's own self-agreement, the ceiling any judge can reach.
+which GRPO needs. The old judge is kept as `page_quality_stills`.
 
 **Rescore with the motion-aware judge** (`distill rescore`, all episodes in the published records, reruns included):
 
