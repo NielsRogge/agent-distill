@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import math
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -36,7 +37,9 @@ class Rubric:
     weight: float = 1.0
     train_only: bool = False
     eval_only: bool = False
-    neutral: float | None = 1.0  # the value `reward` sees when the rubric is inactive in a mode
+    # The value a custom `reward` expression sees when the rubric is inactive in a mode (e.g. a train_only gate
+    # passes in evaluation). The default weighted reward drops inactive rubrics instead.
+    neutral: float | None = 1.0
     judge_spec: Any = None  # JudgeSpec for judge rubrics
     _params: tuple[str, ...] = field(default=(), repr=False)
     _takes_kwargs: bool = field(default=False, repr=False)
@@ -76,20 +79,25 @@ class Rubric:
         value = self.fn(**self.arguments(context))
         if inspect.isawaitable(value):
             value = await value
-        return normalize(value, self.name)
+        return normalize(value, self.name, bounded=self.kind != "metric")
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.fn(*args, **kwargs)
 
 
-def normalize(value: Any, name: str) -> tuple[float | None, dict[str, float]]:
+def normalize(value: Any, name: str, *, bounded: bool = True) -> tuple[float | None, dict[str, float]]:
+    """A rubric's return value as (score, metrics). Scores must be in [0, 1] (`bounded`; metrics such as a file size
+    only need to be finite) or None; anything else raises ValueError, which makes the episode unscorable."""
     metrics: dict[str, float] = {}
     if isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], Mapping):
         value, extra = value
         metrics = {f"{name}/{key}": float(item) for key, item in extra.items()}
     if value is None:
         return None, metrics
-    return float(value), metrics
+    score = float(value)
+    if math.isnan(score) or (bounded and not 0.0 <= score <= 1.0):
+        raise ValueError(f"rubric {name!r} returned {value!r}; scores must be in [0, 1] (or None)")
+    return score, metrics
 
 
 def _decorator(kind: str, default_weight: float):
@@ -215,6 +223,11 @@ class RubricResult:
     errors: dict[str, str] = field(default_factory=dict)
     mode: Mode = "eval"
 
+    @property
+    def errored(self) -> bool:
+        """A rubric that counts (not a metric) raised: the episode is unscorable, not failed."""
+        return bool(self.errors)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "scores": self.scores,
@@ -246,8 +259,17 @@ class RubricSet:
         if duplicates:
             raise ValueError(f"duplicate rubric names: {sorted(duplicates)}")
         self.threshold = threshold
-        self._reward = reward or weighted({r.name: r.weight for r in self.rubrics if r.kind != "metric"})
+        self._custom_reward = reward
         self._passed = passed
+
+    def _default_reward(self, mode: Mode) -> Expr:
+        """Weighted mean of the non-metric rubrics active in `mode` (inactive ones drop out, not count as 1)."""
+        return weighted({r.name: r.weight for r in self.rubrics if r.kind != "metric" and r.active(mode)})
+
+    def _reward(self, view: Scores, mode: Mode) -> float | None:
+        if self._custom_reward is not None:
+            return self._custom_reward(view)
+        return self._default_reward(mode)(view)
 
     def __iter__(self):
         return iter(self.rubrics)
@@ -267,13 +289,13 @@ class RubricSet:
         return view
 
     def reward(self, scores: Scores, mode: Mode = "train") -> float | None:
-        return self._reward(self.reward_scores(scores, mode))
+        return self._reward(self.reward_scores(scores, mode), mode)
 
     def passed(self, scores: Scores, mode: Mode = "eval") -> bool:
         view = self.reward_scores(scores, mode)
         if self._passed is not None:
             return bool(self._passed(view))
-        value = self._reward(view)
+        value = self._reward(view, mode)
         return value is not None and value >= self.threshold
 
     async def ascore(self, context: Mapping[str, Any], *, mode: Mode = "eval") -> RubricResult:
@@ -286,12 +308,15 @@ class RubricSet:
         for rubric, (value, extra, error) in zip(active, outcomes, strict=True):
             scores[rubric.name] = value
             metrics.update(extra)
-            if error:
+            if error and rubric.kind != "metric":
                 errors[rubric.name] = error
+        # A rubric error (an exception, a judge outage or an unparseable verdict) makes the episode unscorable:
+        # no reward (GRPO drops it from the group baseline) and not passed, but never a 0 that looks like a
+        # real failure. Stages count these with `ErrorBudget`.
         return RubricResult(
             scores=scores,
-            reward=self.reward(scores, mode),
-            passed=self.passed(scores, mode),
+            reward=None if errors else self.reward(scores, mode),
+            passed=False if errors else self.passed(scores, mode),
             metrics=metrics,
             errors=errors,
             mode=mode,
@@ -306,13 +331,47 @@ async def _safe(rubric: Rubric, context: Mapping[str, Any]) -> tuple[float | Non
     try:
         value, metrics = await rubric.ascore(context)
         return value, metrics, None
-    except Exception as exc:  # a broken rubric scores 0, loudly, instead of killing a run
+    except Exception as exc:  # unscorable, loudly, instead of killing a run or scoring a fake 0
         logger.warning("rubric %s failed: %s: %s", rubric.name, type(exc).__name__, exc)
-        return 0.0, {}, f"{type(exc).__name__}: {exc}"
+        return None, {}, f"{type(exc).__name__}: {exc}"
+
+
+class TooManyErrors(RuntimeError):
+    """Raised by `ErrorBudget` when too many episodes were unscorable because a rubric errored."""
+
+
+@dataclass
+class ErrorBudget:
+    """Stops a stage once rubric errors (e.g. a judge outage) make too many episodes unscorable.
+
+    `record(result)` after every scored episode; it raises `TooManyErrors` once at least `min_episodes` were scored
+    and more than `max_rate` of them errored, so the stage can stop cleanly (publishing what it has) instead of
+    rejecting every trace or training on empty rewards.
+    """
+
+    max_rate: float = 0.05
+    min_episodes: int = 20
+    scored: int = 0
+    errored: int = 0
+    last_errors: dict[str, str] = field(default_factory=dict)
+
+    def record(self, result: RubricResult) -> None:
+        self.scored += 1
+        if result.errored:
+            self.errored += 1
+            self.last_errors = dict(result.errors)
+        if self.scored >= self.min_episodes and self.errored > self.max_rate * self.scored:
+            raise TooManyErrors(
+                f"{self.errored} of {self.scored} episodes were unscorable because a rubric errored "
+                f"(limit {self.max_rate:.0%}); last errors: {self.last_errors}"
+            )
 
 
 def episode_context(episode: Any, row: Mapping[str, Any], **extra: Any) -> dict[str, Any]:
-    """The injectable arguments for one episode."""
+    """The injectable arguments for one episode. Without explicit `limits`, the task's own limits are used, so
+    rubrics that check them (e.g. a tool-call limit) never silently skip the check."""
+    if extra.get("limits") is None and extra.get("task") is not None:
+        extra["limits"] = getattr(extra["task"], "limits", None)
     return {
         "episode": episode,
         "row": row,

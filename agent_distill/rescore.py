@@ -34,16 +34,32 @@ def read_jsonl(path: Path) -> Iterator[dict[str, Any]]:
                 yield json.loads(line)
 
 
+def label_repos(task: Task, datasets: Iterable[str] | None = None) -> list[str]:
+    """The label datasets to read, in precedence order: `--dataset`, else the task's `label_repos`, else its repo."""
+    return list(datasets or task.dataset.label_repos or [task.dataset.repo])
+
+
 def load_rows(task: Task, datasets: Iterable[str] | None = None, revision: str | None = None) -> dict[str, dict]:
-    """Every row of every split of the label datasets, keyed by the task's row id (later datasets win)."""
+    """Every row of every split of the label datasets, keyed by the task's row id. Earlier datasets win: a later
+    one only adds rows the earlier ones lack (as parity tier 1 does)."""
     from datasets import get_dataset_split_names, load_dataset
 
     rows: dict[str, dict] = {}
-    for repo in list(datasets or [task.dataset.repo]):
+    for repo in label_repos(task, datasets):
         for split in get_dataset_split_names(repo, revision=revision):
             for row in load_dataset(repo, split=split, revision=revision):
-                rows[task.row_id(dict(row))] = dict(row)
+                rows.setdefault(task.row_id(dict(row)), dict(row))
     return rows
+
+
+def limits_for(task: Task, name: str, record: dict[str, Any], override: int | None = None) -> Limits:
+    """The limits a record ran with: `--max-tool-calls`, else the record's own `limits`, else the task's
+    `record_limits(file name)`, else the task's limits."""
+    base = (task.record_limits(name) if task.record_limits else None) or task.limits
+    stored = record.get("limits") if isinstance(record.get("limits"), dict) else {}
+    max_calls = override or stored.get("max_tool_calls") or base.max_tool_calls
+    return Limits(timeout=stored.get("timeout") or base.timeout, max_tool_calls=max_calls,
+                  max_model_calls=base.max_model_calls)  # fmt: skip
 
 
 def record_to_episode(record: dict[str, Any], task: Task, row_id: str) -> Episode:
@@ -61,8 +77,11 @@ def rescore(
     *,
     limits: Limits | None = None,
     mode: str = "eval",
+    name: str = "",
+    max_tool_calls: int | None = None,
 ) -> list[Rescored]:
-    limits = limits or task.limits
+    """Score every record. `limits` forces one set of limits; otherwise each record's are found by `limits_for`
+    (from the record, or the task's `record_limits(name)` for the file `name`)."""
     out: list[Rescored] = []
     for record in records:
         row_id = task.row_id(record)
@@ -70,13 +89,21 @@ def rescore(
         if row is None:
             raise KeyError(f"no label row for {row_id!r}")
         episode = record_to_episode(record, task, row_id)
-        result = task.rubrics.score(episode_context(episode, row, limits=limits, task=task), mode=mode)  # type: ignore[arg-type]
+        record_limits = limits or limits_for(task, name, record, max_tool_calls)
+        context = episode_context(episode, row, limits=record_limits, task=task)
+        result = task.rubrics.score(context, mode=mode)  # type: ignore[arg-type]
         out.append(Rescored(record, episode, result))
     return out
 
 
 def summarize(items: list[Rescored]) -> dict[str, dict[str, Any]]:
-    """Per model label: episodes, pass rate, mean reward, mean of each rubric score, sums of rubric metrics."""
+    """Per model label: episodes, passes, unscorable episodes, mean reward, mean of each rubric score, sums of
+    rubric metrics, and pooled accuracies.
+
+    `pooled` turns metric pairs `<rubric>/<x>_correct` and `<rubric>/<x>_scored` into one accuracy per rubric over
+    every scored item (e.g. per-field URL accuracy, url-extraction's `field_accuracy`), which differs from the
+    per-episode mean in `scores` when episodes score different numbers of items.
+    """
     groups: dict[str, list[Rescored]] = defaultdict(list)
     for item in items:
         groups[str(item.record.get("evaluation_model") or "teacher")].append(item)
@@ -91,9 +118,18 @@ def summarize(items: list[Rescored]) -> dict[str, dict[str, Any]]:
                     scores[name].append(value)
             for name, value in item.result.metrics.items():
                 metrics[name] += value
+        pooled: dict[str, float] = {}
+        for name in {key.split("/", 1)[0] for key in metrics if key.endswith("_scored") and "/" in key}:
+            correct = sum(v for k, v in metrics.items() if k.startswith(f"{name}/") and k.endswith("_correct"))
+            scored = sum(v for k, v in metrics.items() if k.startswith(f"{name}/") and k.endswith("_scored"))
+            if scored:
+                pooled[name] = correct / scored
         summary[label] = {
             "episodes": len(group),
             "passed": sum(item.result.passed for item in group),
+            "unscorable": sum(item.result.reward is None for item in group),
+            "errored": sum(item.result.errored for item in group),
+            "pooled": dict(sorted(pooled.items())),
             "mean_reward": sum(rewards) / len(rewards) if rewards else None,
             "scores": {name: sum(values) / len(values) for name, values in sorted(scores.items())},
             "metric_sums": dict(sorted(metrics.items())),
@@ -113,7 +149,7 @@ def repo_record_files(repo: str, revision: str | None = None) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="distill rescore", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(prog="distill rescore", description="Rescore stored episode records")
     parser.add_argument("--task", required=True, help="Task folder or task.py")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--repo", help="Dataset repo holding episode records")
@@ -121,13 +157,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--files", nargs="*", help="Record files in --repo (default: every *.jsonl outside sessions/)")
     parser.add_argument("--revision")
     parser.add_argument("--dataset", action="append", help="Label dataset(s) (default: the task's dataset)")
-    parser.add_argument("--max-tool-calls", type=int, help="Tool-call limit the episodes ran with")
+    parser.add_argument(
+        "--max-tool-calls",
+        type=int,
+        help="Tool-call limit the episodes ran with (default: per record, from the record or the task's record_limits)",
+    )
     parser.add_argument("--mode", choices=("eval", "train"), default="eval")
     parser.add_argument("--output", type=Path, help="Write the per-file summary as JSON")
     args = parser.parse_args(argv)
 
     task = load_task(args.task)
-    limits = Limits(timeout=task.limits.timeout, max_tool_calls=args.max_tool_calls or task.limits.max_tool_calls)
     rows = load_rows(task, args.dataset)
     if args.repo:
         from huggingface_hub import hf_hub_download
@@ -144,13 +183,19 @@ def main(argv: list[str] | None = None) -> int:
         if not records or not ({"opencode_messages", "tool_events"} & set(records[0])):
             print(f"skip {name}: not episode records")
             continue
-        summary = summarize(rescore(records, task, rows, limits=limits, mode=args.mode))
+        rescored = rescore(records, task, rows, mode=args.mode, name=name, max_tool_calls=args.max_tool_calls)
+        summary = summarize(rescored)
         report[name] = summary
         print(f"\n## {name}")
         for label, entry in summary.items():
             mean = entry["mean_reward"]
             mean_text = f"{mean:.3f}" if mean is not None else "n/a"
-            print(f"- {label}: {entry['episodes']} episodes, passed {entry['passed']}, mean reward {mean_text}")
+            print(
+                f"- {label}: {entry['episodes']} episodes, passed {entry['passed']} "
+                f"(unscorable {entry['unscorable']}, counted as not passed), mean reward {mean_text}"
+            )
+            for rubric, value in entry["pooled"].items():
+                print(f"  {rubric} over all scored items: {value:.4f}")
             print(f"  scores {json.dumps({k: round(v, 4) for k, v in entry['scores'].items()})}")
     if args.output:
         args.output.write_text(json.dumps(report, indent=2))
