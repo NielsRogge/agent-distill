@@ -176,6 +176,16 @@ class Student:
     probe: ProbeSettings = field(default_factory=ProbeSettings)
     grpo: GRPOSettings = field(default_factory=GRPOSettings)
 
+    def hooks(self) -> dict[str, str]:
+        """Profile field -> the `module[:function]` hook it names (DESIGN.md §2): the modules must be staged with
+        the job code (`requires`) or ship in the agent_distill package."""
+        named = {
+            "lora.adapter_converter": self.lora.adapter_converter,
+            "sft.train_patch": self.sft.train_patch,
+            "merge.method": "" if self.merge.method == "peft" else self.merge.method,
+        }
+        return {key: value for key, value in named.items() if value}
+
 
 @dataclass
 class Download:
@@ -262,9 +272,41 @@ class EvalSettings:
     concurrency: int = 8
     timeout: float = 180
     max_tool_calls: int = 15
-    # label -> "model[+adapter]"; default: {"base": the student}
+    # Which models to evaluate: variants of this run (base, sft, grpo, teacher) ...
+    variants: list[str] = field(default_factory=lambda: ["base", "sft", "grpo", "teacher"])
+    # ... or explicit models, label -> "model[+adapter]" (replaces `variants`)
     models: dict[str, str] = field(default_factory=dict)
     answer_retry: bool = False  # OpenCode 2.x: ask once for the JSON answer when an episode ends without one
+
+
+@dataclass
+class TracesRun:
+    split: str = "train"
+    limit: int | None = None  # first N train rows after the task's train filter, in total over the shards (None: all)
+    shards: int | None = None  # default: the teacher profile's
+    attempts: int | None = None  # default: the teacher profile's
+
+
+@dataclass
+class SFTRun:
+    args: list[str] = field(default_factory=list)  # appended after the student profile's [sft] args
+    timeout: str = ""  # default: the student profile's
+
+
+@dataclass
+class GRPORun:
+    args: list[str] = field(default_factory=list)  # appended after the recipe defaults and the profile's args
+    timeout: str = ""  # default: the student profile's
+    use_probe: bool = True  # train on the difficulty probe's qualified rows (difficulty/ in the eval dataset)
+
+
+@dataclass
+class ProbeRun:
+    split: str = "train"
+    sample: int | None = None  # default: the student profile's [probe] values
+    k: int | None = None
+    shards: int | None = None
+    timeout: str = ""  # default: the student profile's
 
 
 @dataclass
@@ -284,6 +326,10 @@ class RunConfig:
     stages: list[str] = field(default_factory=lambda: ["eval"])
     hub: HubSettings = field(default_factory=HubSettings)
     eval: EvalSettings = field(default_factory=EvalSettings)
+    traces: TracesRun = field(default_factory=TracesRun)
+    sft: SFTRun = field(default_factory=SFTRun)
+    probe: ProbeRun = field(default_factory=ProbeRun)
+    grpo: GRPORun = field(default_factory=GRPORun)
     budget: Budget = field(default_factory=Budget)
     repos: dict[str, str] = field(default_factory=dict)  # override any artifact repo by suffix: {"eval": "..."}
     profiles: list[str] = field(default_factory=list)  # extra profile folders, relative to the run.toml

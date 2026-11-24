@@ -49,6 +49,10 @@ class Endpoint:
     headers: Mapping[str, str] = field(default_factory=dict)  # e.g. {"X-HF-Bill-To": "huggingface"}
     native_id: str = ""  # harness-native model id, e.g. OpenCode's "huggingface/zai-org/GLM-5.2"
     native_entry: Mapping[str, Any] = field(default_factory=dict)  # harness-native model declaration
+    # A non-secret API key sent as-is, e.g. the OpenEnv capture session id the capture proxy reads as its key.
+    api_key: str = ""
+    # Also route the harness's auxiliary model calls (e.g. OpenCode 1.x session titles) to this endpoint.
+    small_model: bool = False
     session_key: str = ""  # a KeyProxy session key (set by the adapters, never a real credential)
 
 
@@ -85,6 +89,22 @@ class Harness(Protocol):
     def native_trace(self, episode: Episode) -> list[dict[str, Any]] | None:
         """The harness's own session file for the agent-traces viewer, if it has one (Pi); else None."""
         ...
+
+
+HF_ROUTER = "https://router.huggingface.co/v1"
+
+
+def teacher_endpoint(teacher: Any, harness: HarnessProfile, bill_to: str = "") -> Endpoint:
+    """A teacher served by HF Inference Providers, billed to `bill_to` (`X-HF-Bill-To`), with the `HF_TOKEN` key.
+
+    OpenCode reaches it through its built-in Hugging Face provider (`huggingface/<model>[:provider]`, with an inline
+    model entry for ids missing from its catalog); other harnesses use the router's OpenAI-compatible API.
+    """
+    headers = {"X-HF-Bill-To": bill_to} if bill_to else {}
+    native_id = teacher.opencode_id if harness.name == "opencode" else ""
+    native_entry = teacher.opencode_model_entry if harness.name == "opencode" else {}
+    return Endpoint(base_url=HF_ROUTER, model=teacher.routed_model, key_env="HF_TOKEN", name=teacher.name,
+                    headers=headers, native_id=native_id, native_entry=native_entry)  # fmt: skip
 
 
 def load_harness(profile: HarnessProfile, **options: Any) -> Harness:

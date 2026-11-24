@@ -34,7 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # Implemented commands parse their own arguments.
-IMPLEMENTED = {"rescore": "agent_distill.rescore:main", "run": "agent_distill.pipeline:main"}
+IMPLEMENTED = {
+    "rescore": "agent_distill.rescore:main",
+    "run": "agent_distill.pipeline:main",
+    "smoke": "agent_distill.pipeline:smoke_main",
+}
 
 
 def main(argv: list[str] | None = None) -> int:

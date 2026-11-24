@@ -29,7 +29,8 @@ class Limits:
 class DatasetSpec:
     repo: str
     splits: dict[str, str | list[str]] = field(default_factory=lambda: {"train": "train", "eval": ["test"]})
-    filter: Callable[[Row], bool] | None = None
+    filter: Callable[[Row], bool] | None = None  # evaluation rows
+    train_filter: Callable[[Row], bool] | None = None  # rows for traces, the probe and GRPO (default: `filter`)
     revision: str | None = None
     # Label datasets `distill rescore` reads rows from, in precedence order (the first dataset holding a row id
     # wins); default: `repo` alone. E.g. v1 labels first, then a later dataset for rows v1 lacks (test_hard).

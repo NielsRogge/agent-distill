@@ -1,4 +1,5 @@
-"""The eval stage's harness-failure handling and publishing, and `distill publish`'s visibility rules (Hub mocked)."""
+"""The episode loop's harness-failure handling (eval, probe, traces), the eval stage's publishing, and `distill
+publish`'s visibility rules (Hub mocked)."""
 
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from agent_distill.episode import Episode, ToolEvent
 from agent_distill.harnesses.base import Endpoint, HarnessError
 from agent_distill.records import RecordWriter, read_jsonl
 from agent_distill.rubrics import RubricResult
+from agent_distill.stages import common
 from agent_distill.stages import eval as eval_stage
 from agent_distill.task import Limits
 
@@ -76,12 +78,12 @@ class FakeHarness:
 
 @pytest.fixture(autouse=True)
 def plain_context(monkeypatch):
-    monkeypatch.setattr(eval_stage, "episode_context", lambda episode, row, **kwargs: None)
+    monkeypatch.setattr(common, "episode_context", lambda episode, row, **kwargs: None)
 
 
 def run_label(harness: FakeHarness, writer: RecordWriter, **kwargs: Any) -> None:
-    asyncio.run(eval_stage.run_label(harness, TASK, ROWS, ENDPOINT, "base", writer, limits=Limits(), concurrency=1,
-                                     **kwargs))  # fmt: skip
+    asyncio.run(common.run_episodes(harness, TASK, ROWS, ENDPOINT, writer, common.Plan(label="base"), limits=Limits(),
+                                    concurrency=1, cache=None, **kwargs))  # fmt: skip
 
 
 def test_run_label_skips_harness_failures_and_restarts(tmp_path) -> None:
@@ -110,7 +112,9 @@ def test_run_once_reports_a_broken_harness(tmp_path) -> None:
     writer = RecordWriter(tmp_path / "eval", "base/test")
 
     def run_once(harness: FakeHarness) -> bool:
-        return asyncio.run(eval_stage._run_once(harness, TASK, ROWS, ENDPOINT, "base", writer, Limits(), 4, None, None))
+        work = [(row, 1) for row in ROWS]
+        plan = common.Plan(label="base")
+        return asyncio.run(common._run_once(harness, TASK, work, ENDPOINT, writer, plan, Limits(), 4, None)) == "broken"
 
     assert run_once(FakeHarness()) is False
     assert run_once(FakeHarness({"3": ["dead"]})) is True
@@ -203,12 +207,12 @@ def test_eval_publish_refuses_a_public_repo(tmp_path, hub, public) -> None:
 def test_eval_main_publishes_what_finished_when_a_label_fails(tmp_path, monkeypatch) -> None:
     published: list[tuple] = []
 
-    async def failing_run_label(harness, task, rows, endpoint, label, writer, **kwargs):
-        writer.write(episode("1"), RubricResult(scores={"r": 1.0}, reward=1.0, passed=True), label=label)
+    async def failing_run_label(harness, task, rows, endpoint, writer, plan, **kwargs):
+        writer.write(episode("1"), RubricResult(scores={"r": 1.0}, reward=1.0, passed=True), label=plan.label)
         raise RuntimeError("the harness kept failing")
 
     monkeypatch.setattr(eval_stage, "select_rows", lambda task, split, **kwargs: [{"arxiv_id": "1"}])
-    monkeypatch.setattr(eval_stage, "run_label", failing_run_label)
+    monkeypatch.setattr(eval_stage, "run_episodes", failing_run_label)
     monkeypatch.setattr(eval_stage, "publish", lambda *args, **kwargs: published.append((args, kwargs)))
     argv = ["--task", "examples/paper-urls", "--harness", "opencode@2.3.2", "--student", "qwen3.5-9b", "--model",
             "Qwen/Qwen3.5-9B", "--split", "test", "--no-serve", "--output-dir", str(tmp_path / "eval"),

@@ -123,7 +123,11 @@ class OpenCodeV1:
         try:
             with opencode.key_proxies(endpoints) as routed:
                 env = opencode.server_env(
-                    routed, {"OPENCODE_CONFIG_CONTENT": json.dumps(opencode.provider_config(routed))}
+                    routed,
+                    {
+                        "OPENCODE_CONFIG_CONTENT": json.dumps(opencode.provider_config(routed)),
+                        **opencode.xdg_dirs(Path(workspace.name)),
+                    },
                 )
                 server = await asyncio.to_thread(
                     opencode.start_server, executable, self.version, Path(workspace.name), env, startup_timeout=30

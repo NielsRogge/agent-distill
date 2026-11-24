@@ -6,10 +6,11 @@
 # - TRL's tree-packed GRPO rejects attention sinks / short convolutions: the synchronous "simple" backend.
 # - RTX PRO 6000 prefill is slow (~1-2k tokens/s): 8 concurrent rollouts, not 16. Never pass --dspark (the
 #   bundled drafter has no kernels for RTX PRO 6000).
-# The hook modules (`requires`) live in url-extraction; a run refuses to start until they are in the project.
+# The hook modules (`requires`, every `module:function` below) live in url-extraction; copy them next to the run.toml
+# (or into a project profiles folder): `distill run` stages them with the job code and refuses to start without them.
 name = "inkling-2-mini"
 model = "thinkingmachines/Inkling-2-Mini"
-requires = ["inkling_adapter.py", "inkling_train_patch.py"]
+requires = ["inkling_adapter.py", "inkling_train_patch.py", "merge_adapter.py"]
 
 [serve]
 image = "vllm/vllm-openai:inkling-2-mini"
