@@ -33,7 +33,7 @@ from agent_distill.config import Student, load_profile
 from agent_distill.harnesses.base import Endpoint, HarnessError, default_cache, load_harness
 from agent_distill.harnesses.opencode import harness_failure
 from agent_distill.records import RecordWriter, raw_root_for, read_jsonl, summarize_records
-from agent_distill.rubrics import episode_context
+from agent_distill.rubrics import ErrorBudget, TooManyErrors, episode_context
 from agent_distill.task import Limits, Task, load_task
 
 VLLM_PORT = 8000
@@ -157,8 +157,12 @@ async def run_label(
     cache: Path | None = None,
     max_restarts: int = 3,
     extra: dict[str, Any] | None = None,
+    errors: ErrorBudget | None = None,
 ) -> None:
-    """Run every row not yet recorded for `label`, restarting the harness after a harness failure."""
+    """Run every row not yet recorded for `label`, restarting the harness after a harness failure.
+
+    `errors` stops the stage (`TooManyErrors`, after recording the episode) once too many episodes were unscorable
+    because a rubric errored, e.g. a judge outage; `main` still publishes what finished."""
     for restart in range(max_restarts + 1):
         done = writer.done()
         pending = [row for row in rows if (label, task.row_id(row)) not in done]
@@ -166,7 +170,9 @@ async def run_label(
             return
         if restart:
             print(f"[{label}] restarting the harness after a harness failure ({len(pending)} rows left)", flush=True)
-        broken = await _run_once(harness, task, pending, endpoint, label, writer, limits, concurrency, cache, extra)
+        broken = await _run_once(
+            harness, task, pending, endpoint, label, writer, limits, concurrency, cache, extra, errors
+        )
         if not broken:
             return
     raise RuntimeError(f"the harness kept failing for {label} after {max_restarts} restarts")
@@ -183,6 +189,7 @@ async def _run_once(
     concurrency: int,
     cache: Path | None,
     extra: dict[str, Any] | None,
+    errors: ErrorBudget | None = None,
 ) -> bool:
     """Run `pending` on one fresh harness. Returns True when the harness broke (the rest is left for a restart).
 
@@ -199,7 +206,7 @@ async def _run_once(
     try:
         async with harness.session([endpoint], cache=cache, task=task) as runner:
             await _run_rows(harness, runner, task, pending, endpoint, label, writer, limits, semaphore, broken,
-                            harness_broke, extra)  # fmt: skip
+                            harness_broke, extra, errors)  # fmt: skip
             if not broken.is_set():
                 try:
                     await harness.healthy(runner)
@@ -223,10 +230,13 @@ async def _run_rows(
     broken: asyncio.Event,
     harness_broke: Any,
     extra: dict[str, Any] | None,
+    errors: ErrorBudget | None = None,
 ) -> None:
+    stopped = asyncio.Event()
+
     async def run_row(index: int, row: dict) -> None:
         async with semaphore:
-            if broken.is_set():
+            if broken.is_set() or stopped.is_set():
                 return
             try:
                 episode = await harness.run_episode(runner, task, row, endpoint, limits)
@@ -244,6 +254,12 @@ async def _run_rows(
                 f"reward={result.reward} tools={episode.tool_calls} failure={episode.failure}",
                 flush=True,
             )
+            if errors is not None:
+                try:
+                    errors.record(result)
+                except TooManyErrors:
+                    stopped.set()  # rows still waiting for the semaphore do not start
+                    raise
 
     await asyncio.gather(*(run_row(i, row) for i, row in enumerate(pending, 1)))
 
@@ -351,6 +367,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--row-ids", default="", help="Comma-separated row ids (overrides --start/--limit)")
     parser.add_argument("--concurrency", type=int, default=8)
+    parser.add_argument("--max-error-rate", type=float, default=0.05,
+                        help="Stop once more than this share of episodes (after 20) had a rubric error")  # fmt: skip
     parser.add_argument("--timeout", type=float, default=180)
     parser.add_argument("--max-tool-calls", type=int, default=15)
     parser.add_argument("--output-dir", type=Path, default=Path("/eval"))
@@ -410,6 +428,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if server is not None:
             wait_for_vllm(server)
+        errors = ErrorBudget(max_rate=args.max_error_rate)
         for label, endpoint in targets:
             prefix = args.prefix or f"{label}/{args.split}"
             writer = RecordWriter(args.output_dir, prefix, raw_dir)
@@ -426,6 +445,7 @@ def main(argv: list[str] | None = None) -> None:
                     concurrency=args.concurrency,
                     cache=cache,
                     extra=extra,
+                    errors=errors,
                 )
             )
             summary = summarize_records(read_jsonl(writer.episodes))

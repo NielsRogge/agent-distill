@@ -299,3 +299,16 @@ def test_dry_run_prints_staging_and_residual_risk(monkeypatch, capsys) -> None:
 def test_answer_retry_setting_is_in_eval_settings() -> None:
     field_names = {field.name for field in dataclasses.fields(load_run(RUN_TOML).eval)}
     assert "answer_retry" in field_names
+
+
+def test_run_label_stops_on_too_many_rubric_errors(tmp_path, monkeypatch) -> None:
+    from agent_distill.rubrics import ErrorBudget, RubricResult, TooManyErrors
+
+    async def failing(context, mode="eval"):
+        return RubricResult(scores={"j": None}, reward=None, passed=False, errors={"j": "HTTP 402"})
+
+    monkeypatch.setattr(TASK.rubrics, "ascore", failing)
+    writer = RecordWriter(tmp_path / "eval", "base/test")
+    with pytest.raises(TooManyErrors, match="HTTP 402"):
+        run_label(FakeHarness({}), writer, errors=ErrorBudget(max_rate=0.5, min_episodes=2))
+    assert len(read_jsonl(writer.episodes)) == 2  # recorded (as unscorable) before the stop
