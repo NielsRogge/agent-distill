@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -268,8 +269,10 @@ def test_eval_jobs_install_locked_requirements() -> None:
     lines = job.command.splitlines()
     locked = lines.index("uv pip install -q --python /work/venv/bin/python --require-hashes -r /work/requirements.txt")
     wheel = lines.index('uv pip install -q --python /work/venv/bin/python --no-deps "$WHEEL"')
-    runtime = next(i for i, line in enumerate(lines) if "-c /work/constraints.txt" in line)
-    assert locked < wheel < runtime and "vllm==0.33.0" in lines[runtime]
+    runtime = next(i for i, line in enumerate(lines) if "vllm==0.33.0" in line)
+    # The runtime stack is resolved with the wheel, not under the lock's constraints (its pins win, e.g. a
+    # huggingface-hub below 2.0 for transformers 5.14).
+    assert locked < wheel < runtime and '"$WHEEL"' in lines[runtime] and "constraints" not in lines[runtime]
     assert lines[runtime + 1].startswith("/work/venv/bin/python -m agent_distill.stages.eval ")
     assert "--answer-retry" in job.command and "uv run" not in job.command
     assert f"--raw-repo {run.repo('eval-raw')}" in job.command
@@ -316,3 +319,39 @@ def test_run_label_stops_on_too_many_rubric_errors(tmp_path, monkeypatch) -> Non
     with pytest.raises(TooManyErrors, match="HTTP 402"):
         run_label(FakeHarness({}), writer, errors=ErrorBudget(max_rate=0.5, min_episodes=2))
     assert len(read_jsonl(writer.episodes)) == 2  # recorded (as unscorable) before the stop
+
+
+@pytest.mark.skipif(not os.environ.get("AGENT_DISTILL_RESOLVE_JOB_DEPS"), reason="set AGENT_DISTILL_RESOLVE_JOB_DEPS=1")
+def test_every_job_stack_resolves_on_the_locked_environment(tmp_path) -> None:
+    """Opt-in (network): every stage's runtime stack, for every built-in student, installs on top of the locked
+    job environment the way jobs install it (wheel + stack, no lock constraints)."""
+    import subprocess
+
+    from agent_distill import jobs
+    from agent_distill.config import load_profile
+
+    requirements, _ = jobs.export_requirements(tmp_path)
+    wheel = jobs.build_wheel(tmp_path)
+    python = tmp_path / "venv" / "bin" / "python"
+    subprocess.run(["uv", "venv", "-q", "--python", "3.12", str(tmp_path / "venv")], check=True)
+    subprocess.run(["uv", "pip", "install", "-q", "--python", str(python), "--require-hashes", "-r", str(requirements)],
+                   check=True)  # fmt: skip
+    stacks = {"sft": pipeline.SFT_DEPS, "merge": pipeline.MERGE_DEPS, "grpo": pipeline.GRPO_DEPS}
+    for name in ("qwen3.5-4b", "qwen3.5-9b", "inkling-2-mini"):
+        student = load_profile("students", name)
+        serve = list(student.serve.deps) + (
+            [] if student.serve.vllm == "image" else [f"vllm=={student.serve.vllm_version}"]
+        )
+        stacks[f"{name}:serve"] = serve
+        for stage in ("sft", "merge", "grpo"):
+            if getattr(student, stage).deps:
+                stacks[f"{name}:{stage}"] = list(getattr(student, stage).deps)
+    failed = {}
+    for label, deps in stacks.items():
+        if not deps:
+            continue
+        result = subprocess.run(["uv", "pip", "install", "--dry-run", "--python", str(python), str(wheel), *deps],
+                                capture_output=True, text=True)  # fmt: skip
+        if result.returncode:
+            failed[label] = result.stderr[-500:]
+    assert not failed, failed
