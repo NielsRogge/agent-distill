@@ -16,6 +16,12 @@ git fetch origin main
 git worktree add -b claude/new-feature ../agent-distill-new-feature origin/main
 ```
 
+## Python environment
+
+- Python 3.12 (`.python-version`; CI uses 3.12). Use `uv`; `dev` is a dependency group (`uv sync`), not an extra.
+- Some environments set `UV_PRERELEASE=allow`, which makes `uv run` / `uv lock` rewrite `uv.lock` with pre-releases. Run uv with `env -u UV_PRERELEASE` there, and check `git diff uv.lock` before every commit. CI runs `uv lock --check` and `uv sync --locked`.
+- Keep heavy dependencies (`trl`, `vllm`, `torch`, Playwright) out of the base dependencies: put them in optional extras, or install them in the job that needs them.
+
 ## Hugging Face billing
 
 Always bill Hugging Face services to the `huggingface` org, never to a personal account:
