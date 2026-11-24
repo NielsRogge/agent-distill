@@ -1,0 +1,19 @@
+# Qwen3.5-9B for HTML pages: the qwen3.5-9b profile with room for whole pages. Kimi-K3.1-Pro's accepted baseline
+# trajectories are ~24k tokens (median, without reasoning; max ~36k) and a single `write` of a page can reach ~31k
+# tokens, so the student serves 32k output tokens per turn and SFT keeps 40k-token sequences.
+name = "qwen3.5-9b-pages"
+model = "Qwen/Qwen3.5-9B"
+
+[serve]
+max_model_len = 65536
+max_output_tokens = 32768
+
+[sft]
+args = ["--no-4bit", "--max-length", "40960", "--epochs", "1", "--full-trajectory", "--save-steps", "50"]
+
+[probe]
+episode_timeout = 900
+concurrency = 8
+
+[grpo]
+args = ["--max-concurrent-rollouts", "16", "--max-completion-length", "32768", "--max-model-calls", "32"]

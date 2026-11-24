@@ -1,0 +1,42 @@
+# HTML pages, the M5 distillation run (DESIGN.md §10): Kimi-K3.1-Pro traces in Pi 1.6.0 -> SFT -> difficulty probe
+# -> GRPO -> evaluation of Qwen3.5-9B. A trace is accepted when the agent submitted a page that passes the gates and
+# scores at least 7/10 with the motion-aware Gemini 4 Hydrogen judge (rubrics.py), the same rule as the evaluation
+# pass rate.
+#
+#   distill run examples/html-pages/run.toml --dry-run
+#   distill run examples/html-pages/run.toml --stages traces --set traces.limit=24 --set name='"html-pages-pilot"'
+task = "."
+teacher = "kimi-k3.1-pro"
+student = "qwen3.5-9b-pages"
+harness = "pi@1.6.0"
+name = "qwen35-9b-html-pages-kimi-k31-pro-pi-160"
+stages = ["traces", "sft", "merge", "eval", "probe", "grpo", "grpo-merge"]
+profiles = ["profiles"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+
+[traces]
+split = "train"
+limit = 600  # first 600 train concepts (balanced categories); ~550 accepted at the baseline's pass rate
+attempts = 1
+shards = 6  # ~100 rows each at 4 concurrent ~7-minute episodes: about 3 h per shard
+
+[eval]
+splits = ["test"]
+limit = 120  # every test concept (10 per category)
+concurrency = 8
+timeout = 900
+max_tool_calls = 30
+variants = ["base", "sft", "grpo"]  # the teacher's validation baseline is already published
+
+[probe]
+sample = 200
+k = 4
+
+[budget]
+traces_usd = 600  # Kimi at ~$0.84 per episode (baseline), 600 rows plus reruns
+judge_usd = 0  # Hydrogen has no price in its profile yet; calls are counted
+gpu_usd = 400

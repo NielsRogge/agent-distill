@@ -9,10 +9,13 @@
   1-10, plus an overall score. A broken page is not judged (the gate already scores it 0). Against human pair
   labels this view disagreed least with people (README); `page_quality_stills` is the earlier three-screenshot
   judge, kept for comparison.
+- `submitted` (gate): the agent ended the episode with `submit`. A page left on disk by an episode that timed out or
+  hit the tool-call limit does not pass: its trajectory never finishes, so it is no SFT trace, and a student that
+  never submits should not earn reward for it.
 - Metrics, recorded only: page size, basic accessibility, and whether the agent previewed before submitting.
 
-reward = gate(page_ok, page_quality); an episode passes (trace acceptance, evaluation pass rate) when the page is
-not broken and the judge's overall score is at least 7/10.
+reward = gate(submitted, gate(page_ok, page_quality)); an episode passes (trace acceptance, evaluation pass rate) when
+the agent submitted, the page is not broken and the judge's overall score is at least 7/10.
 """
 
 from __future__ import annotations
@@ -62,6 +65,11 @@ async def page_ok(answer: Any) -> tuple[float, dict[str, float]] | float:
     report = await inspect_html(str(answer))
     gates = report.gates()
     return float(all(gates.values())), {name: float(ok) for name, ok in gates.items()}
+
+
+@programmatic(weight=0.0)
+def submitted(episode: Any) -> float:
+    return float(bool((getattr(episode, "metadata", None) or {}).get("submitted")))
 
 
 JUDGE_PROMPT = """You are an exacting art director judging a single-file web page made for this concept:
@@ -162,11 +170,16 @@ def previewed(tool_events: list[Any]) -> float:
 def passed(scores: dict[str, float | None]) -> bool:
     quality = scores.get("page_quality")
     threshold = (PASS_SCORE - SCALE[0]) / (SCALE[1] - SCALE[0])
-    return scores.get("page_ok") == 1.0 and quality is not None and quality >= threshold - 1e-9
+    return (
+        scores.get("submitted") == 1.0
+        and scores.get("page_ok") == 1.0
+        and quality is not None
+        and quality >= threshold - 1e-9
+    )
 
 
 RUBRICS = RubricSet(
-    [page_ok, page_quality, size_kb, accessibility_basics, previewed],
-    reward=gate("page_ok", "page_quality"),
+    [submitted, page_ok, page_quality, size_kb, accessibility_basics, previewed],
+    reward=gate("submitted", gate("page_ok", "page_quality")),
     passed=passed,
 )

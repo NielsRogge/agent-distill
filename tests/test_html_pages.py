@@ -40,7 +40,14 @@ class FakeJudge:
         return self.reply
 
 
-def score(monkeypatch, page: PageReport, judge: FakeJudge, events=(), answer="<html lang=en><title>x</title></html>"):
+def score(
+    monkeypatch,
+    page: PageReport,
+    judge: FakeJudge,
+    events=(),
+    answer="<html lang=en><title>x</title></html>",
+    submitted=True,
+):
     async def fake_inspect(html, **kw):
         return page
 
@@ -52,7 +59,8 @@ def score(monkeypatch, page: PageReport, judge: FakeJudge, events=(), answer="<h
     monkeypatch.setattr(RUBRICS, "inspect_html", fake_inspect)
     monkeypatch.setattr(RUBRICS, "observe_html", fake_observe)
     episode = Episode(task="html-pages", row_id="c1", harness="pi", harness_version="1.6.0", model="m",
-                      answer=answer, answer_mode="file", tool_events=list(events))  # fmt: skip
+                      answer=answer, answer_mode="file", tool_events=list(events),
+                      metadata={"submitted": submitted})  # fmt: skip
     context = episode_context(episode, ROW, limits=TASK.limits, task=TASK, judge=JudgeRunner(judge))
     return TASK.rubrics.score(context, mode="eval")
 
@@ -96,6 +104,12 @@ def test_low_score_fails_and_judge_errors_are_unscorable(monkeypatch):
     failed = score(monkeypatch, report(), FakeJudge(RuntimeError("HTTP 402")))
     assert failed.scores["page_quality"] is None and failed.reward is None and not failed.passed
     assert "HTTP 402" in failed.errors["page_quality"]
+
+
+def test_page_left_without_submit_does_not_pass(monkeypatch):
+    result = score(monkeypatch, report(), FakeJudge(), submitted=False)  # e.g. a timeout with a good page on disk
+    assert result.scores["submitted"] == 0.0 and result.scores["page_ok"] == 1.0
+    assert result.reward == 0.0 and not result.passed
 
 
 def test_submit_without_preview_is_recorded(monkeypatch):

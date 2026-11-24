@@ -38,15 +38,21 @@ class Plan:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+# Failures that are the model's own doing, never rerun: the harnesses' tool-call-limit and output-truncation messages.
+OWN_FAILURES = ("tool-call limit", "response truncated at the output token limit")
+
+
 def cut_short(episode: Any) -> str | None:
     """Why an episode stopped before the model finished, or None.
 
     An episode is cut short when it ended without an answer because of the timeout or a provider/harness error,
     typically mid-tool-call. Such a teacher episode says little about the row, so the traces stage reruns it
-    (`Plan.rerun_cut_short`) instead of spending an attempt on it. Hitting the tool-call limit is the model's own
-    doing and is not a cut. Evaluation never reruns (a student's timeout counts against it).
+    (`Plan.rerun_cut_short`) instead of spending an attempt on it. Hitting the tool-call limit or the output token
+    limit (reasoning that never reaches a tool call) is the model's own doing and is not a cut. Evaluation never
+    reruns (a student's timeout counts against it).
     """
-    if episode.answer is not None or not episode.failure or str(episode.failure).startswith("tool-call limit"):
+    failure = str(episode.failure or "")
+    if episode.answer is not None or not failure or failure.startswith(OWN_FAILURES):
         return None
     last = episode.messages[-1] if episode.messages else {}
     where = "mid-tool-call" if last.get("role") == "tool" or last.get("tool_calls") else "mid-turn"

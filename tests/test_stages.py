@@ -205,6 +205,9 @@ def test_cut_short_episodes_are_rerun_without_using_an_attempt(tmp_path, monkeyp
     tool_limit = Episode(task="t", row_id="1", harness="opencode", harness_version="2.3.2", model="m",
                          failure="tool-call limit reached (15)")  # fmt: skip
     assert cut_short(tool_limit) is None
+    truncated = Episode(task="t", row_id="1", harness="pi", harness_version="1.6.0", model="m",
+                        failure="response truncated at the output token limit")  # fmt: skip
+    assert cut_short(truncated) is None
 
 
 def test_checkpoint_uploads_a_consistent_copy(tmp_path):
