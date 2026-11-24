@@ -77,3 +77,34 @@ the output limit are in the records but not in this column.
 - **Judge resolution:** Hydrogen spreads GLM's pages over 5–9 but puts every Kimi page at 7–9, so it ranks broken or
   weak pages well and great pages poorly. Calibration against human labels comes next.
 - Datasets: `nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval`, `nielsr/qwen35-9b-html-pages-glm-53-pi-160-eval`.
+
+**Judge calibration (2026-11-24):** the user labelled 41 same-concept page pairs blind (29 with a preference, 12
+about equal). Accuracy is on the decided pairs, a judge tie counting half; Spearman is between the judge's difference
+and the label over all 41.
+
+| Judge setup | Agree / disagree / tie | Accuracy | Spearman |
+|---|---|---|---|
+| Hydrogen, per page, 3 screenshots (the baseline judge) | 13 / 8 / 8 | 0.59 | 0.13 |
+| Qwen3.8-27B, per page, 3 screenshots | 10 / 5 / 14 | 0.59 | 0.19 |
+| Hydrogen, defect list + appeal | 10 / 14 / 3 | 0.43 | -0.07 |
+| Hydrogen, pairwise, 3 screenshots each | 18 / 10 / 1 | 0.64 | 0.24 |
+| Hydrogen, per page, filmstrip + phone + activity log | 12 / 5 / 12 | 0.62 | 0.26 |
+| Hydrogen, pairwise, filmstrip + phone + activity log | 17 / 9 / 3 | 0.64 | 0.27 |
+
+None is clearly above chance on 29 decided pairs. `page_quality` now uses the per-page motion-aware setup
+(`agent_distill.browser.observe`: a scripted 10-second visit gives an 8-frame filmstrip, the phone view and a log of
+sound, animation, listeners and controls), because it is the best-correlated judge that still scores a single page,
+which GRPO needs. The old judge is kept as `page_quality_stills`. Ten repeated pairs in the labeller will measure the
+user's own self-agreement, the ceiling any judge can reach.
+
+**Rescore with the motion-aware judge** (`distill rescore`, all episodes in the published records, reruns included):
+
+| Teacher | Passed before → after | Judge scores before (1–10) | Judge scores after (1–10) | Mean `page_quality` |
+|---|---|---|---|---|
+| Kimi-K3.1-Pro | 59/63 → 58/63 | 7: 2, 8: 23, 9: 34 | 6: 1, 7: 7, 8: 28, 9: 23 | 0.838 → 0.804 |
+| GLM-5.3 | 47/80 → 44/80 | 5: 1, 6: 2, 7: 13, 8: 25, 9: 9 | 5: 1, 6: 5, 7: 9, 8: 20, 9: 15 | 0.753 → 0.762 |
+
+- The new judge is harsher on Kimi and kinder to GLM's best pages, so Kimi's lead in mean quality shrinks from 0.085
+  to 0.042. Pass rates barely move (gates are unchanged; the 7/10 bar now fails one more Kimi page and three more GLM
+  pages).
+- Kimi stays the teacher: the gap that matters is in clean, submitted trajectories, not in judged quality.
