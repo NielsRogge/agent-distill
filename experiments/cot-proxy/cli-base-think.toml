@@ -1,0 +1,30 @@
+# CoT-proxy experiments, step 2: base Qwen3.5-4B with thinking ON (qwen3 reasoning parser, 8k tokens per turn) on the
+# first 150 v2 test questions of hf-hub-qa (CLI), the rows of the existing non-thinking evaluations (47.3% base, 78.0% SFT).
+# Its own run name: nothing is written into the phase-1 run's repos.
+#
+#   distill run experiments/cot-proxy/mcp-base-think.toml --dry-run
+task = "../../examples/hf-hub-qa"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false  # nielsr's private storage is full: raw harness logs stay in the jobs
+
+[eval]
+splits = ["test"]
+limit = 150
+concurrency = 4  # anonymous Hub API rate limits
+timeout = 300  # as in the non-thinking evaluations
+max_tool_calls = 15
+models = { "base-think" = "Qwen/Qwen3.5-4B" }
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 25
