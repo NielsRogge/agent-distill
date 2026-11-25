@@ -8,7 +8,7 @@
 #       --set 'eval.variants=["base","sft","teacher"]' --dry-run
 task = "."
 teacher = "glm-5.3"
-student = "qwen3.5-4b"
+student = "qwen3.5-4b-nothink"  # served without thinking, like its reasoning-free SFT data (phase 1 trained the same model)
 harness = "pi@1.6.0"
 name = "qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160"  # v1 runs: qwen35-4b-hf-hub-qa-mcp-glm-53-pi-160
 stages = ["traces", "sft", "merge", "eval"]
@@ -36,4 +36,19 @@ variants = ["base", "sft", "teacher"]
 [budget]
 traces_usd = 150  # GLM-5.3 at ~$0.20 per episode (estimate; the pilot checks it)
 judge_usd = 0  # no judge rubrics
-gpu_usd = 60  # SFT, merge and the student evaluations
+gpu_usd = 150  # per stage. Phase 1 (SFT, merge, evals) needed 60. Phase 2 (probe, GRPO, eval) was raised to 150 with the user's approval (2026-11-25), as a hard stop; the timeouts below bound the worst case
+
+# Phase 2 (user-approved 2026-11-25): difficulty probe on the whole train split, then GRPO on the qualified rows
+# (solved on 1-3 of 4 attempts). The GRPO step count is set from the qualified pool (2 prompts per TRL step, so
+# steps <= pool / 2, at most 100).
+[probe]
+split = "train"
+sample = 1162  # every v2 train question
+k = 4
+shards = 6  # ~194 rows x 4 attempts per H200 job
+timeout = "150m"  # 6 x 2.5 h x $5: at most $75
+
+[grpo]
+args = ["--max-concurrent-rollouts", "16", "--save-steps", "10"]  # anonymous MCP rate limits; checkpoints survive a timeout
+timeout = "7h"  # 2x H200 at $10/h: at most $70 (probe <= $75 + GRPO <= $70 + merge/eval ~ $10: the $150 stop)
+use_probe = true
