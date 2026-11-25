@@ -163,6 +163,14 @@ def score_fact(monkeypatch, answer, events, live="apache-2.0"):
     return FACTS.rubrics.score(episode_context(episode, FACT_ROW, task=FACTS), mode="eval")
 
 
+def test_job_setup_installs_the_shell_tools_every_image_needs():
+    # The student's huggingface/trl image lacks curl, jq and wget, which the teacher's traces use (README).
+    setup = FACTS.job_setup[0]
+    for tool in ("curl", "jq", "wget"):
+        assert f"command -v {tool}" in setup and tool in setup.split("install", 1)[1]
+    assert setup.index("apt-get") < " ".join(FACTS.job_setup).index("huggingface_hub==2.4.0")
+
+
 def test_facts_task_shape():
     assert FACTS.dataset.repo == "nielsr/hf-hub-facts-v2" and FACTS.version == "2"
     assert FACTS.dataset.splits["eval"] == ["test", "validation"]

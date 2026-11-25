@@ -19,8 +19,16 @@ from .rubrics import RUBRICS
 
 HERE = Path(__file__).parent
 HF_VERSION = "2.4.0"  # the CLI the agent runs and the skill was generated from (`hf skills preview`)
+# Shell tools the agents reach for (the teacher pipes `curl` into `jq`). Job images differ: the teacher's uv image has
+# curl but no jq, the student's huggingface/trl image has none of them, so install all three everywhere. Otherwise SFT
+# imitates teacher commands that fail in the student's image, and every student number is understated (README).
+SHELL_TOOLS = ("curl", "jq", "wget")
 # The pinned CLI, outside root's home so isolated agents can run it, on the PATH agents inherit.
 JOB_SETUP = [
+    " && ".join(f"command -v {tool} >/dev/null" for tool in SHELL_TOOLS)
+    + " || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "
+    + " ".join(SHELL_TOOLS)
+    + " >/dev/null)",
     "export UV_TOOL_DIR=/opt/hf-cli/tools UV_TOOL_BIN_DIR=/opt/hf-cli/bin",
     f"uv tool install -q --python 3.12 --python-preference only-managed huggingface_hub=={HF_VERSION}",
     'export PATH="/opt/hf-cli/bin:$PATH" HF_HUB_DISABLE_UPDATE_CHECK=1',
@@ -49,4 +57,4 @@ task = Task(
     job_setup=JOB_SETUP,
 )
 
-__all__ = ["JOB_SETUP", "task", "user_prompt"]
+__all__ = ["JOB_SETUP", "SHELL_TOOLS", "task", "user_prompt"]
