@@ -24,6 +24,14 @@ the tools is shared wherever possible.
   Snapshot taken on 2026-11-25: server `huggingface.co/mcp` version **0.4.39**, four tools, all annotated
   `readOnlyHint: true`: `hf_whoami`, `hub_repo_search`, `hub_repo_details`, `hf_fs`. The full `tools/list`
   (names, descriptions, input schemas) is frozen in [`mcp-tools.json`](mcp-tools.json) with its sha256.
+- **Few tools, full coverage.** Server 0.4.x folded the older separate tools (model, dataset, Space and paper
+  search, doc search and fetch) into `hf_fs`, a filesystem-style tool over `hf://` URIs with `ls`, `cat`,
+  `stat`, `find`, `search` and `attach`. It covers trending listings, papers (`search hf://papers <query>`,
+  `cat hf://papers/<id>/paper.md`), daily papers, collections, repo files and cards, and documentation
+  (`search hf://docs <query>`). Paper and doc search both work anonymously (checked 2026-11-25). The
+  `?bouquet=` URL parameter only narrows the set (`search`, `docs`); none of the tried values adds tools.
+  The extra tools in the [settings](https://huggingface.co/settings/mcp) (Contribute Repos, Sandboxes, Jobs,
+  Gradio Spaces) need a logged-in account and are all write or compute tools, so they're out of scope.
 - **Allow-list:** `hub_repo_search`, `hub_repo_details`, `hf_fs`. `hf_whoami` is hidden (useless when anonymous).
   No `bash`, `read`, `write` or `edit`, so there is no CLI or `curl` fallback; Pi's MCP resource tools and
   `codemode` are off too.
