@@ -325,6 +325,8 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
             ]
             if settings.answer_retry:
                 args.append("--answer-retry")
+            if settings.debug_stalls:
+                args.append("--debug-stalls")
             minutes = VLLM_STARTUP_MINUTES + settings.limit * EVAL_MINUTES_PER_EPISODE / max(1, settings.concurrency)
             name = f"{run.name}-eval-{slugify(label)}-{slugify(split)}"
             built.append(served_job(run, rev, "eval", name, model, adapter, label, args, minutes))

@@ -329,6 +329,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--answer-retry", action="store_true",
                         help="OpenCode 2.x: ask once for the JSON answer when an episode ends without one")  # fmt: skip
     parser.add_argument("--cache", type=Path, default=None, help="Binary cache (default: the per-user cache)")
+    parser.add_argument("--debug-stalls", action="store_true",
+                        help="Log the environment and the agents' long-running commands (stall_debug)")  # fmt: skip
     parser.add_argument("--vllm-binary", default="vllm")
     parser.add_argument("--no-serve", action="store_true", help="Use an already running vLLM on port 8000")
     return parser.parse_args(argv)
@@ -340,6 +342,10 @@ def main(argv: list[str] | None = None) -> None:
     student = load_profile("students", args.student, args.profiles)
     profile = load_profile("harnesses", args.harness, args.profiles)
     harness = load_harness(profile, **({"answer_retry": True} if args.answer_retry else {}))
+    if args.debug_stalls:
+        from agent_distill.stages import stall_debug
+
+        stall_debug.start()
     cache = args.cache or default_cache()
     raw_dir = args.raw_output_dir or raw_root_for(args.output_dir)
     raw_repo = args.raw_repo or (f"{args.output_repo}-raw" if args.output_repo else "")

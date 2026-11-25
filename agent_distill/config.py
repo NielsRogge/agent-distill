@@ -277,6 +277,7 @@ class EvalSettings:
     # ... or explicit models, label -> "model[+adapter]" (replaces `variants`)
     models: dict[str, str] = field(default_factory=dict)
     answer_retry: bool = False  # OpenCode 2.x: ask once for the JSON answer when an episode ends without one
+    debug_stalls: bool = False  # log the agents' long-running commands (agent_distill.stages.stall_debug)
 
 
 @dataclass
