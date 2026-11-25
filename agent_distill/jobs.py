@@ -32,9 +32,11 @@ JOB_EXTRAS = ("hub",)  # the package extras every job installs (from uv.lock)
 VENV_PYTHON = "/work/venv/bin/python"
 # Printed by every dry run and recorded in the run manifest (DESIGN.md §6, credentials).
 RESIDUAL_RISKS = (
-    "the job's own HF token (its HF_TOKEN secret) is in the stage process's environment and token cache; the "
-    "harness runs as the same user, so an agent could read it from /proc/<pid>/environ although the harness's own "
-    "environment is stripped (teacher keys reach the harness only as key-proxy session keys)",
+    "the job's own HF token (its HF_TOKEN secret) is in the stage process's environment and token cache. Pi agents "
+    "run as their own unprivileged users and cannot read it (agent_distill.harnesses.isolation); OpenCode agents, "
+    "and Pi agents in a stage that is not root or has AGENT_DISTILL_AGENT_USERS=off, run as the stage's user and "
+    "could read it from /proc/<pid>/environ, although the harness's own environment is stripped (teacher keys reach "
+    "the harness only as key-proxy session keys)",
 )
 
 
