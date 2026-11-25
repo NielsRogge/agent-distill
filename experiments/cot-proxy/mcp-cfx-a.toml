@@ -1,0 +1,44 @@
+# CoT-proxy experiments, step 3 (a): the paper's recipe without CoT-proxies on hf-hub-qa-mcp. The phase-1 GLM-5.3
+# traces (599, read only) -> SFT of Qwen3.5-4B with an empty think block in every target, visible text stripped,
+# KL replay on the initial student's out-of-domain generations, LoRA r16/alpha 32, lr 3e-5 constant after 2 warmup
+# updates, 8 passes of 17 teacher + 3 replay samples per update -> evaluation with thinking on (qwen3.5-4b-think) on
+# all 377 test questions. The replay pool is generated once (stage `replay`) and shared with variant (b).
+#
+#   distill run experiments/cot-proxy/mcp-cfx-a.toml --stages replay --dry-run
+#   distill run experiments/cot-proxy/mcp-cfx-a.toml --stages sft,eval --dry-run
+task = "../../examples/hf-hub-qa-mcp"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160"
+stages = ["sft", "eval"]
+
+[repos]
+traces = "nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-traces"  # phase 1's accepted traces, read only
+replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[sft]
+replay = true
+timeout = "10h"
+args = ["--think-target", "empty", "--strip-visible-text", "--full-trajectory", "--lora-rank", "16",
+        "--lora-alpha", "32", "--lora-dropout", "0", "--learning-rate", "3e-5", "--warmup-steps", "2",
+        "--epochs", "8", "--save-steps", "50"]
+
+[eval]
+splits = ["test"]
+limit = 377
+concurrency = 4
+timeout = 300
+max_tool_calls = 15
+variants = ["sft"]
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 60  # per stage: SFT <= 10 h on H200
