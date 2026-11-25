@@ -118,6 +118,8 @@ async def run_episodes(
     rubric errored, e.g. a judge outage; the stages still publish what finished. Every episode is marked
     `metadata["reasoning_leak"]` (agent_distill.reasoning), and `leaks` stops the stage the same way once too many
     episodes leak reasoning into their visible content."""
+    if missing := task.missing_commands():
+        raise RuntimeError(f"{plan.label}: commands the task needs are not on the PATH: {', '.join(missing)}")
     restarts = 0
     try:
         while work := pending_work(task, rows, writer, plan):

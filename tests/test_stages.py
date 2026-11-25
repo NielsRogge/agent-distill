@@ -239,3 +239,22 @@ def test_checkpoint_uploads_a_consistent_copy(tmp_path):
 
     asyncio.run(main())
     assert uploads == [["a.jsonl"]]
+
+
+def test_an_episode_stage_refuses_to_start_without_the_tasks_commands(tmp_path):
+    import asyncio
+    import dataclasses
+
+    import pytest
+
+    from agent_distill.stages.common import run_episodes
+    from agent_distill.task import Limits
+
+    task = dataclasses.replace(TASK, commands=("sh", "no-such-command-xyz"))
+    assert task.missing_commands() == ["no-such-command-xyz"]
+    harness = ScriptedHarness({"1": ["pass"]})
+    plan = Plan(label="student", attempts=1, stop_when_passed=True)
+    with pytest.raises(RuntimeError, match="no-such-command-xyz"):
+        asyncio.run(run_episodes(harness, task, rows("1"), None, RecordWriter(tmp_path, "student/test"), plan,
+                                 limits=Limits(), concurrency=1, cache=tmp_path))  # fmt: skip
+    assert harness.runs == []  # no episode ran

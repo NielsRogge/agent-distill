@@ -324,7 +324,7 @@ def served_job(
         full += ["--label", jobs.q(label)]
     command = "\n".join(
         [
-            jobs.prelude(run.repo("code"), rev, run.task.job_setup),
+            jobs.prelude(run.repo("code"), rev, run.task.job_setup, run.task.commands),
             jobs.python_module("agent_distill.stages.eval", full, deps=deps),
             f"echo {stage.upper()}_DONE",
         ]
@@ -382,7 +382,7 @@ def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minu
         full += ["--bill-to", jobs.q(run.config.hub.bill_to)]
     command = "\n".join(
         [
-            jobs.prelude(run.repo("code"), rev, run.task.job_setup),
+            jobs.prelude(run.repo("code"), rev, run.task.job_setup, run.task.commands),
             jobs.python_module("agent_distill.stages.traces", full),
             f"echo {stage.upper()}_DONE",
         ]
@@ -579,7 +579,7 @@ def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
     deps = grpo.deps or GRPO_DEPS
     command = "\n".join(
         [
-            jobs.prelude(run.repo("code"), rev, run.task.job_setup),
+            jobs.prelude(run.repo("code"), rev, run.task.job_setup, run.task.commands),
             jobs.python_module("agent_distill.stages.grpo", args, deps=deps),
             "echo GRPO_DONE",
         ]
