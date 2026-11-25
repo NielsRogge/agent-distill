@@ -205,6 +205,7 @@ def summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             "scores": {name: sum(v) / len(v) for name, v in sorted(scores.items())},
             "metric_sums": dict(sorted(metrics.items())),
             "mean_tool_calls": sum(r.get("tool_calls") or 0 for r in group) / len(group),
+            "reasoning_leaks": sum(bool((r.get("metadata") or {}).get("reasoning_leak")) for r in group),
             "failures": dict(sorted(failures.items(), key=lambda item: -item[1])),
         }
     paired = {}
