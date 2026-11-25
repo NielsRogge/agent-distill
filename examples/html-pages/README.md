@@ -3,6 +3,39 @@
 Distil a frontier agent that makes stunning, self-contained, interactive single-file HTML pages into a small open
 model, in the Pi harness (`pi@1.6.0`). The design is in [docs/DESIGN.md](../../docs/DESIGN.md) §10.
 
+## Status: paused (2026-11-25)
+
+The user dropped this example as too complex for what it teaches. It stays as a documented attempt. The published
+traces, adapter and merged model stay public and in the collection. The evidence from the M5 run (Kimi-K3.1-Pro
+traces, Qwen3.5-9B student, `pi@1.6.0`):
+
+- **Traces:** Kimi passed 478 of 600 train concepts (80%) for $582.99. 472 of them reached SFT; two shards lost
+  their last few episodes to a full private-storage quota.
+  - Dataset: `nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-traces`.
+- **SFT:** LoRA rank 32, 1 epoch (30 steps), Kimi's reasoning dropped. Train loss went from 0.62 to about 0.50 and
+  plateaued after about 40% of the epoch.
+  - Models: `nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-lora` and `-sft-merged`.
+- **Evaluation**, 120 test concepts (`nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval-test`, private):
+
+  | Student | Episodes | Passed | Submitted | Page passes the gates | Judge ≥ 7/10 | Median judge |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | Qwen3.5-9B base | 120 | 0 | 72 | 83 | 0 of 83 | 2/10 |
+  | + SFT (partial) | 38 | 0 | 15 | 8 | 0 of 8 | 2/10 |
+
+  - Base: 48 of the 120 base episodes hit the 30-tool-call limit.
+  - SFT: the SFT evaluation was stopped after 38 episodes. 12 of those timed out. Its pages mostly fail the gates on
+    JavaScript errors at load, and its shell commands are often garbled.
+  - The first SFT evaluation crashed when an episode deleted the stage's records; since then every agent runs as its
+    own unprivileged user ([agent isolation](../../docs/DESIGN.md)).
+- **Why it was dropped:** the task is agentic in form but not in substance.
+  - 97% of what the teacher puts into tool calls is one initial `write` of the page (about 66 KB at the median). The
+    median episode has one edit, of about 1.2 KB.
+  - `./preview` reported a problem in only 35 of the 472 accepted traces.
+  - So the student has to learn to generate a 15-25k-token page without a single JavaScript error, rather than an
+    agent loop.
+- **Judge caveat:** against 50 blind human pair labels, no judge setup agreed with the user significantly better than
+  chance (see "Judge calibration" below). The judge was not validated as a GRPO reward.
+
 ## The task
 
 - **Concepts:** `nielsr/html-concepts` (private until reviewed). The teacher brainstorms about 5k concepts in 12
