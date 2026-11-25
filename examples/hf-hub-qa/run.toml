@@ -1,0 +1,38 @@
+# hf-hub-qa (CLI), phase 1 (SFT): GLM-5.3 traces in Pi 1.6.0 with the pinned hf CLI and skill -> SFT of Qwen3.5-4B
+# -> merge -> evaluation of base, SFT and teacher on the held-out test split. A trace is accepted when it answered,
+# stayed read-only, used the Hub, and stated the frozen gold value (rubrics.py). Everything but the task matches the
+# MCP twin's run.toml, so the two differ only in the tool surface.
+# Phase 2 (probe -> GRPO) only with the user's go: --stages probe,grpo,grpo-merge and "grpo" in [eval] variants.
+#
+#   distill run examples/hf-hub-qa/run.toml --dry-run
+#   distill run examples/hf-hub-qa/run-judged-pilot.toml --dry-run   # the secondary, judged evaluation
+task = "."
+teacher = "glm-5.3"
+student = "qwen3.5-4b"
+harness = "pi@1.6.0"
+name = "qwen35-4b-hf-hub-qa-glm-53-pi-160"
+stages = ["traces", "sft", "merge", "eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+
+[traces]
+split = "train"
+limit = 600  # of 1,070 train questions (shuffled, so every template is represented)
+attempts = 2
+shards = 3  # anonymous Hub API rate limits: few episodes at once per job
+
+[eval]
+splits = ["test"]
+limit = 150  # of 359 test questions
+concurrency = 4  # anonymous Hub API rate limits
+timeout = 300
+max_tool_calls = 15
+variants = ["base", "sft", "teacher"]
+
+[budget]
+traces_usd = 150  # GLM-5.3 at ~$0.05 per episode in the judged pilot ($2.72 for 51)
+judge_usd = 0  # no judge rubrics
+gpu_usd = 60  # SFT, merge and the student evaluations

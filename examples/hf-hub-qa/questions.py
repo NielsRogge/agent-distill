@@ -63,7 +63,9 @@ QUESTIONS: list[tuple[str, str, dict[str, Any] | None]] = [
     ("discovery", "What models can I use for time series forecasting?", None),
     ("discovery", "What are good open text-to-speech models?", None),
     # Libraries
-    ("libraries", "Which decision models does the Transformers library support?", None),
+    ("libraries", "Which decision models does the Transformers library support?",  # the Hub's decision-model tag
+     ids("models", "list", "--filter", "transformers", "--filter", "decision-model", "--sort", "trending_score",
+         "--limit", "6", k=3)),
     ("libraries", "What are the most downloaded models for the diffusers library?",
      ids("models", "list", "--filter", "diffusers", "--sort", "downloads", *TOP)),
     ("libraries", "Which sentence-transformers models are the most popular?",

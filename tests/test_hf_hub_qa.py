@@ -1,23 +1,30 @@
-"""The hf-hub-qa example: task shape, seed questions and rubrics (no network: the reference CLI is faked)."""
+"""The hf-hub-qa example: the facts task (task.py), the judged task (judged.py), seed questions and rubrics (no
+network: the reference CLI, the Hub lookups and the judge are faked)."""
 
 from __future__ import annotations
 
 import importlib
 import json
 import sys
+from pathlib import Path
 
 from agent_distill.episode import Episode, ToolEvent
-from agent_distill.rubrics import JudgeRunner, episode_context
+from agent_distill.rubrics import JudgeRunner, episode_context, grounding
 from agent_distill.task import TextAnswer, load_task
 
-TASK = load_task("examples/hf-hub-qa")
+TASK = load_task("examples/hf-hub-qa/judged.py")  # the judged questions; FACTS is the folder's main task
+FACTS = load_task("examples/hf-hub-qa")
 REPLY = "correctness: 9\nrelevance: 9\ncompleteness: 8\nclarity: 9\nSCORE: 9"
 TRENDING = [{"id": f"org/model-{i}"} for i in range(10)]
 
 
 def rubrics_module():
-    return next(m for name, m in sys.modules.items() if name.endswith("hf-hub-qa.rubrics") or
-                (name.endswith(".rubrics") and hasattr(m, "cited_ids")))  # fmt: skip
+    """The judged rubrics module, as load_task imported it."""
+    return next(m for name, m in sys.modules.items() if name.endswith("judged_rubrics") and hasattr(m, "reference"))
+
+
+def facts_module():
+    return next(m for name, m in sys.modules.items() if name.endswith(".rubrics") and hasattr(m, "fact_correct"))
 
 
 class FakeJudge:
@@ -38,7 +45,7 @@ def shell(command: str, output: str = "", success: bool = True) -> ToolEvent:
 def score(monkeypatch, answer, events, row, judge=None, listing=None):
     module = rubrics_module()
     monkeypatch.setattr(module, "run_hf", lambda argv: listing if listing is not None else TRENDING)
-    monkeypatch.setattr(module, "exists_on_hub", lambda repo_id: repo_id in {"BAAI/bge-m3"})
+    monkeypatch.setattr(grounding, "exists_on_hub", lambda repo_id: repo_id in {"BAAI/bge-m3"})
     episode = Episode(task="hf-hub-qa", row_id=row["question_id"], harness="pi", harness_version="1.6.0", model="m",
                       answer=answer, answer_mode="text", tool_events=list(events))  # fmt: skip
     judge = judge or FakeJudge()
@@ -78,7 +85,7 @@ def test_seed_questions_have_ids_categories_and_valid_references():
 
 
 def test_cited_ids(monkeypatch):
-    module = rubrics_module()
+    module = grounding  # shared with the MCP twin (agent_distill.rubrics.grounding)
     monkeypatch.setattr(module, "exists_on_hub", lambda repo_id: repo_id == "BAAI/bge-m3")
     text = ("Try `Qwen/Qwen3.5-9B` or [fineweb](https://huggingface.co/datasets/HuggingFaceFW/fineweb), see paper "
             "2205.02340. Use PEFT/LoRA in F16/BF16, or BAAI/bge-m3 for retrieval, and/or more.")  # fmt: skip
@@ -134,3 +141,59 @@ def test_fact_reference(monkeypatch):
     )
     bad, _ = score(monkeypatch, "Qwen/Qwen3.5-9B is MIT licensed.", events, row("License?", ref), listing=info)
     assert good.scores["reference"] == 1.0 and bad.scores["reference"] == 0.0 and not bad.passed
+
+
+# --- The facts task (task.py): deterministic, the same rubrics as the MCP twin with the CLI's gates ---------------
+
+FACT_ROW = {"question_id": "f1", "question": "What is the license of Qwen/Qwen3.5-9B?", "kind": "category",
+            "gold": json.dumps("apache-2.0"), "extra": json.dumps({"hedge": ["mit", "apache-2.0", "llama3"]}),
+            "live": json.dumps({"type": "model", "id": "Qwen/Qwen3.5-9B", "field": "license"})}  # fmt: skip
+INFO = shell(
+    "hf models info Qwen/Qwen3.5-9B --format json", '{"id": "Qwen/Qwen3.5-9B", "card_data": {"license": "apache-2.0"}}'
+)
+
+
+def score_fact(monkeypatch, answer, events, live="apache-2.0"):
+    module = facts_module()
+    module.live.cache_clear()
+    monkeypatch.setattr(module, "live_value", lambda spec: live)
+    monkeypatch.setattr(grounding, "exists_on_hub", lambda repo_id: False)
+    episode = Episode(task="hf-hub-qa", row_id="f1", harness="pi", harness_version="1.6.0", model="m",
+                      answer=answer, answer_mode="text", tool_events=list(events))  # fmt: skip
+    return FACTS.rubrics.score(episode_context(episode, FACT_ROW, task=FACTS), mode="eval")
+
+
+def test_facts_task_shape():
+    assert FACTS.dataset.repo == "nielsr/hf-hub-facts" and FACTS.dataset.splits["eval"] == ["test", "validation"]
+    assert FACTS.limits.max_tool_calls == 15 and FACTS.limits.timeout == 300  # the MCP twin's limits
+    assert FACTS.judge == "" and FACTS.skills == TASK.skills and FACTS.job_setup == TASK.job_setup
+
+
+def test_right_fact_passes_with_the_efficiency_bonus(monkeypatch):
+    result = score_fact(monkeypatch, "`Qwen/Qwen3.5-9B` is licensed Apache 2.0.", [INFO])
+    assert result.scores["fact_correct"] == 1.0 and result.scores["grounded"] == 1.0 and result.passed
+    assert abs(result.reward - (1.0 + 0.1 * (1 - 1 / 20))) < 1e-9
+
+
+def test_wrong_fact_fails_and_drift_is_unscorable(monkeypatch):
+    wrong = score_fact(monkeypatch, "It is MIT licensed.", [INFO])
+    assert wrong.scores["fact_correct"] == 0.0 and not wrong.passed
+    drifted = score_fact(monkeypatch, "It is MIT licensed.", [INFO], live="mit")  # the Hub changed since the snapshot
+    assert drifted.scores["fact_correct"] is None
+
+
+def test_fact_gates(monkeypatch):
+    memory = score_fact(monkeypatch, "Apache 2.0.", [])
+    assert memory.scores["used_hub"] == 0.0 and memory.reward == 0.0 and not memory.passed
+    write = score_fact(monkeypatch, "Apache 2.0.", [INFO, shell("hf repos create me/x", "error", success=False)])
+    assert write.scores["read_only"] == 0.0 and write.reward == 0.0
+
+
+def test_jobs_get_the_task_file_a_run_names(tmp_path):
+    from agent_distill import pipeline
+    from agent_distill.config import load_run
+
+    folder = pipeline.make_run(load_run(Path("examples/hf-hub-qa/run.toml"), {}))
+    judged = pipeline.make_run(load_run(Path("examples/hf-hub-qa/run-judged-pilot.toml"), {}))
+    assert pipeline.job_task(folder) == "/work/task" and folder.task.name == "hf-hub-qa"
+    assert pipeline.job_task(judged) == "/work/task/judged.py" and judged.task.name == "hf-hub-qa-judged"

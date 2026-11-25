@@ -247,10 +247,17 @@ def harness_id(run: Run) -> str:
     return load_profile("harnesses", run.config.harness, run.config.profile_paths).id
 
 
+def job_task(run: Run) -> str:
+    """The task as jobs see it: the staged task folder, or the task file within it when the run names a file
+    (e.g. `task = "judged.py"` for a second task in the same folder)."""
+    path = run.config.path(run.config.task)
+    return "/work/task" if path.is_dir() else f"/work/task/{path.name}"
+
+
 def common_args(run: Run) -> list[str]:
     return [
         "--task",
-        "/work/task",
+        job_task(run),
         "--harness",
         jobs.q(harness_id(run)),
         "--profiles",
@@ -457,7 +464,7 @@ def sft_jobs(run: Run, rev: str) -> list[jobs.Job]:
     student = student_profile(run)
     args = [
         "--task",
-        "/work/task",
+        job_task(run),
         "--harness",
         jobs.q(harness_id(run)),
         "--profiles",
