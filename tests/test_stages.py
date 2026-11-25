@@ -281,3 +281,12 @@ def test_raw_logs_off_passes_no_raw_upload():
     assert traces_args(
         ["--task", "t", "--harness", "pi@1.6.0", "--teacher", "glm-5.3", "--no-raw-upload"]
     ).no_raw_upload
+
+
+def test_probe_jobs_probe_the_whole_sample_not_the_eval_default_limit():
+    run = pipeline.make_run(load_run(SMOKE, {"probe.sample": 1162, "probe.shards": 6}))
+    built = pipeline.probe_jobs(run, "rev")
+    assert len(built) == 6
+    for job in built:
+        command = job.command
+        assert "--sample 1162" in command and "--limit 1162" in command  # select_rows: sample, shard, then limit

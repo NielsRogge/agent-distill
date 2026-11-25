@@ -626,6 +626,8 @@ def probe_jobs(run: Run, rev: str) -> list[jobs.Job]:
             "train",
             "--sample",
             str(sample),
+            "--limit",  # the eval stage's default --limit (50 rows) would otherwise cap every shard
+            str(sample),
             "--seed",
             "0",
             "--shard",
