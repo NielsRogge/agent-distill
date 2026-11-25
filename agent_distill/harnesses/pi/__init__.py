@@ -593,7 +593,9 @@ async def _terminate(process: asyncio.subprocess.Process) -> None:
         os.killpg(process.pid, signal.SIGTERM)
     try:
         await asyncio.wait_for(process.wait(), 10)
-    except TimeoutError:
+    except BaseException as exc:  # timed out, or cancelled again while waiting: never leave the agent running
         with suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
+        if not isinstance(exc, TimeoutError):
+            raise
         await process.wait()

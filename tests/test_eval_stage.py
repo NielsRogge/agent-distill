@@ -6,6 +6,8 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import os
+import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -83,8 +85,9 @@ def plain_context(monkeypatch):
 
 
 def run_label(harness: FakeHarness, writer: RecordWriter, **kwargs: Any) -> None:
+    kwargs = {"concurrency": 1, **kwargs}
     asyncio.run(common.run_episodes(harness, TASK, ROWS, ENDPOINT, writer, common.Plan(label="base"), limits=Limits(),
-                                    concurrency=1, cache=None, **kwargs))  # fmt: skip
+                                    cache=None, **kwargs))  # fmt: skip
 
 
 def test_run_label_skips_harness_failures_and_restarts(tmp_path) -> None:
@@ -148,6 +151,7 @@ class FakeHub:
         self.repos.setdefault(repo, {"private": private, "files": []})
 
     def list_repo_files(self, repo: str, repo_type: str = "model") -> list[str]:
+        self.repo_info(repo)  # not found: RepositoryNotFoundError
         return list(self.repos[repo]["files"])
 
     def upload_folder(self, *, folder_path: str, repo_id: str, repo_type: str, commit_message: str,
@@ -199,7 +203,7 @@ def test_eval_publish_creates_private_repos_and_keeps_raw_logs_apart(tmp_path, h
 def test_eval_publish_refuses_a_public_repo(tmp_path, hub, public) -> None:
     out, raw = written(tmp_path)
     hub.repos[public] = {"private": False, "files": []}
-    with pytest.raises(SystemExit, match="is public"):
+    with pytest.raises(common.PublishRefused, match="is public"):
         eval_stage.publish(out, "org/run-eval", "opencode@2.3.2", "t", raw_dir=raw, raw_repo="org/run-eval-raw")
     assert not any(call[0] == "upload_folder" and call[1] == public for call in hub.calls)
     assert hub.repos[public]["private"] is False  # never changed by the eval stage
@@ -223,6 +227,101 @@ def test_eval_main_publishes_what_finished_when_a_label_fails(tmp_path, monkeypa
     ((args, kwargs),) = published
     assert args[:2] == (tmp_path / "eval", "org/run-eval") and kwargs["raw_repo"] == "org/run-eval-raw"
     assert kwargs["raw_dir"] == tmp_path / "eval-raw"
+
+
+class BlockingHarness(FakeHarness):
+    """Row "1" finishes at once; every other episode runs until it is cancelled (and records that it was stopped,
+    like a harness terminating its subprocess)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.started: list[str] = []
+        self.stopped: list[str] = []
+        self.closed = 0
+
+    @asynccontextmanager
+    async def session(self, endpoints, *, cache=None, task=None):
+        self.sessions += 1
+        try:
+            yield "runner"
+        finally:
+            self.closed += 1
+
+    async def run_episode(self, runner, task, row, endpoint, limits):
+        if row["id"] == "1":
+            return episode("1")
+        self.started.append(row["id"])
+        try:
+            await asyncio.Event().wait()
+        finally:
+            self.stopped.append(row["id"])
+
+
+def finishes(target, timeout: float = 15.0) -> BaseException | None:
+    """Run `target` in a daemon thread (a hang fails the test instead of hanging it); return what it raised."""
+    outcome: dict[str, BaseException | None] = {}
+
+    def run() -> None:
+        try:
+            target()
+            outcome["raised"] = None
+        except BaseException as exc:  # SystemExit included: that is the bug
+            outcome["raised"] = exc
+
+    thread = threading.Thread(target=run, daemon=True)
+    started = time.monotonic()
+    thread.start()
+    thread.join(timeout)
+    assert not thread.is_alive(), f"still running after {timeout:g}s"
+    assert time.monotonic() - started < timeout
+    return outcome["raised"]
+
+
+@pytest.mark.parametrize("refusal", ["public-repo", "system-exit"])
+def test_a_refused_checkpoint_upload_stops_the_episode_loop(tmp_path, hub, refusal) -> None:
+    out = tmp_path / "eval"
+    writer = RecordWriter(out, "base/test")
+    hub.repos["org/run-eval"] = {"private": False, "files": []}
+    if refusal == "public-repo":  # the real path: publish() -> private_dataset() refuses the public repo
+        checkpoint = eval_stage.checkpoint(out, "org/run-eval", 1e-9, "opencode@2.3.2", "t", raw_dir=writer.raw_root,
+                                           raw_repo="org/run-eval-raw")  # fmt: skip
+    else:  # any SystemExit an upload raises in its thread is turned into a refusal, never escapes the loop
+
+        def upload(folder: Path, raw_folder: Path | None) -> None:
+            raise SystemExit("org/run-eval is public: refusing to upload unscanned episodes into it")
+
+        checkpoint = common.Checkpoint(out, upload, 1e-9, raw_dir=writer.raw_root)
+    harness = BlockingHarness()
+    threads = set(threading.enumerate())
+
+    raised = finishes(lambda: run_label(harness, writer, checkpoint=checkpoint, concurrency=4))
+
+    assert isinstance(raised, common.PublishRefused) and "is public" in str(raised)
+    assert harness.started and sorted(harness.stopped) == sorted(harness.started)  # every running episode stopped
+    assert harness.closed == harness.sessions == 1  # the harness session was closed, and not restarted
+    assert [r["row_id"] for r in read_jsonl(writer.episodes)] == ["1"]
+    assert not any(call[0] == "upload_folder" and call[1] == "org/run-eval" for call in hub.calls)
+    assert hub.repos["org/run-eval"]["private"] is False
+    assert set(threading.enumerate()) <= threads  # no executor or harness thread left behind
+
+
+def test_eval_main_exits_with_an_error_when_a_checkpoint_upload_is_refused(tmp_path, monkeypatch, hub) -> None:
+    hub.repos["org/run-eval"] = {"private": False, "files": []}
+    harness = BlockingHarness()
+    task = SimpleNamespace(**vars(TASK), dataset=SimpleNamespace(repo="org/data"), judge="")
+    monkeypatch.setattr(eval_stage, "load_task", lambda path: task)
+    monkeypatch.setattr(eval_stage, "load_harness", lambda profile, **kwargs: harness)
+    monkeypatch.setattr(eval_stage, "select_rows", lambda task, split, **kwargs: ROWS)
+    argv = ["--task", "examples/paper-urls", "--harness", "opencode@2.3.2", "--student", "qwen3.5-9b", "--model",
+            "Qwen/Qwen3.5-9B", "--split", "test", "--no-serve", "--output-dir", str(tmp_path / "eval"),
+            "--output-repo", "org/run-eval", "--upload-every", "1e-9", "--concurrency", "4",
+            "--cache", str(tmp_path / "cache")]  # fmt: skip
+
+    raised = finishes(lambda: eval_stage.main(argv))
+
+    assert isinstance(raised, common.PublishRefused) and "is public" in str(raised)  # a non-zero exit, not a hang
+    assert harness.started and sorted(harness.stopped) == sorted(harness.started)
+    assert not any(call[0] == "upload_folder" and call[1] == "org/run-eval" for call in hub.calls)
 
 
 RUN_TOML = Path("examples/paper-urls/run.toml")

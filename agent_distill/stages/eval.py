@@ -35,7 +35,7 @@ from agent_distill.reasoning import LeakGuard
 from agent_distill.records import RecordWriter, raw_root_for, read_jsonl, summarize_records
 from agent_distill.rubrics import ErrorBudget
 from agent_distill.rubrics.judge import make_judge_runner
-from agent_distill.stages.common import Checkpoint, Plan, resume_from_hub, run_episodes, shard
+from agent_distill.stages.common import Checkpoint, Plan, PublishRefused, resume_from_hub, run_episodes, shard
 from agent_distill.task import Limits, Task, load_task
 
 VLLM_PORT = 8000
@@ -212,7 +212,8 @@ def private_dataset(api: Any, repo: str) -> bool:
     """Create `repo` as a private dataset, or check that the existing one is private. Returns True when created.
 
     `create_repo(private=True, exist_ok=True)` leaves an existing public repo public, so unscanned episodes would be
-    uploaded straight into a public dataset: refuse instead.
+    uploaded straight into a public dataset: refuse instead (`PublishRefused`: this runs inside the episode loop's
+    checkpoints, where a `SystemExit` would escape the event loop instead of stopping the stage).
     """
     from huggingface_hub.utils import RepositoryNotFoundError
 
@@ -224,7 +225,7 @@ def private_dataset(api: Any, repo: str) -> bool:
     else:
         created = False
     if not info.private:
-        raise SystemExit(
+        raise PublishRefused(
             f"{repo} is public: refusing to upload unscanned episodes into it. Use a new repo name, or make it "
             "private and run `distill run ... --stages publish` after the upload to scan and publish it again."
         )
@@ -249,7 +250,7 @@ def publish(
     api = HfApi()
     if raw_dir is not None and raw_dir.exists() and any(raw_dir.rglob("*.jsonl")):
         if not raw_repo:
-            raise SystemExit("raw harness logs need a private --raw-repo; they never go into the episode dataset")
+            raise PublishRefused("raw harness logs need a private --raw-repo; they never go into the episode dataset")
         private_dataset(api, raw_repo)
         api.upload_folder(folder_path=str(raw_dir), repo_id=raw_repo, repo_type="dataset",
                           commit_message=f"agent-distill raw harness logs ({harness_id})")  # fmt: skip
