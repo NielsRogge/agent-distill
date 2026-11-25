@@ -8,10 +8,16 @@ in at most two sentences, seeing only that thought. Qwen3-4B-Instruct worked as 
 of the cost. Drafts that break the acceptance rules (`agent_distill.cot_proxy.rejection`) are retried with the next
 seed, up to three attempts; a turn whose drafts are all rejected, or that has no reasoning, gets an empty summary.
 
+Decoding: Qwen3-4B-Instruct-2507's recommended non-thinking settings (temperature 0.7, top-p 0.8, top-k 20), not the
+paper's 0.6 / 0.95, which were for its thinking annotator; at most 256 new tokens (a summary is at most 400 characters).
+Thoughts too long for the annotator's context are not sent; they get an empty summary and are counted. The stage fails
+(before uploading) when fewer than `--min-acceptance` of the turns with reasoning get a summary.
+
 The annotator runs offline in vLLM on the job's GPU. Output (a dataset repo created private and joined to the
 collection; `distill run --stages publish` scans it and makes it public): `summaries/summaries.jsonl`, one line per
 assistant turn of every accepted trajectory, `{row_id, turn, summary, attempts, rejections, thought_chars}`, plus
-`summaries/manifest.json`. `turn` is the index among the record's assistant messages, as SFT counts them.
+`summaries/manifest.json`. `turn` is the index among the record's assistant messages, as SFT counts them;
+`thought_sha256` fingerprints the thought, so SFT refuses summaries made from another episode of the same row.
 """
 
 from __future__ import annotations
@@ -47,10 +53,11 @@ def annotate(items: list[dict[str, Any]], generate: Any, attempts: int = cot_pro
     per conversation; rejected drafts are retried with the next seed."""
     results = {
         (i["row_id"], i["turn"]): {"row_id": i["row_id"], "turn": i["turn"], "summary": "", "attempts": 0,
-                                   "rejections": [], "thought_chars": len(i["thought"])}
+                                   "rejections": list(i.get("skipped", [])), "thought_chars": len(i["thought"]),
+                                   "thought_sha256": cot_proxy.thought_sha256(i["thought"])}
         for i in items
     }  # fmt: skip
-    pending = [item for item in items if item["thought"]]
+    pending = [item for item in items if item["thought"] and not item.get("skipped")]
     for seed in range(attempts):
         if not pending:
             break
@@ -81,6 +88,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--top-p", type=float, default=0.8)
     parser.add_argument("--top-k", type=int, default=20)
     parser.add_argument("--max-tokens", type=int, default=256, help="A summary is at most 400 characters")
+    parser.add_argument("--max-model-len", type=int, default=32768)
+    parser.add_argument(
+        "--min-acceptance", type=float, default=0.8, help="Fail when fewer of the turns with reasoning get a summary"
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("/annotate"))
     parser.add_argument("--output-repo", default="")
     parser.add_argument("--collection", default="")
@@ -106,7 +117,19 @@ def main(argv: list[str] | None = None) -> None:
 
     from vllm import LLM, SamplingParams
 
-    llm = LLM(model=args.model, max_model_len=32768, gpu_memory_utilization=0.85)
+    llm = LLM(model=args.model, max_model_len=args.max_model_len, gpu_memory_utilization=0.85)
+    tokenizer = llm.get_tokenizer()
+    room = args.max_model_len - args.max_tokens
+    for item in items:  # a thought the annotator cannot read whole is never clipped: it gets no summary
+        if item["thought"]:
+            text = tokenizer.apply_chat_template(cot_proxy.messages(item["thought"]), tokenize=False,
+                                                 add_generation_prompt=True)  # fmt: skip
+            if len(tokenizer.encode(text, add_special_tokens=False)) > room:
+                item["skipped"] = ["too long for the annotator"]
+    skipped = sum(bool(item.get("skipped")) for item in items)
+    if skipped:
+        print(f"WARNING: {skipped} thoughts exceed the annotator's context ({room} tokens); they get no summary",
+              flush=True)  # fmt: skip
 
     def generate(conversations: list[list[dict[str, str]]], seed: int) -> list[tuple[str, bool]]:
         params = SamplingParams(temperature=args.temperature, top_p=args.top_p, top_k=args.top_k,
@@ -121,6 +144,8 @@ def main(argv: list[str] | None = None) -> None:
                 "with_reasoning": with_thought, "accepted": accepted, "empty_after_rejections": with_thought - accepted,
                 "retries": sum(max(0, r["attempts"] - 1) for r in results),
                 "mean_summary_words": sum(len(r["summary"].split()) for r in results) / max(1, accepted),
+                "too_long_for_annotator": skipped, "decoding": {"temperature": args.temperature, "top_p": args.top_p,
+                                                                "top_k": args.top_k, "max_tokens": args.max_tokens},
                 "prompt": cot_proxy.SYSTEM_PROMPT}  # fmt: skip
     print(json.dumps({k: v for k, v in manifest.items() if k != "prompt"}), flush=True)
     out = args.output_dir / "summaries"
@@ -129,6 +154,10 @@ def main(argv: list[str] | None = None) -> None:
         for result in results:
             handle.write(record_line(result))
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
+    rate = accepted / max(1, with_thought)
+    if rate < args.min_acceptance:
+        raise SystemExit(f"only {accepted} of {with_thought} turns with reasoning got a summary ({rate:.0%} < "
+                         f"--min-acceptance {args.min_acceptance:.0%}); not uploading")  # fmt: skip
     if args.output_repo:
         from huggingface_hub import HfApi
 

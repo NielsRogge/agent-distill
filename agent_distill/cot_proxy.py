@@ -12,6 +12,7 @@ runs the annotator.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
@@ -93,3 +94,61 @@ def summary_block(summary: str) -> str:
 def summaries_by_turn(records: list[dict[str, Any]]) -> dict[tuple[str, int], str]:
     """Annotation records (`annotate` stage output) -> {(row_id, assistant turn index): summary ("" = rejected)}."""
     return {(str(r["row_id"]), int(r["turn"])): str(r.get("summary") or "") for r in records}
+
+
+def thought_sha256(thought: str) -> str:
+    """The fingerprint an annotation keeps of the thought it summarised (the stripped `reasoning_content`)."""
+    return hashlib.sha256(thought.strip().encode()).hexdigest()
+
+
+def record_thoughts(record: dict[str, Any]) -> list[str]:
+    """A trace record's per-turn thoughts, indexed like `turn` (every assistant message, in order)."""
+    return [str(m.get("reasoning_content") or "").strip() for m in record.get("messages") or []
+            if m.get("role") == "assistant"]  # fmt: skip
+
+
+class SummaryMismatch(ValueError):
+    pass
+
+
+def check_summaries(
+    records: list[dict[str, Any]], annotations: list[dict[str, Any]], *, min_coverage: float = 0.8
+) -> dict[str, float]:
+    """Check that the annotations belong to exactly these trace records and cover enough of their turns.
+
+    Annotations are keyed by (row_id, turn); each also holds a fingerprint of the thought it summarised
+    (`thought_sha256`, or only `thought_chars` in annotations written before the fingerprint existed). A different
+    episode of the same row (another attempt, another file or shard picked as "the" accepted record) has other
+    thoughts, so any mismatch raises instead of attaching another episode's summaries. Coverage is the share of turns
+    with a thought that have an accepted summary; below `min_coverage` it raises rather than rendering mostly empty
+    `<summary></summary>` blocks."""
+    by_key = {(str(a["row_id"]), int(a["turn"])): a for a in annotations}
+    mismatched: list[tuple[str, int]] = []
+    with_thought = covered = 0
+    for record in records:
+        row_id = str(record["row_id"])
+        for turn, thought in enumerate(record_thoughts(record)):
+            annotation = by_key.get((row_id, turn))
+            if annotation is not None:
+                if "thought_sha256" in annotation:
+                    same = annotation["thought_sha256"] == thought_sha256(thought)
+                else:
+                    same = int(annotation.get("thought_chars", -1)) == len(thought)
+                if not same:
+                    mismatched.append((row_id, turn))
+            if thought:
+                with_thought += 1
+                covered += bool(annotation and annotation.get("summary"))
+    if mismatched:
+        raise SummaryMismatch(
+            f"{len(mismatched)} annotated turns do not match the thoughts of the trace records SFT uses (first: "
+            f"{mismatched[:3]}); the summaries were made from other episodes of those rows. Re-run `annotate` on the "
+            "same traces (repo and files)."
+        )
+    coverage = covered / max(1, with_thought)
+    if coverage < min_coverage:
+        raise SummaryMismatch(
+            f"only {covered} of {with_thought} turns with reasoning have a CoT-proxy summary ({coverage:.0%} < "
+            f"{min_coverage:.0%}); check the annotate stage (or lower --min-summary-coverage)"
+        )
+    return {"turns_with_reasoning": with_thought, "summarised": covered, "coverage": coverage}

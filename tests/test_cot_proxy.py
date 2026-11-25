@@ -327,3 +327,81 @@ def test_mcp_tools_are_rendered_from_the_snapshot_as_pi_declares_them(tmp_path):
     assert tools[0]["function"]["description"] == "Details."
     assert tools[0]["function"]["parameters"] == {"type": "object", "properties": {"repo_ids": {}}}
     assert tools[1]["function"]["description"] == "Files" and tools[1]["function"]["parameters"]["properties"] == {}
+
+
+# --------------------------------------------------------------------------------------------------
+# Review fixes (#19): summary provenance and coverage, per-stage sampling, recipe defaults and dry-run checks
+# --------------------------------------------------------------------------------------------------
+
+
+def annotation(turn, thought, summary="Plan.", **extra):
+    return {"row_id": "r1", "turn": turn, "summary": summary, "thought_sha256": cot_proxy.thought_sha256(thought),
+            "thought_chars": len(thought), **extra}  # fmt: skip
+
+
+def test_summaries_from_another_episode_of_the_row_are_refused():
+    good = [annotation(0, "I should call hf."), annotation(1, "It says mit.")]
+    assert cot_proxy.check_summaries([RECORD], good)["coverage"] == 1.0
+    other_attempt = [annotation(0, "A different thought."), annotation(1, "It says mit.")]
+    with pytest.raises(cot_proxy.SummaryMismatch, match="other episodes"):
+        cot_proxy.check_summaries([RECORD], other_attempt)
+    legacy = [{k: v for k, v in a.items() if k != "thought_sha256"} for a in good]  # checked by length then
+    assert cot_proxy.check_summaries([RECORD], legacy)["summarised"] == 2
+
+
+def test_low_summary_coverage_is_refused():
+    sparse = [annotation(0, "I should call hf.", summary=""), annotation(1, "It says mit.")]
+    with pytest.raises(cot_proxy.SummaryMismatch, match="1 of 2"):
+        cot_proxy.check_summaries([RECORD], sparse, min_coverage=0.8)
+    assert cot_proxy.check_summaries([RECORD], sparse, min_coverage=0.5)["coverage"] == 0.5
+
+
+def test_annotations_fingerprint_the_thought_and_skip_overlong_ones():
+    items = annotate.turns([RECORD])
+    items[1]["skipped"] = ["too long for the annotator"]
+    results = annotate.annotate(items, lambda conversations, seed: [("Plan to call hf.", True)] * len(conversations))
+    assert results[0]["thought_sha256"] == cot_proxy.thought_sha256("I should call hf.")
+    assert results[1]["summary"] == "" and results[1]["attempts"] == 0
+    assert results[1]["rejections"] == ["too long for the annotator"]
+
+
+def test_trajectories_with_inline_think_blocks_are_skipped_in_empty_mode(capsys):
+    inline = {**RECORD, "row_id": "r2", "messages": [*RECORD["messages"][:-1],
+              {"role": "assistant", "content": "<think>hm</think>The license is MIT."}]}  # fmt: skip
+    trajectories = [sft.trajectory(r, keep_reasoning=False) for r in (RECORD, inline)]
+    assert len(sft.render_trajectory_examples(trajectories, QwenLikeTokenizer(), [], "empty")) == 1
+    assert "skipped 1 trajectories" in capsys.readouterr().out
+    assert len(sft.render_examples(trajectories, QwenLikeTokenizer(), [], "empty")) == 2  # r1's two turns only
+
+
+BASE_ARGS = ["--task", "t", "--harness", "pi@1.6.0", "--student", "s", "--traces", "x"]
+
+
+def test_the_recipe_takes_the_papers_defaults_unless_set():
+    paper = sft.parse_args([*BASE_ARGS, "--think-target", "empty"])
+    assert (paper.epochs, paper.learning_rate, paper.lora_dropout, paper.warmup_steps, paper.lora_rank) == (
+        8.0, 3e-5, 0.0, 2, 16)  # fmt: skip
+    legacy = sft.parse_args(BASE_ARGS)
+    assert (legacy.epochs, legacy.learning_rate, legacy.lora_dropout, legacy.warmup_steps, legacy.lora_rank) == (
+        2.0, 2e-4, 0.05, 0, None)  # fmt: skip
+    assert sft.parse_args([*BASE_ARGS, "--replay-repo", "o/r", "--epochs", "3"]).epochs == 3.0
+    with pytest.raises(SystemExit, match="--batch-size must be 1"):
+        sft.parse_args([*BASE_ARGS, "--replay-repo", "o/r", "--batch-size", "4"])
+
+
+def test_summaries_without_the_empty_target_fail_the_dry_run():
+    run = pipeline.make_run(load_run(SMOKE, {"sft.summaries": True}))
+    with pytest.raises(SystemExit, match="--think-target empty"):
+        pipeline.sft_jobs(run, "R")
+
+
+def test_the_thinking_profiles_sampling_is_for_evaluation_only():
+    from agent_distill.stages.eval import vllm_command
+
+    student = load_profile("students", "qwen3.5-4b-think")
+    probe = vllm_command(student, student.model, "", temperature=1.0)
+    assert probe.count("--override-generation-config") == 1
+    assert json.loads(probe[probe.index("--override-generation-config") + 1])["temperature"] == 1.0
+    assert "--override-generation-config" not in student.serve.vllm_extra_args  # GRPO's vLLM never sees it
+    args = sft.parse_args([*BASE_ARGS, *student.sft.args, "--think-target", "empty"])
+    assert args.epochs == 8.0  # the profile's SFT args leave the recipe's defaults alone
