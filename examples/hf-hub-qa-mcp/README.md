@@ -1,7 +1,8 @@
 # hf-hub-qa-mcp: Hub questions answered through the Hugging Face MCP server
 
-**Status: phase 1 (SFT) done on v2. Non-thinking Qwen3.5-4B goes from 73.3% to 80.0% on 150 test questions after
-SFT on 599 GLM-5.3 traces (teacher 98.7%), and its failed MCP calls drop from 41% to 13% (see "Results").**
+**Status: phase 1 (SFT) done on v2. On all 377 test questions, SFT on 599 GLM-5.3 traces takes non-thinking
+Qwen3.5-4B from 72.1% to 81.4% (McNemar p = 0.001; teacher 98.7%), and cuts its failed MCP calls from 45% to 12%. Pi
+GRPO works (2-step smoke); full GRPO awaits a budget decision.**
 
 A Pi agent answers questions about the Hugging Face Hub using only the tools of the
 [Hugging Face MCP server](https://huggingface.co/docs/hub/en/agents-mcp), through
@@ -306,3 +307,40 @@ kept for the record:
 
 Thinking mode is not comparable with the reasoning-free SFT data: SFT shows no gain there. Hence the non-thinking
 profile, and #14's guard that now flags reasoning leakage in every episode stage.
+
+### Full test split (377 questions)
+
+The same models on every v2 test question. The first 150 come from the run above, extended to all 377. Raw logs stayed
+in the jobs (`[hub] raw_logs = false`): nielsr's private storage was full.
+
+| | Passed | MCP calls / episode | Failed MCP calls |
+|---|---|---|---|
+| Qwen3.5-4B (base, non-thinking) | 272/377 (72.1%) | 6.13 | 45.0% |
+| **Qwen3.5-4B + SFT** | **307/377 (81.4%)** | **3.38** | **11.9%** |
+| GLM-5.3 (teacher) | 372/377 (98.7%) | 3.15 | 6.6% |
+
+Base vs SFT on the same 377 questions: SFT fixed 72 and broke 37 (exact McNemar **p = 0.001**). The gain that was not
+significant at 150 questions is significant on the full split.
+
+| Template | n | Base | SFT | Teacher |
+|---|---|---|---|---|
+| paper_title | 69 | 47 | **61** | 69 |
+| base_pipeline | 36 | 25 | **34** | 36 |
+| paper_first_author | 67 | 56 | **66** | 67 |
+| base_params | 81 | 57 | 63 | 80 |
+| gguf_count | 37 | 15 | 17 | 37 |
+| base_license | 15 | 14 | 14 | 13 |
+| safetensors_count | 20 | 13 | 12 | 20 |
+| params_sum | 52 | 45 | **40** | 50 |
+
+SFT gains most on lookups through a model's card: the linked paper and the base model. It does not learn to count a
+repo's files (`gguf_count` 17/37 against the teacher's 37/37) and loses ground on adding up three models' parameters.
+Those rows are the GRPO targets.
+
+### GRPO smoke
+
+Run `qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-smoke`. Two GRPO steps (TRL async GRPO, 2× H200) from the SFT
+checkpoint, with the student served non-thinking and MCP rollouts through the capture proxy: both steps finished and
+the adapter was pushed and merged. This is the first time Pi GRPO has made a step in this repository. On unfiltered
+train rows the SFT student is right 95.5% of the time, so the in-group reward spread was only 0.04. A real GRPO run
+first needs the difficulty probe, to keep the rows it solves only sometimes.
