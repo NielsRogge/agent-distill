@@ -1,7 +1,7 @@
 # hf-hub-qa-mcp: Hub questions answered through the Hugging Face MCP server
 
-**Status: smoke run passed; validation baseline shows hf-hub-facts v1 is near the ceiling (base 96%). A harder v2 is
-proposed before the full SFT run (see "Validation baseline").**
+**Status: v1 (single lookups) was a ceiling (base 96%), so the task moved to v2 (multi-hop and file counts; base 74.5%,
+teacher 97.4%). The full v2 SFT run (`qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160`) is running.**
 
 A Pi agent answers questions about the Hugging Face Hub using only the tools of the
 [Hugging Face MCP server](https://huggingface.co/docs/hub/en/agents-mcp), through
@@ -228,3 +228,31 @@ pass rate of about 30–60%:
 - comparison: which of three models has the most parameters or downloads (frozen counts);
 - listing and aggregation: number of files, largest weight file, GGUF quantizations in a repo;
 - organization questions: a model's collections, or an organization's newest model (frozen at snapshot).
+
+## v2 validation baseline (2026-11-25)
+
+[`nielsr/hf-hub-facts-v2`](https://huggingface.co/datasets/nielsr/hf-hub-facts-v2) (`questions_v2.py`): every question
+needs at least two lookups or a repo's full file listing. 1,162 train / 149 validation / 377 test; all rows pass the
+oracle, no-op and canary checks. Run `qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160`, all 149 validation rows; no row drifted.
+
+| | Passed | MCP calls / episode | Failed MCP calls |
+|---|---|---|---|
+| Qwen3.5-4B (base) | **111/149 (74.5%)** | 5.8 | 36.3% |
+| GLM-5.3 (teacher) | **148/152 (97.4%)** | 3.3 | 8.6% |
+
+The teacher has 152 episodes because 3 cut-short episodes were rerun.
+
+| Template | Base | Teacher |
+|---|---|---|
+| gguf_count | 7/20 | 19/20 |
+| safetensors_count | 2/7 | 7/7 |
+| paper_title | 19/26 | 26/26 |
+| base_params | 20/29 | 29/29 |
+| paper_first_author | 22/25 | 25/25 |
+| base_pipeline | 16/17 | 17/17 |
+| params_sum | 24/24 | 24/24 |
+| base_license | 1/1 | 1/1 |
+
+The headroom is about 23 points. It sits in file counting (listing every folder with `hf_fs`), paper lookups through a
+model's tags, and the base model's size. Tool competence differs more than the pass rate: the base model fails 36% of
+its MCP calls (`mcp_errors`), the teacher 9%.
