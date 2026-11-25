@@ -33,7 +33,48 @@ SUBMIT_TOOLS = {"structuredoutput", "submit"}
 # --------------------------------------------------------------------------------------------------
 
 
-def load_accepted(paths: list[Path], *, harness: str, allow_mismatch: bool = False) -> list[dict[str, Any]]:
+def parse_metric_caps(specs: list[str] | None) -> dict[str, float]:
+    caps: dict[str, float] = {}
+    for spec in specs or []:
+        key, sep, raw = spec.partition("=")
+        if not sep or not key.strip():
+            raise SystemExit(f"bad --max-metric {spec!r} (expected NAME=MAX)")
+        caps[key.strip()] = float(raw)
+    return caps
+
+
+def filter_records(
+    records: list[dict[str, Any]],
+    *,
+    max_metrics: dict[str, float] | None = None,
+    max_tool_calls: int | None = None,
+) -> list[dict[str, Any]]:
+    """Drop accepted traces that exceed metric caps (e.g. `hf_errors=0`) or tool-call caps."""
+    if not max_metrics and max_tool_calls is None:
+        return records
+    kept: list[dict[str, Any]] = []
+    for record in records:
+        if max_tool_calls is not None and int(record.get("tool_calls") or 0) > max_tool_calls:
+            continue
+        scores = record.get("scores") or {}
+        if max_metrics and any(
+            scores.get(key) is not None and float(scores[key]) > cap for key, cap in max_metrics.items()
+        ):
+            continue
+        kept.append(record)
+    if not kept:
+        raise ValueError("no accepted trajectories remain after filtering")
+    return kept
+
+
+def load_accepted(
+    paths: list[Path],
+    *,
+    harness: str,
+    allow_mismatch: bool = False,
+    max_metrics: dict[str, float] | None = None,
+    max_tool_calls: int | None = None,
+) -> list[dict[str, Any]]:
     """Accepted records (first per row) from episode JSONL files, all from `harness` (`name@version`).
 
     DESIGN.md §6 "No mixing of versions": records from another `harness@version` refuse the run, unless
@@ -55,7 +96,15 @@ def load_accepted(paths: list[Path], *, harness: str, allow_mismatch: bool = Fal
         print(f"WARNING: {message} (--allow-harness-mismatch: training on them)", flush=True)
     if not by_row:
         raise ValueError(f"no accepted {harness} trajectories in {[str(p) for p in paths]}")
-    return list(by_row.values())
+    records = list(by_row.values())
+    filtered = filter_records(records, max_metrics=max_metrics, max_tool_calls=max_tool_calls)
+    if len(filtered) != len(records):
+        print(
+            f"filtered {len(records)} accepted traces -> {len(filtered)} "
+            f"(max_metrics={max_metrics or {}}, max_tool_calls={max_tool_calls})",
+            flush=True,
+        )
+    return filtered
 
 
 def chat_message(message: dict[str, Any], *, keep_reasoning: bool) -> dict[str, Any]:
@@ -204,9 +253,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--profiles", action="append", type=Path, default=[])
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--traces", nargs="+", type=Path, help="Local episode JSONL files")
-    source.add_argument("--traces-repo", help="Dataset repo; reads episodes/**/*.jsonl (or --traces-files)")
+    source.add_argument(
+        "--traces-repo",
+        action="append",
+        help="Dataset repo (repeatable); reads episodes/**/*.jsonl (or --traces-files)",
+    )
     parser.add_argument("--traces-files", nargs="*", help="Files in --traces-repo")
     parser.add_argument("--allow-harness-mismatch", action="store_true")
+    parser.add_argument(
+        "--max-metric",
+        action="append",
+        default=[],
+        metavar="NAME=MAX",
+        help="Skip accepted traces whose score[NAME] exceeds MAX (repeatable, e.g. hf_errors=0)",
+    )
+    parser.add_argument("--max-tool-calls", type=int, help="Skip accepted traces with more than N tool calls")
     parser.add_argument("--model", help="Student checkpoint (default: the profile's model)")
     parser.add_argument("--output", type=Path, default=Path("/sft/adapter"))
     parser.add_argument("--hub-model-id", default="", help="Push the adapter (a public model repo)")
@@ -217,8 +278,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
+    parser.add_argument("--lr-scheduler-type", default="linear")
+    parser.add_argument("--warmup-ratio", type=float, default=0.0)
+    parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--epochs", type=float, default=2.0)
     parser.add_argument("--lora-rank", type=int)
+    parser.add_argument("--lora-alpha", type=int)
+    parser.add_argument("--lora-dropout", type=float, default=0.05)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--save-steps", type=int, default=5)
     parser.add_argument("--save-total-limit", type=int)
     parser.add_argument("--no-4bit", action="store_true")
@@ -242,13 +309,21 @@ def main(argv: list[str] | None = None) -> None:
     if args.traces_repo:
         from huggingface_hub import HfApi, hf_hub_download
 
-        names = args.traces_files or [
-            name
-            for name in HfApi().list_repo_files(args.traces_repo, repo_type="dataset")
-            if name.startswith("episodes/") and name.endswith(".jsonl")
-        ]
-        paths = [Path(hf_hub_download(args.traces_repo, name, repo_type="dataset")) for name in names]
-    records = load_accepted(paths, harness=args.harness, allow_mismatch=args.allow_harness_mismatch)
+        api = HfApi()
+        for repo in dict.fromkeys(args.traces_repo):
+            names = args.traces_files or [
+                name
+                for name in api.list_repo_files(repo, repo_type="dataset")
+                if name.startswith("episodes/") and name.endswith(".jsonl")
+            ]
+            paths.extend(Path(hf_hub_download(repo, name, repo_type="dataset")) for name in names)
+    records = load_accepted(
+        paths,
+        harness=args.harness,
+        allow_mismatch=args.allow_harness_mismatch,
+        max_metrics=parse_metric_caps(args.max_metric),
+        max_tool_calls=args.max_tool_calls,
+    )
     keep_reasoning = student.sft.keep_reasoning
     trajectories = [trajectory(record, keep_reasoning=keep_reasoning) for record in records]
     from agent_distill.harnesses.tools import harness_tools
@@ -306,14 +381,15 @@ def train(args: argparse.Namespace, student: Any, model_id: str, tokenizer: Any,
                 config.use_cache = False
         model_init_kwargs = None
     rank = args.lora_rank or student.lora.rank
+    alpha = args.lora_alpha if args.lora_alpha is not None else rank * 2
     trainer = SFTTrainer(
         model=model,
         processing_class=tokenizer,
         train_dataset=Dataset.from_list(rows),
         peft_config=LoraConfig(
             r=rank,
-            lora_alpha=rank * 2,
-            lora_dropout=0.05,
+            lora_alpha=alpha,
+            lora_dropout=args.lora_dropout,
             bias="none",
             task_type="CAUSAL_LM",
             target_modules=lora_target_modules(student.lora.sft_target_modules),
@@ -326,8 +402,12 @@ def train(args: argparse.Namespace, student: Any, model_id: str, tokenizer: Any,
             per_device_train_batch_size=args.batch_size,
             gradient_accumulation_steps=args.gradient_accumulation,
             learning_rate=args.learning_rate,
+            lr_scheduler_type=args.lr_scheduler_type,
+            warmup_ratio=args.warmup_ratio,
+            weight_decay=args.weight_decay,
             num_train_epochs=args.epochs,
             max_steps=args.max_steps,
+            seed=args.seed,
             bf16=not args.fp16,
             fp16=args.fp16,
             gradient_checkpointing=True,

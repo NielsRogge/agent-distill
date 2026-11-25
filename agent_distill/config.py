@@ -282,6 +282,7 @@ class HubSettings:
     namespace: str = ""
     bill_to: str = ""  # X-HF-Bill-To for Inference Providers and --namespace for Jobs ("" = your account)
     collection: str = ""
+    raw_logs: bool = True  # upload raw harness logs to the private -raw repo (false: keep local to the job)
 
 
 @dataclass
@@ -304,6 +305,7 @@ class EvalSettings:
 @dataclass
 class TracesRun:
     split: str = "train"
+    start: int = 0  # first row index after the task's train filter
     limit: int | None = None  # first N train rows after the task's train filter, in total over the shards (None: all)
     shards: int | None = None  # default: the teacher profile's
     attempts: int | None = None  # default: the teacher profile's

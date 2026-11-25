@@ -293,7 +293,7 @@ def output_args(run: Run, suffix: str) -> list[str]:
     """Where an episode stage's raw logs go (the always-private `-raw` sibling of its dataset, never the dataset
     itself), and the collection a newly created dataset joins at once."""
     raw = "raw" if suffix == "traces" else f"{suffix}-raw"
-    args = ["--raw-repo", jobs.q(run.repo(raw))]
+    args = ["--raw-repo", jobs.q(run.repo(raw))] if run.config.hub.raw_logs else ["--no-raw-upload"]
     if run.config.hub.collection:
         args += ["--collection", jobs.q(run.config.hub.collection), "--collection-note",
                  jobs.q(collection_note(run, suffix))]  # fmt: skip
@@ -466,6 +466,8 @@ def trace_jobs(run: Run, rev: str) -> list[jobs.Job]:
             "--output-repo",
             jobs.q(run.repo("traces")),
         ]
+        if settings.start:
+            args += ["--start", str(settings.start)]
         if settings.limit:
             args += ["--limit", str(settings.limit)]
         if settings.attempts:
@@ -642,6 +644,8 @@ def probe_jobs(run: Run, rev: str) -> list[jobs.Job]:
             "--purpose",
             "train",
             "--sample",
+            str(sample),
+            "--limit",
             str(sample),
             "--seed",
             "0",

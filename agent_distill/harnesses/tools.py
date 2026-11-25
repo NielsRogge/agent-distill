@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from agent_distill.task import Task
+from agent_distill.task import Task, TextAnswer
 
 TOOLS_DIR = Path(__file__).resolve().parent / "tools"
 SUBMIT_TOOLS = {"structuredoutput", "submit"}
@@ -30,6 +30,8 @@ def tool_schemas(harness: str, version: str, task: Task, allowed: set[str]) -> l
     for tool in tools:
         name = tool["function"]["name"]
         if name.lower() in SUBMIT_TOOLS:
+            if isinstance(task.answer, TextAnswer):  # the final message is the answer: no submit tool
+                continue
             if schema is None:  # a file answer: Pi's argument-free submit as captured
                 if not tool["function"]["parameters"].get("properties"):
                     result.append(tool)

@@ -67,6 +67,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Reruns per row of episodes cut short by a timeout or provider error")  # fmt: skip
     parser.add_argument("--raw-output-dir", type=Path, help="Raw harness logs (default: <output-dir>-raw)")
     parser.add_argument("--raw-repo", default="", help="Always-private raw-log dataset (default: <output-repo>-raw)")
+    parser.add_argument("--no-raw-upload", action="store_true", help="Keep raw harness logs local (do not upload)")
     parser.add_argument("--collection", default="", help="Collection to add a newly created --output-repo to")
     parser.add_argument("--collection-note", default="")
     parser.add_argument("--max-error-rate", type=float, default=0.05,
@@ -100,7 +101,8 @@ def main(argv: list[str] | None = None) -> None:
         max_tool_calls=args.max_tool_calls or max(settings.max_tool_calls, task.limits.max_tool_calls or 0),
     )
     raw_dir = args.raw_output_dir or raw_root_for(args.output_dir)
-    raw_repo = args.raw_repo or (f"{args.output_repo}-raw" if args.output_repo else "")
+    raw_repo = "" if args.no_raw_upload else (args.raw_repo or (f"{args.output_repo}-raw" if args.output_repo else ""))
+    upload_raw = None if args.no_raw_upload else raw_dir
     if args.output_repo:
         refuse_public(args.output_repo, raw_repo)
     rows = trace_rows(task, args)
@@ -151,7 +153,7 @@ def main(argv: list[str] | None = None) -> None:
                     args.upload_every,
                     profile.id,
                     task.name,
-                    raw_dir=raw_dir,
+                    raw_dir=upload_raw,
                     raw_repo=raw_repo,
                     collection=args.collection,
                     note=args.collection_note,
@@ -161,7 +163,7 @@ def main(argv: list[str] | None = None) -> None:
             )
         )
     finally:
-        finish(args, task, teacher, profile, rows, limits, writer, prefix, raw_dir, raw_repo)
+        finish(args, task, teacher, profile, rows, limits, writer, prefix, upload_raw, raw_repo)
 
 
 def finish(args, task, teacher, profile, rows, limits, writer, prefix, raw_dir, raw_repo) -> None:

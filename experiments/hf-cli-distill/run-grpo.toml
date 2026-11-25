@@ -1,0 +1,39 @@
+# Cursor experiment (phase 2): Difficulty probe + on-policy GRPO in the real Pi + hf CLI harness,
+# starting from our merged thinking-SFT checkpoint.
+task = "../../examples/hf-hub-qa"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think-grpo"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160"
+profiles = ["profiles"]
+stages = ["probe", "grpo"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[probe]
+split = "train"
+sample = 1162
+k = 4
+shards = 4
+timeout = "4h"
+
+[grpo]
+timeout = "6h"
+use_probe = true
+
+[eval]
+splits = ["test"]
+limit = 377
+concurrency = 4
+timeout = 300
+max_tool_calls = 15
+variants = ["grpo"]
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 100
