@@ -84,3 +84,28 @@ def hf_calls(tool_events: list[Any]) -> float:
 @metric
 def answer_chars(answer: Any) -> float | None:
     return float(len(str(answer))) if answer else None
+
+
+HF_CALL = re.compile(r"(?:^|[\s;&|(`])hf\s+[a-z]")
+CLI_ERROR = re.compile(
+    r"Error: (?:No such (?:command|option)|Invalid value|Missing (?:argument|option)|Got unexpected)"
+)
+
+
+def rejected(event: Any) -> bool:
+    """An `hf` call the CLI rejected: an invented command or option, or an invalid value."""
+    text = f"{getattr(event, 'output', '') or ''}{getattr(event, 'error', '') or ''}"
+    return bool(HF_CALL.search(command_of(event)) and CLI_ERROR.search(text))
+
+
+@metric
+def hf_errors(tool_events: list[Any]) -> float:
+    """How many `hf` calls the CLI rejected: how well the agent knows the CLI, which the pass rate hides (v1
+    validation: base Qwen3.5-4B 33% of its calls, GLM-5.3 5%)."""
+    return float(sum(1 for e in shell_events(tool_events) if rejected(e)))
+
+
+@metric
+def read_skill(tool_events: list[Any]) -> float:
+    """1 if the agent read the hf-cli skill (SKILL.md) at least once."""
+    return float(any("SKILL.md" in json.dumps(getattr(e, "input", None) or {}) for e in tool_events or []))

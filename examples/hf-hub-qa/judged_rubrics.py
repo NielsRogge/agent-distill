@@ -13,7 +13,7 @@
   it scores and checks the answer against it: recall of the top-k ids (a match anywhere in the listing's top 2k
   counts) or the stated fact. Not scored (None) without a reference.
 - `answer_quality` (judge): correctness against what the tools returned, relevance, completeness and clarity, 1-10.
-- Metrics, recorded only: number of `hf` calls, answer length.
+- Metrics, recorded only: `hf_calls`, `hf_errors` (calls the CLI rejected), `read_skill`, answer length.
 
 reward = gate(answered, gate(read_only, gate(used_hub, weighted(answer_quality 2, grounded 1, reference 1))));
 an episode passes when it answered, stayed read-only, used the Hub, every named id was seen (grounded = 1), the
@@ -30,7 +30,18 @@ from agent_distill.rubrics import RubricSet, gate, programmatic, weighted
 from agent_distill.rubrics.grounding import grounded_score
 from agent_distill.rubrics.judge import judge
 
-from .cli import answer_chars, answered, command_of, hf_calls, read_only, run_hf, tool_text, used_hub
+from .cli import (
+    answer_chars,
+    answered,
+    command_of,
+    hf_calls,
+    hf_errors,
+    read_only,
+    read_skill,
+    run_hf,
+    tool_text,
+    used_hub,
+)
 
 PASS_SCORE = 7  # of 10
 SCALE = (1.0, 10.0)
@@ -138,7 +149,7 @@ def passed(scores: dict[str, float | None]) -> bool:
 
 
 RUBRICS = RubricSet(
-    [answered, read_only, used_hub, grounded, reference, answer_quality, hf_calls, answer_chars],
+    [answered, read_only, used_hub, grounded, reference, answer_quality, hf_calls, hf_errors, read_skill, answer_chars],
     reward=gate(
         "answered",
         gate("read_only", gate("used_hub", weighted({"answer_quality": 2.0, "grounded": 1.0, "reference": 1.0}))),

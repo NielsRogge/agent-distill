@@ -12,7 +12,7 @@ The same rubrics as the MCP twin (examples/hf-hub-qa-mcp), with the CLI's tool g
   row has drifted and the episode is unscorable (None), never a 0.
 - `grounded`: of the Hub ids the answer names, the share that appears in the episode's own tool output
   (agent_distill.rubrics.grounding). Not scored (None) when the answer names no ids.
-- Metrics: `hf_calls`, `answer_chars`.
+- Metrics, recorded only: `hf_calls`, `hf_errors` (calls the CLI rejected), `read_skill`, `answer_chars`.
 
 reward = gate(answered, gate(read_only, gate(used_hub, weighted(fact_correct 1, grounded 0.25))))
          + 0.1 * (1 - hf_calls / 20) when the episode passed    (the tool-efficiency bonus, for GRPO)
@@ -29,7 +29,7 @@ from agent_distill.hub_facts import live_value
 from agent_distill.rubrics import RubricSet, bonus_if, facts, gate, programmatic, weighted
 from agent_distill.rubrics.grounding import grounded_score
 
-from .cli import answer_chars, answered, hf_calls, read_only, tool_text, used_hub
+from .cli import answer_chars, answered, hf_calls, hf_errors, read_only, read_skill, tool_text, used_hub
 
 EFFICIENCY_CALLS = 20
 
@@ -77,7 +77,7 @@ def passed(scores: dict[str, float | None]) -> bool:
 
 
 RUBRICS = RubricSet(
-    [answered, read_only, used_hub, fact_correct, grounded, hf_calls, answer_chars],
+    [answered, read_only, used_hub, fact_correct, grounded, hf_calls, hf_errors, read_skill, answer_chars],
     reward=bonus_if(
         efficiency,
         gate("answered", gate("read_only", gate("used_hub", weighted({"fact_correct": 1.0, "grounded": 0.25})))),

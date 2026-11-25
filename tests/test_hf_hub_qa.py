@@ -198,3 +198,15 @@ def test_jobs_get_the_task_file_a_run_names(tmp_path):
     judged = pipeline.make_run(load_run(Path("examples/hf-hub-qa/run-judged-pilot.toml"), {}))
     assert pipeline.job_task(folder) == "/work/task" and folder.task.name == "hf-hub-qa"
     assert pipeline.job_task(judged) == "/work/task/judged.py" and judged.task.name == "hf-hub-qa-judged"
+
+
+def test_cli_error_and_skill_metrics(monkeypatch):
+    events = [
+        {"kind": "read", "name": "read", "input": {"path": "/work/task/skills/hf-cli/SKILL.md"}, "output": "---"},
+        shell("hf models show Qwen/Qwen3.5-9B", "Error: No such command 'show'.", success=False),
+        shell("hf models list --format table", "Error: Invalid value for '--format': 'table'.", success=False),
+        INFO,
+    ]
+    events[0] = ToolEvent(**events[0], success=True)
+    result = score_fact(monkeypatch, "`Qwen/Qwen3.5-9B` is licensed Apache 2.0.", events)
+    assert result.scores["hf_errors"] == 2.0 and result.scores["read_skill"] == 1.0 and result.passed

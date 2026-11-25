@@ -70,4 +70,12 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
   - The 12 failures as run were checker false negatives: correct answers that mentioned other values in context, and
     a dual license.
   - Median 2 tool calls; 100 of 127 episodes read the skill.
-- **Full run** (`run.toml`): in progress.
+- **Facts v1, base Qwen3.5-4B** (127 validation questions): 118/127 (93%), against MCP's 122/127. v1 is a ceiling
+  for both twins, so both moved to v2.
+  - The pass rate hides how badly the base model uses the CLI. It read the skill in 2 of 127 episodes (GLM-5.3:
+    100). The CLI rejected 33% of its `hf` calls (GLM-5.3: 5%): invented commands such as `hf models show`,
+    `hf search` and `hf papers view`, and options such as `--arxiv`. It went around the CLI to the API (`curl`,
+    Python) in 35 episodes. The `hf_errors` and `read_skill` metrics now record this in every evaluation.
+  - The pinned skill itself says `--format table` is the default, which CLI 2.4.0 rejects (it accepts `agent`,
+    `auto`, `human`, `json`, `quiet`); `hf skills preview` generates that line.
+- **Facts v2 baseline and full run:** in progress.
