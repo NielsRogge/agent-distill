@@ -431,7 +431,23 @@ unchanged.
 | Visible text | `sft --strip-visible-text` | A turn that calls tools keeps only the calls; the teacher's prose around them (about half of GLM-5.3's tool turns) is dropped, as the paper strips everything to the parsed action (keeping it cost 10-12 points there). A turn without tool calls is the final answer of a `TextAnswer` task and keeps its text: it is the action. |
 | CoT-proxy | `annotate` stage, `[sft] summaries = true` | A small instruct model (default Qwen3-4B-Instruct-2507, offline vLLM) summarises each turn's teacher reasoning in at most two sentences, seeing only that thought (Appendix A prompt and acceptance rules, three attempts, else an empty summary). SFT puts `<summary>S</summary>` after the empty think block and before the action, supervised. Needs traces that kept `reasoning_content`. |
 | KL replay | `replay` stage, `[sft] replay = true` | The initial student's own generations (thinking on) on 1,000 out-of-domain prompts (OpenR1-Math, OpenAssistant), plus 100 held out. Each update mixes 17 teacher trajectories with 3 replay samples; loss = CE on teacher tokens / their count + KL(p_init ‖ p_θ) on replay tokens / their count, with p_init the base model with the LoRA adapter disabled. A custom loop (`stages.sft.train_kl_replay`) computes logits only at supervised positions, reports the held-out drift (KL per token) in `kl_replay_report.json` next to the adapter. The pool depends only on the student, so runs share one (`[repos] replay`). In-domain replay must not be used: it holds the policy in place. |
-| Thinking student | `qwen3.5-4b-think` profile | Thinking on, vLLM's `qwen3` reasoning parser (no reasoning in the visible content, so the leak guard stays quiet), 8,192 output tokens per turn, temperature 0.6 / top-p 0.95 / top-k 20. |
+| Thinking student | `qwen3.5-4b-think` profile | Thinking on, vLLM's `qwen3` reasoning parser (no reasoning in the visible content, so the leak guard stays quiet), 8,192 output tokens per turn. Evaluations sample at temperature 0.6 / top-p 0.95 / top-k 20 (`[serve] generation_config`, evaluation only: the probe and GRPO keep their own sampling). |
+
+- **Provenance of summaries.** Annotations are keyed by (row, assistant turn) and fingerprint the thought they
+  summarise. SFT refuses summaries whose fingerprints do not match the trace records it trains on (another attempt or
+  file of the same row), and refuses coverage below `--min-summary-coverage` (default 80% of the turns with
+  reasoning). The annotate stage fails before uploading below `--min-acceptance`; thoughts longer than the
+  annotator's context are not clipped but left without a summary and counted.
+- **Defaults.** With any recipe flag (`--think-target empty`, `--replay-repo`, `--summaries-repo`), the SFT stage
+  defaults to the paper's 8 passes, lr 3e-5 constant after 2 warmup updates, LoRA r16 / alpha 32 and no dropout;
+  explicit flags win. The dry run parses the SFT job's effective arguments, so a misconfigured recipe is refused
+  before launch. The KL-replay loop takes one sample at a time (`--batch-size` 1; `--gradient-accumulation` and
+  `--save-total-limit` do not apply) and warns when a teacher sample is a single turn instead of a trajectory.
+- **Replay truncation.** Replay completions are capped at `--max-tokens` (4,096 by default), so many OpenR1-Math
+  generations are cut mid-reasoning. That is harmless for a KL target (no end-of-sequence is needed), but the pool
+  covers the start of long reasoning more than its end; the paper's 32k training context fits longer samples.
+- **MCP tools.** SFT renders a task's MCP tools from `Task.mcp_servers` (read with `getattr`, so it is inert until
+  the MCP support of #13 is on main).
 
 **History at inference.** The paper keeps the student's own reasoning in its history. Pi 1.6.0 does: it stores
 the parsed reasoning as a thinking block and, for the same model, sends it back on later turns in the reasoning
@@ -440,8 +456,9 @@ assistant turn after the user's question, which in a one-question agent episode 
 field into the template; the thinking baselines check it from the records (per-call prompt tokens grow by the
 previous turn's reasoning).
 
-Paper hyperparameters, set in the run's `[sft] args`: `--think-target empty --strip-visible-text --lora-rank 16
---lora-alpha 32 --lora-dropout 0 --learning-rate 3e-5 --warmup-steps 2 --epochs 8 --full-trajectory`.
+A run turns the recipe on with `[sft] replay = true`, `summaries = true` and `args = ["--think-target", "empty",
+"--strip-visible-text"]` (the paper's hyperparameters are then the defaults) and serves the student with
+`qwen3.5-4b-think`.
 
 **Code staging.** Before jobs are launched:
 

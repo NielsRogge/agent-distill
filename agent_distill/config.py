@@ -102,6 +102,9 @@ class ServeSettings:
     max_output_tokens: int = 1024
     gpu_memory_utilization: float = 0.85
     vllm_extra_args: str = ""
+    # Sampling for evaluation serving (vLLM --override-generation-config), e.g. a thinking student's decoding. The probe
+    # and GRPO never use it: they sample at their own temperature (untruncated, for GRPO's logprobs).
+    generation_config: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

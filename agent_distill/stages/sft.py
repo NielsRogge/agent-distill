@@ -159,16 +159,28 @@ def supervised_start(prompt: str, through: str, think_target: str = "native") ->
     return start
 
 
+def has_inline_reasoning(messages: list[dict]) -> bool:
+    """Does a turn's visible text carry a think block (`<think>` / `</think>` in the content), which the template
+    would turn into reasoning? Such a trajectory cannot get the empty-think target; the caller skips and counts it."""
+    from agent_distill.reasoning import MARKERS
+
+    return any(m.get("role") == "assistant" and MARKERS.search(str(m.get("content") or "")) for m in messages)
+
+
 def render_trajectory_examples(
     trajectories: list[list[dict]], tokenizer: Any, tools: list[dict], think_target: str = "native"
 ) -> list[dict]:
     """One example per trajectory with every assistant turn supervised, when the template is prefix-stable."""
     examples: list[dict[str, Any]] = []
     fallback: list[list[dict]] = []
+    inline = 0
     for messages in trajectories:
         full = tokenizer.apply_chat_template(messages, tools=tools, tokenize=False, add_generation_prompt=False)
         spans: list[list[int]] = []
         stable = True
+        if think_target == "empty" and has_inline_reasoning(messages):
+            inline += 1
+            continue
         for index, message in enumerate(messages):
             if message.get("role") != "assistant":
                 continue
@@ -189,6 +201,9 @@ def render_trajectory_examples(
             continue
         if spans:
             examples.append({"prompt": full, "completion": "", "spans": json.dumps(spans)})
+    if inline:
+        print(f"skipped {inline} trajectories whose visible text carries a think block (--think-target empty)",
+              flush=True)  # fmt: skip
     if fallback:
         print(f"{len(fallback)} trajectories are not prefix-stable; using per-turn examples for them", flush=True)
         examples += [{**row, "spans": ""} for row in render_examples(fallback, tokenizer, tools, think_target)]
@@ -202,6 +217,8 @@ def render_examples(
     """One example per assistant turn: the history as prompt, the turn as completion."""
     examples: list[dict[str, str]] = []
     for messages in trajectories:
+        if think_target == "empty" and has_inline_reasoning(messages):
+            continue
         history: list[dict[str, Any]] = []
         for message in messages:
             if message.get("role") != "assistant":
@@ -296,8 +313,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-steps", type=int, default=-1, help="Stop after N optimizer steps (smoke runs)")
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation", type=int, default=16)
-    parser.add_argument("--learning-rate", type=float, default=2e-4)
-    parser.add_argument("--epochs", type=float, default=2.0)
+    parser.add_argument("--learning-rate", type=float, help="Default 2e-4; 3e-5 with the cross-format recipe")
+    parser.add_argument("--epochs", type=float, help="Default 2; 8 with the cross-format recipe")
     parser.add_argument("--lora-rank", type=int)
     parser.add_argument("--save-steps", type=int, default=5)
     parser.add_argument("--save-total-limit", type=int)
@@ -326,11 +343,40 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     recipe.add_argument("--teacher-per-update", type=int, default=17)
     recipe.add_argument("--replay-per-update", type=int, default=3)
     recipe.add_argument("--lora-alpha", type=int, help="Default: twice the rank")
-    recipe.add_argument("--lora-dropout", type=float, default=0.05)
-    recipe.add_argument("--warmup-steps", type=int, default=0, help="KL-replay loop: linear warmup, then constant")
+    recipe.add_argument("--lora-dropout", type=float, help="Default 0.05; 0 with the cross-format recipe")
+    recipe.add_argument("--warmup-steps", type=int, help="Linear warmup, then constant (default 0; 2 with the recipe)")
+    recipe.add_argument(
+        "--min-summary-coverage",
+        type=float,
+        default=0.8,
+        help="Refuse summaries covering fewer of the turns with reasoning",
+    )
     recipe.add_argument("--max-grad-norm", type=float, default=1.0)
     recipe.add_argument("--seed", type=int, default=0)
-    return parser.parse_args(argv)
+    return resolve_defaults(parser.parse_args(argv))
+
+
+# Defaults by recipe: the cross-format recipe takes the paper's hyperparameters (its Table 10) unless set explicitly.
+LEGACY_DEFAULTS = {"learning_rate": 2e-4, "epochs": 2.0, "lora_dropout": 0.05, "warmup_steps": 0, "lora_rank": None}
+PAPER_DEFAULTS = {"learning_rate": 3e-5, "epochs": 8.0, "lora_dropout": 0.0, "warmup_steps": 2, "lora_rank": 16}
+
+
+def cross_format(args: argparse.Namespace) -> bool:
+    return args.think_target == "empty" or bool(args.replay_repo) or bool(args.summaries_repo)
+
+
+def resolve_defaults(args: argparse.Namespace) -> argparse.Namespace:
+    """Fill the unset hyperparameters with the recipe's defaults, and refuse inconsistent recipe flags."""
+    defaults = PAPER_DEFAULTS if cross_format(args) else LEGACY_DEFAULTS
+    for key, value in defaults.items():
+        if getattr(args, key) is None:
+            setattr(args, key, value)
+    if args.summaries_repo and args.think_target != "empty":
+        raise SystemExit("CoT-proxy summaries go after an empty think block: pass --think-target empty")
+    if args.replay_repo and args.batch_size != 1:
+        raise SystemExit("the KL-replay loop runs one sample at a time (an update is --teacher-per-update + "
+                         "--replay-per-update samples); --batch-size must be 1")  # fmt: skip
+    return args
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -356,9 +402,9 @@ def main(argv: list[str] | None = None) -> None:
     keep_reasoning = student.sft.keep_reasoning
     if args.think_target == "empty" and keep_reasoning:
         raise SystemExit("--think-target empty supervises no reasoning; the student profile sets keep_reasoning")
-    summaries = load_summaries(args.summaries_repo, args.summaries_file) if args.summaries_repo else None
-    if summaries is not None and args.think_target != "empty":
-        raise SystemExit("CoT-proxy summaries go after an empty think block: pass --think-target empty")
+    summaries = None
+    if args.summaries_repo:
+        summaries = load_summaries(args.summaries_repo, args.summaries_file, records, args.min_summary_coverage)
     trajectories = [
         trajectory(record, keep_reasoning=keep_reasoning, strip_visible_text=args.strip_visible_text,
                    summaries=summaries)
@@ -393,21 +439,29 @@ def main(argv: list[str] | None = None) -> None:
     if args.dry_run:
         return
     if replay is not None:
+        per_turn = sum(1 for example in examples if not example.get("spans"))
+        if per_turn:
+            print(f"WARNING: {per_turn} of {len(examples)} teacher samples are single turns, not trajectories "
+                  f"(per-turn fallback or no --full-trajectory): an update's {args.teacher_per_update} teacher "
+                  "samples are then not all whole trajectories as in the paper", flush=True)  # fmt: skip
         train_kl_replay(args, student, model_id, tokenizer, rows, replay, heldout or [])
     else:
         train(args, student, model_id, tokenizer, rows)
 
 
-def load_summaries(repo: str, filename: str) -> dict[tuple[str, int], str]:
+def load_summaries(
+    repo: str, filename: str, records: list[dict[str, Any]], min_coverage: float
+) -> dict[tuple[str, int], str]:
+    """The annotate stage's summaries, checked against the trace records SFT uses (`cot_proxy.check_summaries`)."""
     from huggingface_hub import hf_hub_download
 
-    from agent_distill.cot_proxy import summaries_by_turn
+    from agent_distill.cot_proxy import check_summaries, summaries_by_turn
 
-    records = list(read_jsonl(Path(hf_hub_download(repo, filename, repo_type="dataset"))))
-    found = summaries_by_turn(records)
-    empty = sum(1 for summary in found.values() if not summary)
-    print(f"{len(found)} CoT-proxy summaries from {repo} ({empty} empty after rejected drafts)", flush=True)
-    return found
+    annotations = list(read_jsonl(Path(hf_hub_download(repo, filename, repo_type="dataset"))))
+    stats = check_summaries(records, annotations, min_coverage=min_coverage)
+    print(f"CoT-proxy summaries from {repo}: {stats['summarised']} of {stats['turns_with_reasoning']} turns with "
+          f"reasoning ({stats['coverage']:.1%}); the rest get <summary></summary>", flush=True)  # fmt: skip
+    return summaries_by_turn(annotations)
 
 
 def replay_row(sample: dict[str, Any], max_length: int) -> dict[str, list[int]] | None:
@@ -516,6 +570,14 @@ def train_kl_replay(
     dtype = torch.float16 if args.fp16 else torch.bfloat16
     if not args.no_4bit:
         raise SystemExit("KL replay trains bf16 base weights; pass --no-4bit")
+    if args.save_total_limit:
+        print("note: --save-total-limit does not apply to the KL-replay loop (each save overwrites the adapter and "
+              "pushes a new commit)", flush=True)  # fmt: skip
+    print(
+        "note: --gradient-accumulation does not apply to the KL-replay loop (an update accumulates "
+        f"{args.teacher_per_update} teacher + {args.replay_per_update} replay samples)",
+        flush=True,
+    )
     if student.sft.train_patch:
         from agent_distill.hooks import resolve
 
@@ -681,6 +743,8 @@ def train(args: argparse.Namespace, student: Any, model_id: str, tokenizer: Any,
             per_device_train_batch_size=args.batch_size,
             gradient_accumulation_steps=args.gradient_accumulation,
             learning_rate=args.learning_rate,
+            warmup_steps=args.warmup_steps,
+            lr_scheduler_type="constant_with_warmup" if cross_format(args) else "linear",
             num_train_epochs=args.epochs,
             max_steps=args.max_steps,
             bf16=not args.fp16,

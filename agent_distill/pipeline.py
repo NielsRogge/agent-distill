@@ -524,6 +524,15 @@ def replay_jobs(run: Run, rev: str) -> list[jobs.Job]:
     return [vllm_job(run, rev, "replay", "agent_distill.stages.replay", args, "", settings.timeout)]
 
 
+def check_sft_args(run: Run, student: Any) -> None:
+    """Parse the SFT job's effective arguments (profile, recipe inputs, run) here, so a misconfigured recipe (e.g.
+    `[sft] summaries = true` without `--think-target empty`) is refused by the dry run, not on the GPU."""
+    from agent_distill.stages import sft as sft_stage
+
+    sft_stage.parse_args(["--task", "t", "--harness", "h", "--student", "s", "--traces", "x", *student.sft.args,
+                          *[a.strip("'") for a in recipe_args(run)], *run.config.sft.args])  # fmt: skip
+
+
 def sft_jobs(run: Run, rev: str) -> list[jobs.Job]:
     student = student_profile(run)
     args = [
@@ -543,6 +552,7 @@ def sft_jobs(run: Run, rev: str) -> list[jobs.Job]:
         *recipe_args(run),
         *[jobs.q(a) for a in run.config.sft.args],
     ]
+    check_sft_args(run, student)
     deps = student.sft.deps or SFT_DEPS
     command = "\n".join(
         [
