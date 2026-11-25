@@ -29,6 +29,45 @@ def test_category(gold, answer, ok):
     assert facts.check("category", gold, answer, hedge=hedge) is ok
 
 
+VOCAB = [
+    *LICENSES,
+    "gfdl",
+    "cc-by-sa-3.0",
+    "docker",
+    "gradio",
+    "streamlit",
+    "static",
+    "diffusers",
+    "transformers",
+    "diffusion-single-file",
+    "image-to-image",
+    "text-to-image",
+]
+
+
+@pytest.mark.parametrize(("gold", "answer", "ok"), [
+    # other values named after the answer, in context: fine (GLM-5.3 pilot false negatives)
+    ("docker", "It uses the **Docker SDK**, unlike Gradio/Streamlit Spaces.", True),
+    ("diffusion-single-file", "Its library tag is `diffusion-single-file`, used with ComfyUI rather than diffusers.",
+     True),
+    ("image-to-image", "Pipeline tag `image-to-image` (it edits images; text-to-image models start from text).", True),
+    ("apache-2.0", "Apache License 2.0 (`apache-2.0`). Not MIT, as some mirrors claim.", True),
+    ("apache-2.0", "Apache 2.0 (`apache-2.0`), not MIT.", True),
+    ("apache-2.0", "Apache 2.0. Unlike Llama models (llama3 license), it is permissive.", True),
+    # hedged: still rejected
+    ("apache-2.0", "Apache 2.0 or MIT.", False),
+    ("apache-2.0", "Either MIT or Apache 2.0.", False),
+    ("apache-2.0", "Apache-2.0/MIT", False),
+    ("apache-2.0", "MIT. (Some say Apache 2.0.)", False),
+    # a dual license: every value
+    (["cc-by-sa-3.0", "gfdl"], "It is dual-licensed under CC-BY-SA 3.0 and the GFDL.", True),
+    (["cc-by-sa-3.0", "gfdl"], "CC-BY-SA 3.0.", False),
+    (["cc-by-sa-3.0", "gfdl"], "CC-BY-SA 3.0 and GFDL, or maybe MIT.", False),
+])  # fmt: skip
+def test_hedge_rule(gold, answer, ok):
+    assert facts.check("category", gold, answer, hedge=VOCAB) is ok
+
+
 def test_repo_number_title_author_arxiv():
     assert facts.check("repo", "Qwen/Qwen3.5-4B-Base", "Its base model is `Qwen/Qwen3.5-4B-Base`.")
     assert not facts.check("repo", "Qwen/Qwen3.5-4B", "Its base model is Qwen/Qwen3.5-4B-Base.")
@@ -51,7 +90,8 @@ def test_repo_number_title_author_arxiv():
 
 
 @pytest.mark.parametrize(("kind", "gold"), [
-    ("category", "apache-2.0"), ("repo", "Qwen/Qwen3.5-4B-Base"), ("number", 4659865088),
+    ("category", "apache-2.0"), ("category", ["cc-by-sa-3.0", "gfdl"]), ("repo", "Qwen/Qwen3.5-4B-Base"),
+    ("number", 4659865088),
     ("title", "Knowledge Distillation of Russian Language Models"), ("first_author", "Alina Kolesnikova"),
     ("arxiv", ["2205.02340"]),
 ])  # fmt: skip
@@ -113,6 +153,12 @@ class FakeHub:
 ])  # fmt: skip
 def test_live_value(spec, value):
     assert hub_facts.live_value(spec, hub=FakeHub()) == value
+
+
+def test_license_value():
+    assert hub_facts.license_value("mit") == "mit" and hub_facts.license_value(["mit"]) == "mit"
+    assert hub_facts.license_value(["gfdl", "cc-by-sa-3.0", "gfdl"]) == ["cc-by-sa-3.0", "gfdl"]
+    assert hub_facts.license_value(None) == "" and hub_facts.license_value([]) == ""
 
 
 def test_single_and_card():

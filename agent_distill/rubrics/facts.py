@@ -5,8 +5,9 @@ Each question has one gold value of a kind:
 
 - `category` (license, pipeline tag, library, Space SDK): the answer names the value as whole tokens ("Apache 2.0",
   "apache-2.0" and "Apache License 2.0" all match `apache-2.0`; `text-generation` does not match
-  `text2text-generation`). With `hedge` set, naming another value of the same field as well (`hedge`: the field's
-  vocabulary) fails: "Apache 2.0 or MIT" is not an answer.
+  `text2text-generation`). A list gold (a dual license) needs every value. With `hedge` (the field's vocabulary), a
+  hedged answer fails: another value named before the gold, or offered as an alternative ("Apache 2.0 or MIT",
+  "Apache-2.0/MIT"); other values named afterwards in context are fine ("Docker, unlike Gradio/Streamlit").
 - `repo`: the answer names the repo id (case-insensitive, whole id).
 - `number`: some number in the answer ("8,030,261,248", "8.03B", "8.03 billion", "494M") is within 1% of the value.
 - `title`: the paper's title (or its part before a colon, if that has at least three words) appears in the answer.
@@ -37,33 +38,78 @@ def fold(text: str) -> str:
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
 
 
+def words(text: str) -> list[str]:
+    """Words of [a-z0-9.] (a sentence's final dot dropped) and "/" separators, without filler words like "license"."""
+    found = [w.strip(".") if w != "/" else w for w in re.findall(r"[a-z0-9.]+|/", fold(text))]
+    return [w for w in found if w and w not in FILLER]
+
+
 def tokens(text: str) -> list[str]:
-    """Words of [a-z0-9.] (a sentence's final dot dropped), without filler words like "license"."""
-    words = [w.strip(".") for w in re.split(r"[^a-z0-9.]+", fold(text))]
-    return [w for w in words if w and w not in FILLER]
+    """`words` without the separators."""
+    return [w for w in words(text) if w != "/"]
 
 
 def compact(text: str) -> str:
     return "".join(tokens(text))
 
 
+def mentions(value: str, answer: str, longest: int = 6) -> list[tuple[int, int]]:
+    """(start, end) word positions where a run of up to `longest` consecutive words (not across "/") spells `value`."""
+    target = compact(value)
+    if not target:
+        return []
+    ws = words(answer)
+    found = []
+    for i in range(len(ws)):
+        joined = ""
+        for j in range(i, min(len(ws), i + longest)):
+            if ws[j] == "/":
+                break
+            joined += ws[j]
+            if joined == target:
+                found.append((i, j + 1))
+            if len(joined) >= len(target):
+                break
+    return found
+
+
 def spans(text: str, longest: int = 6) -> set[str]:
     """Every run of up to `longest` consecutive tokens, joined."""
-    words = tokens(text)
-    return {"".join(words[i:j]) for i in range(len(words)) for j in range(i + 1, min(len(words), i + longest) + 1)}
+    ws = tokens(text)
+    return {"".join(ws[i:j]) for i in range(len(ws)) for j in range(i + 1, min(len(ws), i + longest) + 1)}
 
 
 def names_value(value: str, answer: str) -> bool:
-    target = compact(value)
-    return bool(target) and target in spans(answer)
+    return bool(mentions(value, answer))
 
 
-def check_category(gold: str, answer: str, hedge: list[str] | None = None) -> bool:
-    if not names_value(gold, answer):
+JOIN_WINDOW = 3  # words between two values that "or" or "/" makes alternatives ("Apache 2.0 or MIT")
+
+
+def check_category(gold: str | list[str], answer: str, hedge: list[str] | None = None) -> bool:
+    """Every gold value is named. With `hedge` (the field's vocabulary), the answer must not hedge: no other value
+    named before the first gold value ("Either MIT or Apache 2.0", "MIT. (Some say Apache 2.0.)"), and none offered
+    as an alternative to a gold value, joined by "or" or "/" within a few words ("Apache 2.0 or MIT", "Apache-2.0/MIT").
+    Other values named after the answer, in context, are fine ("Docker, unlike Gradio/Streamlit")."""
+    golds = [str(g) for g in (gold if isinstance(gold, list) else [gold])]
+    found = [mentions(g, answer) for g in golds]
+    if not golds or not all(found):
         return False
-    gold_c = compact(gold)
-    others = [v for v in hedge or [] if compact(v) and compact(v) != gold_c and compact(v) not in gold_c]
-    return not any(names_value(other, answer) for other in others)
+    gold_spans = [span for spans_ in found for span in spans_]
+    first = min(start for start, _ in gold_spans)
+    gold_c = [compact(g) for g in golds]
+    others = [v for v in hedge or [] if compact(v) and not any(compact(v) == g or compact(v) in g for g in gold_c)]
+    ws = words(answer)
+    other_spans = sorted(span for other in others for span in mentions(other, answer))
+    if any(start < first for start, _ in other_spans):
+        return False
+    for g_start, g_end in gold_spans:  # the nearest other value on each side, if offered as an alternative
+        after = next(((s, e) for s, e in other_spans if s >= g_end), None)
+        before = next(((s, e) for s, e in reversed(other_spans) if e <= g_start), None)
+        for between in ([ws[g_end : after[0]]] if after else []) + ([ws[before[1] : g_start]] if before else []):
+            if len(between) <= JOIN_WINDOW and ("or" in between or "/" in between):
+                return False
+    return True
 
 
 def check_repo(gold: str, answer: str) -> bool:
@@ -116,7 +162,7 @@ def check(kind: str, gold: Any, answer: str | None, **extra: Any) -> bool:
     if not answer:
         return False
     if kind == "category":
-        return check_category(str(gold), answer, extra.get("hedge"))
+        return check_category(gold if isinstance(gold, list) else str(gold), answer, extra.get("hedge"))
     if kind == "repo":
         return check_repo(str(gold), answer)
     if kind == "number":
@@ -136,4 +182,6 @@ def render(kind: str, gold: Any) -> str:
         return f"It has {int(gold):,} parameters."
     if kind == "arxiv":
         return f"The linked paper is arXiv {next(iter(gold))}."
+    if isinstance(gold, list):
+        return f"The answer is {' and '.join(map(str, gold))}."
     return f"The answer is {gold}."
