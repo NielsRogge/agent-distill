@@ -293,7 +293,7 @@ def test_export_requirements_is_hash_pinned(tmp_path) -> None:
     assert "--hash" not in constraints.read_text() and "datasets==" in constraints.read_text()
 
 
-def test_dry_run_prints_staging_and_residual_risk(monkeypatch, capsys) -> None:
+def test_dry_run_prints_staging_and_residual_risk(monkeypatch, capsys, hub) -> None:
     from agent_distill import jobs
 
     monkeypatch.setattr(jobs, "hardware_prices", lambda: {"h200": 0.08})
@@ -355,3 +355,95 @@ def test_every_job_stack_resolves_on_the_locked_environment(tmp_path) -> None:
         if result.returncode:
             failed[label] = result.stderr[-500:]
     assert not failed, failed
+
+
+# --------------------------------------------------------------------------------------------------
+# Episode stages after `publish` (--reprivatize)
+# --------------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def offline_launch(monkeypatch) -> list[str]:
+    """`distill run` without staging, pricing or launching anything; returns the launched job names."""
+    from agent_distill import jobs
+
+    launched: list[str] = []
+    monkeypatch.setattr(jobs, "hardware_prices", lambda: {"h200": 0.08, "cpu-basic": 0.0})
+    monkeypatch.setattr(jobs, "stage_code", lambda *args, **kwargs: "REV")
+    monkeypatch.setattr(jobs, "launch", lambda wave, namespace: launched.extend(j.name for j in wave) or ["id"])
+    monkeypatch.setattr(jobs, "wait", lambda ids, namespace: None)
+    return launched
+
+
+@pytest.mark.parametrize("stage", ["eval", "probe"])
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_episode_stage_into_a_published_dataset_refuses_up_front(hub, offline_launch, stage, dry_run) -> None:
+    run = make_run()
+    hub.repos[run.repo("eval")] = {"private": False, "files": ["sessions/a.jsonl"]}  # already published
+    argv = [str(RUN_TOML), "--stages", stage, "--limit", "377", *(["--dry-run"] if dry_run else [])]
+    with pytest.raises(SystemExit, match=r"is public.*--reprivatize.*--stages publish"):
+        pipeline.main(argv)
+    assert offline_launch == [] and hub.calls == []  # nothing launched, nothing changed
+    assert hub.repos[run.repo("eval")]["private"] is False
+
+
+def test_reprivatize_dry_run_changes_nothing(hub, offline_launch, capsys) -> None:
+    run = make_run()
+    hub.repos[run.repo("eval")] = {"private": False, "files": ["sessions/a.jsonl"]}
+    assert pipeline.main([str(RUN_TOML), "--stages", "eval", "--reprivatize", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert f"[dry-run] would make {run.repo('eval')} private" in out and "--stages publish" in out
+    assert hub.calls == [] and offline_launch == [] and hub.repos[run.repo("eval")]["private"] is False
+
+
+def test_reprivatize_makes_the_dataset_private_before_launch_and_reminds(hub, monkeypatch, capsys) -> None:
+    from agent_distill import jobs
+
+    run = make_run()
+    hub.repos[run.repo("eval")] = {"private": False, "files": ["sessions/a.jsonl"]}
+    visibility_at_launch: list[bool] = []
+    monkeypatch.setattr(jobs, "hardware_prices", lambda: {"h200": 0.08, "cpu-basic": 0.0})
+    monkeypatch.setattr(jobs, "stage_code", lambda *args, **kwargs: "REV")
+    monkeypatch.setattr(
+        jobs, "launch", lambda wave, ns: visibility_at_launch.append(hub.repos[run.repo("eval")]["private"]) or ["id"]
+    )
+    assert pipeline.main([str(RUN_TOML), "--stages", "eval", "--reprivatize"]) == 0
+    assert hub.calls == [("update_repo_settings", run.repo("eval"), True)]  # made private; nothing deleted
+    assert visibility_at_launch == [True]
+    assert f"reminder: {run.repo('eval')} is private until you run" in capsys.readouterr().out
+
+
+def test_reprivatize_then_publish_in_one_run_republishes_after_the_jobs(hub, offline_launch, no_scan) -> None:
+    run = make_run()
+    hub.repos[run.repo("eval")] = {"private": False, "files": ["sessions/a.jsonl", "difficulty/x.txt"]}
+    hub.repos[run.repo("eval-raw")] = {"private": True, "files": ["raw/a.jsonl"]}
+    assert pipeline.main([str(RUN_TOML), "--stages", "eval,publish", "--reprivatize"]) == 0
+    visibility = [call for call in hub.calls if call[0] == "update_repo_settings"]
+    assert visibility == [("update_repo_settings", run.repo("eval"), True),
+                          ("update_repo_settings", run.repo("eval"), False)]  # fmt: skip
+    assert hub.repos[run.repo("eval-raw")]["private"]
+
+
+def test_a_public_raw_repo_is_refused_even_with_reprivatize(hub, offline_launch) -> None:
+    run = make_run()
+    hub.repos[run.repo("eval-raw")] = {"private": False, "files": ["raw/a.jsonl"]}
+    with pytest.raises(SystemExit, match="must stay private"):
+        pipeline.main([str(RUN_TOML), "--stages", "eval", "--reprivatize", "--dry-run"])
+    assert hub.calls == [] and hub.repos[run.repo("eval-raw")]["private"] is False
+
+
+def test_publish_before_an_episode_stage_refuses(hub, offline_launch) -> None:
+    with pytest.raises(SystemExit, match="put it last"):
+        pipeline.main([str(RUN_TOML), "--stages", "publish,eval", "--dry-run"])
+    assert hub.calls == []
+
+
+def test_private_or_missing_datasets_pass_and_traces_check_their_own_repos(hub) -> None:
+    run = make_run()
+    hub.repos[run.repo("eval")] = {"private": False, "files": []}  # public eval does not block traces
+    assert pipeline.check_episode_repos(run, ["traces", "sft"], reprivatize=False, dry_run=True) == []
+    hub.repos[run.repo("traces")] = {"private": False, "files": []}
+    with pytest.raises(SystemExit, match=run.repo("traces")):
+        pipeline.check_episode_repos(run, ["traces"], reprivatize=False, dry_run=True)
+    assert pipeline.check_episode_repos(run, ["sft", "merge", "grpo", "publish"], reprivatize=False,
+                                        dry_run=True) == []  # fmt: skip
