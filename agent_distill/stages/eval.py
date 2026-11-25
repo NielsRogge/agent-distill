@@ -67,6 +67,8 @@ def vllm_command(
                     "--lora-modules", f"{ADAPTER_NAME}={adapter_path}"]  # fmt: skip
     if temperature is not None:  # the probe samples like the GRPO rollouts; harnesses send no temperature of their own
         command += ["--override-generation-config", json.dumps({"temperature": temperature, "top_p": 1.0, "top_k": -1})]
+    elif serve.generation_config:  # evaluation sampling from the profile (never the probe's)
+        command += ["--override-generation-config", json.dumps(serve.generation_config)]
     command += shlex.split(serve.vllm_extra_args)
     return command
 
