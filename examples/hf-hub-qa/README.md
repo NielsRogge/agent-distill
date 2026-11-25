@@ -120,6 +120,10 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
   | Episodes using `curl` | 130 | 40 | 27 |
 
   - SFT against base, paired: 62 questions fixed, 16 broken (sign test p ≈ 1.5e-7).
+  - Tool mismatch in this SFT: its training examples listed `bash`, `read` and an argument-free `submit`. The
+    library's tool list gave text-answer tasks Pi's captured `submit` tool (fixed in #19). In evaluation, Pi offers only
+    `bash` and `read`, as in the traces. The traces never call `submit`, so the student only saw it listed. The scores
+    above stand as measured. Rerun SFT or GRPO from code after #19.
   - The MCP twin on the same 150 test questions: base 73.3%, SFT 80.0%, GLM-5.3 98.7%. SFT brings the CLI student
     level with the MCP one, from a much weaker base (47% vs 73%): with a shell, the base model wanders off to
     scrapers, and SFT teaches it the CLI and the skill.
