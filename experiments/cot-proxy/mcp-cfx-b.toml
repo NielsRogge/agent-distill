@@ -16,6 +16,7 @@ stages = ["sft", "eval"]
 [repos]
 traces = "nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-traces"  # phase 1's accepted traces, read only
 replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
+summaries = "nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-summaries"  # stage `annotate`
 
 [hub]
 namespace = "nielsr"
