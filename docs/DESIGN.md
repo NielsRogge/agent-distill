@@ -442,6 +442,9 @@ instead.
   - Datasets are created private and made public only by `publish`, after a credential scan of every text
     file passes. The scan looks for `hf_`, `sk-`, `ghp_`, `github_pat_` and Google API keys.
   - `-code` and `-raw` repos are always private, and `publish` never touches them.
+  - Episode stages (`traces`, `probe`, `eval`) never upload into a public dataset. `distill run` checks
+    before staging or launching anything (the dry run too) and refuses when a stage's dataset was already
+    published. `--reprivatize` makes it private again first; a later `publish` scans and republishes it.
 - **Never deleted.** The tool never deletes Hub repos or files.
 
 **Credentials.**

@@ -122,6 +122,7 @@ def test_requires_are_resolved_and_hooks_checked(tmp_path):
 def test_missing_requires_refuse_the_dry_run(tmp_path, monkeypatch):
     run_toml = project(tmp_path, hooks={}, requires=["hook_mod.py", "hook_patch.py"])
     monkeypatch.setattr(jobs, "estimate", lambda built: {"expected_usd": 0, "worst_case_usd": 0})
+    monkeypatch.setattr(pipeline, "check_episode_repos", lambda *args, **kwargs: [])  # no Hub call
     with pytest.raises(SystemExit, match=r"requires \['hook_mod.py', 'hook_patch.py'\], not found"):
         pipeline.main([str(run_toml), "--stages", "merge", "--dry-run"])
     pipeline.main([str(run_toml), "--stages", "traces", "--dry-run"])  # teacher-only stages need no student hooks

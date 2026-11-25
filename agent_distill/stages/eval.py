@@ -231,8 +231,9 @@ def private_dataset(api: Any, repo: str) -> bool:
 
 def public_message(repo: str) -> str:
     return (
-        f"{repo} is public: refusing to upload unscanned episodes into it. Use a new repo name, or make it "
-        "private and run `distill run ... --stages publish` after the upload to scan and publish it again."
+        f"{repo} is public: refusing to upload unscanned episodes into it. Use a new repo name, or relaunch "
+        "with `distill run ... --reprivatize` (makes it private first) and run `distill run ... --stages "
+        "publish` after the upload to scan and publish it again."
     )
 
 
