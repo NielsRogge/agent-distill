@@ -88,6 +88,8 @@ def test_cited_ids(monkeypatch):
         "See [`Qwen`](https://huggingface.co/Qwen/models) and [its datasets](https://huggingface.co/Qwen/datasets)."
     )
     assert module.cited_ids(org_pages) == set()
+    shorthand = "Try `NeoQuasar/Kronos-mini/small`, `Kronos-Tokenizer-base/2k` or `mmproj-Qwen3.5-9B-bf16/f16.gguf`."
+    assert module.cited_ids(shorthand) == set()
 
 
 def test_help_on_a_write_command_is_read_only(monkeypatch):

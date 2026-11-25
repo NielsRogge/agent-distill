@@ -54,6 +54,11 @@ HUB_COMMAND = re.compile(r"(?:^|[\s;&|(`])hf\s+[a-z]|huggingface\.co/api/|huggin
 REPO_ID = re.compile(r"(?<![\w./-])([A-Za-z0-9][\w.-]{0,95})/([A-Za-z0-9][\w.-]{0,95})(?![\w/-])")
 PAPER_ID = re.compile(r"(?<![\w.])(\d{4}\.\d{4,5})(?![\w]|\.\d)")
 HUB_LINK = re.compile(r"huggingface\.co/(?:(?:datasets|spaces)/)?([A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*)")
+FILE_OR_VARIANT = re.compile(
+    r"\.(?:gguf|safetensors|bin|json|md|py|txt|onnx|pt|pth|yaml|parquet)$"
+    r"|^(?:small|base|large|mini|tiny|medium|xl|\d+(?:\.\d+)?[kmb]|[bf]p?\d{1,2}|q\d\w*|int\d|\d+bit)$",
+    re.IGNORECASE,
+)
 ORG_PAGES = {"models", "datasets", "spaces", "collections", "papers", "activity", "posts", "followers"}
 HELP = re.compile(r"(?:^|\s)(?:--help|-h)(?:\s|$)")
 NOT_IDS = {"and/or", "input/output", "read/write", "train/test", "true/false", "yes/no", "on/off"}
@@ -85,6 +90,8 @@ def _repo_candidates(text: str) -> set[str]:
         if owner.lower() in {"huggingface.co", "hf.co", "datasets", "spaces", "models", "papers"}:
             continue
         if name.lower() in ORG_PAGES:  # huggingface.co/Qwen/models: an organisation's listing, not a repo
+            continue
+        if FILE_OR_VARIANT.search(name):  # `x-bf16/f16.gguf` (a file), `Kronos-mini/small` (shorthand for two repos)
             continue
         found.add(candidate)
     return found
