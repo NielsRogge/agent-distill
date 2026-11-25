@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from agent_distill.mcp import McpServer
     from agent_distill.rubrics import RubricSet
 
 Row = dict[str, Any]
@@ -74,6 +75,9 @@ class Task:
     # Agent Skills (directories holding a SKILL.md) the agent may load, e.g. a pinned `hf-cli` skill. Only harnesses
     # with skill support pass them (Pi: `--skill`); everything else is discovered from nowhere (`--no-skills`).
     skills: tuple[Path, ...] = ()
+    # MCP servers the agent may use (anonymously), each with its tool allow-list and a pinned snapshot of its tool
+    # list (agent_distill.mcp). Only harnesses with MCP support run them (Pi); the stage refuses on tool drift.
+    mcp_servers: tuple[McpServer, ...] = ()
     # agent-distill extras the task's episode stages need beyond `hub`, e.g. ("browser",) for the `preview` tool.
     extras: tuple[str, ...] = ()
     # The limits a stored record ran with when the record does not say (`distill rescore`), from its file name,

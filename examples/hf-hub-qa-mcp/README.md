@@ -1,6 +1,6 @@
 # hf-hub-qa-mcp: Hub questions answered through the Hugging Face MCP server
 
-**Status: design, awaiting the user's OK. Nothing has been run or bought yet.**
+**Status: design approved (SFT first); dataset published; smoke run next.**
 
 A Pi agent answers questions about the Hugging Face Hub using only the tools of the
 [Hugging Face MCP server](https://huggingface.co/docs/hub/en/agents-mcp), through
@@ -32,20 +32,24 @@ the tools is shared wherever possible.
   `?bouquet=` URL parameter only narrows the set (`search`, `docs`); none of the tried values adds tools.
   The extra tools in the [settings](https://huggingface.co/settings/mcp) (Contribute Repos, Sandboxes, Jobs,
   Gradio Spaces) need a logged-in account and are all write or compute tools, so they're out of scope.
-- **Allow-list:** `hub_repo_search`, `hub_repo_details`, `hf_fs`. `hf_whoami` is hidden (useless when anonymous).
+- **Allow-list:** `hub_repo_search`, `hub_repo_details`, `hf_fs`. Every other tool, `hf_whoami` included, is
+  hidden.
   No `bash`, `read`, `write` or `edit`, so there is no CLI or `curl` fallback; Pi's MCP resource tools and
   `codemode` are off too.
 - **Pi config:** the adapter writes `mcp.json` into the episode's own `PI_CODING_AGENT_DIR`:
 
   ```json
   {"autoEnableCodemode": false,
-   "mcpServers": {"hf": {"url": "https://huggingface.co/mcp", "exposure": "direct",
-                         "toolExposure": {"hf_whoami": "hidden"}}}}
+   "mcpServers": {"hf": {"url": "https://huggingface.co/mcp", "exposure": "hidden", "timeout": 120,
+                         "toolExposure": {"hub_repo_search": "direct", "hub_repo_details": "direct",
+                                          "hf_fs": "direct"}}}}
   ```
 
-  and runs Pi with `--tools 'mcp__hf__hub_repo_search,mcp__hf__hub_repo_details,mcp__hf__hf_fs'` (`--no-mcp` is
-  dropped only for tasks that declare an MCP server). Checked locally with the pinned Pi: `pi mcp list` →
-  `hf: connected, 4 tools (direct) — hf_whoami [hidden], hub_repo_search, hub_repo_details, hf_fs`.
+  The server is hidden by default, so a tool the server adds later never reaches the agent. Pi runs with
+  `--no-extensions -e builtin:mcp` and `--tools 'mcp__hf__hub_repo_search,mcp__hf__hub_repo_details,mcp__hf__hf_fs'`.
+  `--no-extensions` also turns off Pi's built-in MCP support, which an MCP task loads back alone; codemode and
+  tool search stay off. Tasks without MCP servers keep `--no-mcp`. Checked with real GLM-5.3 episodes: the model
+  is offered exactly the three tools and nothing else.
 - **Drift guard:** the server's tools change over time. Each episode stage first fetches `tools/list` and
   compares its hash with the snapshot; on a mismatch it refuses to start (the override is an explicit
   `--allow-mcp-drift`, which records both hashes). The endpoint, server version, tools hash and
@@ -81,7 +85,9 @@ judged rows aren't cheap or deterministic. Proposal:
    - Space: SDK;
    - multi-hop: "license of the base model of X", "which of these three models has the most parameters".
 
-   Sizes: about 400 train, 100 validation and 150 test. Splits are disjoint **by entity**, so test asks about
+   Published as [`nielsr/hf-hub-facts`](https://huggingface.co/datasets/nielsr/hf-hub-facts) (snapshot
+   2026-11-25): **1,070 train, 127 validation, 359 test** across 11 templates. All rows pass the
+   oracle/no-op/canary validation. Splits are disjoint **by entity**, so test asks about
    repos and papers never seen in training. Before scoring, a row whose live value no longer matches the frozen
    one is re-checked and marked `drifted` (unscorable) instead of counting as wrong. Both tasks score through
    the *same* verifier module.
@@ -106,9 +112,10 @@ passes when it is fully correct and grounded. No judge is needed for training or
 Run name `qwen35-4b-hf-hub-qa-mcp-glm-53-pi-160`. Every repo joins the agent-distillation collection.
 Episode datasets are created private, credential-scanned, then published by `distill publish`, with Pi
 sessions under `sessions/`. Stages: `traces` (GLM-5.3, up to 2 attempts per train row) → `sft` → `merge` →
-`probe` → `grpo` → `eval` (base, SFT, GRPO and teacher on `test`, plus `seed`).
+`eval` (base, SFT and teacher on `test`, plus `seed`). **SFT comes first**: the first full run stops after the
+SFT evaluation. `probe` → `grpo` is a second phase, run only with the user's go once the SFT numbers are in.
 
-### GRPO, following [harness adapters at scale](https://huggingface.co/blog/harness-adapters-at-scale)
+### Later phase: GRPO, following [harness adapters at scale](https://huggingface.co/blog/harness-adapters-at-scale)
 
 That post runs GRPO only (no SFT) on Qwen3.8-27B with TRL `AsyncGRPOTrainer` and an OpenEnv capture proxy,
 which is the same stack as our `grpo` stage. What carries over:
@@ -137,18 +144,18 @@ Specific to this task:
 
 - **The Pi GRPO path is unproven.** The earlier Pi GRPO smoke made no step, and I found no fix on any branch
   (the html-pages run made probe and GRPO opt-in). Our `grpo` stage drives Pi through the generic capture
-  session, so the smoke run includes 2 GRPO steps. Any failure there gets diagnosed before the full run.
+  session, so before phase 2 a separate 2-step GRPO smoke runs and any failure gets diagnosed.
 - **Rollouts hit the live MCP server.** 8 rollouts × several prompts at once is many anonymous calls. The smoke
   run measures 429s at GRPO concurrency. Rate-limited calls are retried; an episode that still fails is
   unscorable (dropped from the group baseline), never a 0.
 
 | | Estimate | Cap (`[budget]`) |
 |---|---|---|
-| Smoke (`…-smoke`): ~10 teacher traces, 2 SFT steps, 2 GRPO steps, 5-row eval × 4 variants | ≈ $5 teacher, ≈ 2.5 H200-h | $10, 3 GPU-h |
-| Traces: ~600 episodes × ≈ $0.20 (GLM-5.3 at $1.68 / $5.28 per M; MCP outputs are large) | ≈ $120 | $150 |
-| Eval: teacher on 150 test + 51 seed; judge on 3 × 51 seed | ≈ $40 + ≈ $10 judge | $50 + $15 |
+| Smoke (`…-smoke`): 8 teacher traces, 2 SFT steps, 5-row eval × 3 variants (base, SFT, teacher) | < $1 teacher, ≈ 1.5 H200-h | $2 traces, 3 GPU-h |
+| Traces: 600 train rows × up to 2 attempts. Local GLM-5.3 episodes used 1k–14k input tokens, about $0.01–0.03 each (at $1.68 / $5.28 per M) | ≈ $20 | $150 |
+| Eval: teacher on 150 test (+ 51 seed, judged, later) | ≈ $5 (+ ≈ $10 judge) | in `traces_usd` |
 | SFT + merge + student evals | ≈ 4 H200-h | 6 GPU-h |
-| Probe (4 × ~400 train rows, SFT model) | ≈ 2 H200-h | 3 GPU-h |
-| GRPO (2× H200: vLLM + trainer; ~150 steps) | ≈ 16 H200-h | 20 GPU-h |
+| Phase 2 — probe (4 × ~400 train rows, SFT model) | ≈ 2 H200-h | 3 GPU-h |
+| Phase 2 — GRPO (2× H200: vLLM + trainer; ~150 steps) | ≈ 16 H200-h | 20 GPU-h |
 
 Each figure is checked with `--dry-run` and the budget pilot before launch.

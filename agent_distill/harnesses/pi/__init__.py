@@ -6,6 +6,11 @@ Pi (`@earendil-works/pi-coding-agent`) runs one process per episode:
         --no-themes --no-mcp --no-approve --session-dir <dir> --provider agent-distill --model <id>
         --tools <tools>,submit --system-prompt <task prompt> <row prompt>
 
+  A task with MCP servers (`Task.mcp_servers`) drops `--no-mcp`: the episode's `mcp.json` declares each server by URL
+  only (anonymous), with every tool hidden except the task's allow-list, which is exposed directly and named in
+  `--tools` (`mcp__<server>__<tool>`). `--no-extensions` turns off Pi's built-in extensions, MCP included, so such a
+  task loads `-e builtin:mcp` alone: codemode and tool search stay off.
+
 - **Pinned install.** Node (an official tarball, sha256-checked) and Pi with its whole dependency tree from the
   lockfile shipped next to this module (`npm ci`, which checks every package's integrity). Never a `pi` or `node`
   found on PATH.
@@ -28,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -37,7 +43,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +54,7 @@ from agent_distill.harnesses import isolation
 from agent_distill.harnesses.base import Endpoint, architecture, download_verified
 from agent_distill.harnesses.opencode import key_proxies
 from agent_distill.harnesses.opencode_v1_reader import answer_from_text, json_text
+from agent_distill.mcp import check as check_mcp
 from agent_distill.task import FileAnswer, Limits, Task, TextAnswer
 
 HERE = Path(__file__).parent
@@ -188,8 +195,25 @@ def extension_config(task: Task, limits: Limits, endpoint: Endpoint) -> dict[str
     }
 
 
+def mcp_tool_name(server: str, tool: str) -> str:
+    """Pi's name for an MCP tool: every character other than a letter, digit or `_` becomes `_`."""
+    return "__".join(re.sub(r"[^A-Za-z0-9_]", "_", part) for part in ("mcp", server, tool))
+
+
+def mcp_json(task: Task) -> dict[str, Any]:
+    """The episode's `mcp.json`: each server by URL alone (no headers, no credentials), every tool hidden except the
+    allow-list, which is declared to the model like a built-in tool."""
+    servers = {
+        server.name: {"url": server.url, "exposure": "hidden", "timeout": 120,
+                      "toolExposure": {tool: "direct" for tool in server.tools}}
+        for server in task.mcp_servers
+    }  # fmt: skip
+    return {"autoEnableCodemode": False, "mcpServers": servers}
+
+
 def tool_names(task: Task) -> list[str]:
     names = [tool for kind in task.tools for tool in KIND_TOOLS.get(kind, ())]
+    names += [mcp_tool_name(server.name, tool) for server in task.mcp_servers for tool in server.tools]
     if "shell" not in task.tools and "bash" in names:  # pragma: no cover - KIND_TOOLS keeps bash under shell
         names.remove("bash")
     if isinstance(task.answer, TextAnswer):  # the final message is the answer: no submit tool
@@ -202,8 +226,10 @@ def pi_command(node: Path, cli: Path, task: Task, endpoint: Endpoint, session_di
     command = [
         str(node), str(cli), "--mode", "json",
         "--no-context-files", "--no-extensions", "-e", str(EXTENSION),
+        # `--no-extensions` also turns off Pi's built-in MCP support; an MCP task loads it (alone) explicitly.
+        *(["-e", "builtin:mcp"] if task.mcp_servers else []),
         "--no-skills", *[arg for skill in task.skills for arg in ("--skill", str(skill))],
-        "--no-prompt-templates", "--no-themes", "--no-mcp", "--no-approve",
+        "--no-prompt-templates", "--no-themes", *([] if task.mcp_servers else ["--no-mcp"]), "--no-approve",
         "--session-dir", str(session_dir),
         "--provider", PROVIDER, "--model", endpoint.model,
         "--thinking", "off",
@@ -305,7 +331,8 @@ def tool_events(messages: list[dict[str, Any]]) -> list[ToolEvent]:
             result = results.get(str(block.get("id")))
             text = _text(result.get("content")) if result else ""
             failed = result is None or bool(result.get("isError"))
-            events.append(ToolEvent(kind=TOOL_KINDS.get(name.lower(), "other"), name=name,
+            kind = "fetch" if name.startswith("mcp__") else TOOL_KINDS.get(name.lower(), "other")  # a remote lookup
+            events.append(ToolEvent(kind=kind, name=name,
                                     input=block.get("arguments") or {}, success=not failed,
                                     output=None if failed else text,
                                     error=(text or "unfinished") if failed else None))  # fmt: skip
@@ -448,6 +475,7 @@ class Runner:
     cli: Path
     task: Task
     root: Path  # per-session scratch: one workspace + config directory per episode
+    mcp: list[dict[str, Any]] = field(default_factory=list)  # the task's MCP servers as checked at session start
 
 
 class Pi:
@@ -467,10 +495,11 @@ class Pi:
     ) -> AsyncIterator[Runner]:
         """Pi has no server: the session installs it; every episode is its own process and workspace."""
         node, cli = await asyncio.to_thread(install, self.profile, cache)
+        mcp = [await asyncio.to_thread(check_mcp, server) for server in task.mcp_servers]  # refuses on tool drift
         if isolation.enabled():  # agents run as other users: they need Node, Pi and the task's tools, nothing else
             await asyncio.to_thread(isolation.grant_read, [node.parent.parent, cli_root(cli), *task_tool_paths()])
         with tempfile.TemporaryDirectory(prefix="agent-distill-pi-") as root:
-            yield Runner(node, cli, task, Path(root))
+            yield Runner(node, cli, task, Path(root), mcp)
 
     async def healthy(self, runner: Runner) -> None:
         if not runner.cli.exists():
@@ -509,6 +538,8 @@ class Pi:
         if task.setup is not None:
             await asyncio.to_thread(task.setup, row, workspace)
         (agent_dir / "models.json").write_text(json.dumps(models_json(endpoint), indent=2))
+        if task.mcp_servers:
+            (agent_dir / "mcp.json").write_text(json.dumps(mcp_json(task), indent=2))
         config = agent_dir / "agent-distill.json"
         config.write_text(json.dumps(extension_config(task, limits, endpoint)))
         env = pi_base_env()
@@ -550,6 +581,8 @@ class Pi:
         episode = episode_from_session(lines, task=task, row_id=row_id, version=self.version, workspace=workspace,
                                        failure=failure, elapsed_seconds=elapsed)  # fmt: skip
         episode.metadata["cwd"] = str(workspace)
+        if runner.mcp:
+            episode.metadata["mcp"] = runner.mcp
         episode.raw = {"session": lines, "stderr": stderr.decode(errors="replace")[-4000:]}
         return episode
 

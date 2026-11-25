@@ -877,6 +877,7 @@ def main(argv: list[str] | None = None) -> int:
     if job_stages:
         manifest = {"run": dataclasses.asdict(config), "name": run.name, "git_commit": jobs.git_commit(),
                     "task": run.task.name, "task_version": run.task.version,
+                    "mcp": [server.summary() for server in run.task.mcp_servers],
                     "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     "residual_risks": list(jobs.RESIDUAL_RISKS)}  # fmt: skip
         if args.dry_run:
