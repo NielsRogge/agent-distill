@@ -1,12 +1,12 @@
-# Teacher pilot: Kimi-K3.1-Pro answers the 51 seed questions in Pi 1.6.0 with the pinned hf CLI and skill, scored
-# by the task's rubrics. It checks the task and its verifiers against human judgement before any traces are bought.
+# Teacher pilot: GLM-5.3 answers the 51 seed questions in Pi 1.6.0 with the pinned hf CLI and skill, scored by the
+# task's rubrics. GLM-5.3 -> Qwen3.5-4B is the pair for this task and its hf-mcp sibling (the user's choice). It checks the task and its verifiers against human judgement before any traces are bought.
 #
 #   distill run examples/hf-hub-qa/run-teacher-pilot.toml --dry-run
 task = "."
-teacher = "kimi-k3.1-pro"
-student = "qwen3.5-9b"  # unused by this run (teacher only), but every run names its student
+teacher = "glm-5.3"
+student = "qwen3.5-4b"  # unused by this run (teacher only); the student of later runs
 harness = "pi@1.6.0"
-name = "hf-hub-qa-pilot-kimi-k31-pro-pi-160"
+name = "hf-hub-qa-pilot-glm-53-pi-160"  # the first pilot ran Kimi-K3.1-Pro (-kimi-k31-pro-pi-160)
 stages = ["eval"]
 
 [hub]
