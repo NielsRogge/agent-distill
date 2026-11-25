@@ -697,13 +697,23 @@ budget pilot.
 
 ## 15. Open items
 
-- **Agent isolation.** Agents run as the stage's OS user. Each Pi episode has its own 0700 directory, removed
-  when it ends, but a concurrent episode (e.g. a sibling GRPO rollout of the same prompt) could still find and
-  read another's workspace under the temp directory, and any agent can read the stage process's environment
-  (`/proc/<pid>/environ`), which holds `HF_TOKEN` and judge keys. Records and sessions redact credentials, and
-  generated pages run in a credential-free browser, but the fix is one OS user per episode (jobs run as root),
-  which needs the episode's tools (Pi, Node, the `preview` Python and Chromium) installed where that user can read
-  them. Until then, check GRPO groups for copied pages.
+- **Agent isolation.** Done for Pi (M5): when the stage runs as root (HF Jobs), every Pi episode's agent runs as
+  its own unprivileged UID (`agent_distill/harnesses/isolation.py`) that owns only its 0700 episode directory.
+  It cannot read the stage's environment (`HF_TOKEN`, judge keys), root's home or the stage's records (0700), nor
+  delete them, and its leftover processes are killed. Node, Pi, the stage's Python and Chromium live outside
+  root's home (`/var/cache/agent-distill`, `UV_PYTHON_INSTALL_DIR`, `PLAYWRIGHT_BROWSERS_PATH`) and are made
+  readable to agents (system directories never are, recursively). After an episode, every process of its UID is
+  killed (including any that left the process group) before the stage reads the answer and session. It reads them
+  through a directory fd pinned before the agent started, never following a symlink at any path component. A
+  preflight checks that agents can be switched to their own users before any episode runs, so before any spend.
+  A stage that is not root warns, and records the mode in each episode record and stage summary. This was prompted
+  by the M5 SFT evaluation, where an episode deleted the stage's `/eval/episodes` mid-run.
+  - Still open:
+    - OpenCode episodes (paper-urls) run as the stage's user.
+    - Episodes share `/tmp` and `/dev/shm`.
+    - A GRPO judge cache under `/work/cache` is readable by agents.
+    - The gates and the judge's browser run as root (with `--no-sandbox`), not as an agent UID.
+    - Agents can reach the stage's local services (the vLLM server, the key proxy), as they must.
 - **Gemini credits.** Top up the project's prepaid credits, then re-run the one-request check. Until then,
   Qwen3.8-27B is the fallback judge.
 - **Terms of use.** Check Gemini's terms for training on scalar judge scores.

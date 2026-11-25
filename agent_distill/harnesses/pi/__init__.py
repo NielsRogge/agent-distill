@@ -14,6 +14,9 @@ Pi (`@earendil-works/pi-coding-agent`) runs one process per episode:
   per-episode `KeyProxy` in the stage process: `models.json` gets the proxy's URL and a session key that is
   worthless outside it. A non-secret literal key (the GRPO capture session id) is written as is.
 - **Credentials.** The Pi process gets a credential-free environment: no real key, not even the teacher's.
+- **Agent user.** When the stage runs as root (HF Jobs), every episode's Pi runs as its own unprivileged UID that
+  owns only its episode directory (`isolation`), so an agent cannot read the job's token, other episodes or the
+  stage's records, or delete them. The answer and session files are read back without following symlinks.
 - **Extension** (`extension.ts`): the `submit` tool (the answer schema, or no arguments for a `FileAnswer`), the
   exact tool-call limit, the credential-free `bash`.
 - **Records.** Pi's own session file is the episode's native trace (the agent-traces viewer reads it as is); the
@@ -41,6 +44,7 @@ from typing import Any
 from agent_distill.config import HarnessProfile
 from agent_distill.credentials import strip_credentials
 from agent_distill.episode import Episode, ToolEvent
+from agent_distill.harnesses import isolation
 from agent_distill.harnesses.base import Endpoint, architecture, download_verified
 from agent_distill.harnesses.opencode import key_proxies
 from agent_distill.harnesses.opencode_v1_reader import answer_from_text, json_text
@@ -323,8 +327,11 @@ def episode_from_session(
     workspace: Path | None = None,
     failure: str | None = None,
     elapsed_seconds: float | None = None,
+    root: Path | None = None,
+    root_fd: int | None = None,
 ) -> Episode:
-    """A Pi session (its JSONL lines) -> `Episode`. A `FileAnswer` is read from `workspace`."""
+    """A Pi session (its JSONL lines) -> `Episode`. A `FileAnswer` is read from `workspace`, without following
+    symlinks below `root` (the episode directory, through its pinned fd `root_fd`; default: `workspace` itself)."""
     messages = session_messages(lines)
     chat = chat_messages(messages)
     events = tool_events(messages)
@@ -340,11 +347,12 @@ def episode_from_session(
     answer_error: str | None = None
     if isinstance(task.answer, FileAnswer):
         mode = "file"
-        path = Path(workspace or ".") / task.answer.path
-        if path.is_file():
-            answer = path.read_text(encoding="utf-8", errors="replace")
-        else:
-            answer_error = f"{task.answer.path} was not written"
+        folder = Path(workspace or ".")
+        answer = isolation.read_agent_file(folder / task.answer.path, root or folder, root_fd=root_fd)
+        if answer is None:
+            written = os.path.lexists(folder / task.answer.path)
+            problem = "is not a regular file in the workspace" if written else "was not written"
+            answer_error = f"{task.answer.path} {problem}"
     else:
         mode = "submit_tool" if submitted is not None else "final_json"
         if submitted is not None:
@@ -391,12 +399,35 @@ def _tools(messages: list[dict[str, Any]]) -> list[str]:
     return [str(tool.get("name")) for tool in system.get("toolsAdded") or []]
 
 
-def read_session(session_dir: Path) -> list[dict[str, Any]]:
-    files = sorted(Path(session_dir).glob("*.jsonl"))
-    if not files:
+def cli_root(cli: Path) -> Path:
+    """The Pi install (`<cache>/pi-<version>`) that holds `cli`."""
+    return next(parent for parent in cli.parents if parent.name.startswith("pi-"))
+
+
+def task_tool_paths() -> list[Path]:
+    """What a task's workspace tools run with: the stage's Python (e.g. `./preview`) and Playwright's Chromium.
+    A system Python (prefix /usr or /usr/local) is already readable by everyone and is left alone."""
+    import sys
+
+    paths = [Path(sys.prefix), Path(sys.base_prefix)]
+    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        paths.append(Path(os.environ["PLAYWRIGHT_BROWSERS_PATH"]))
+    if os.environ.get("AGENT_DISTILL_CHROMIUM"):
+        paths.append(Path(os.environ["AGENT_DISTILL_CHROMIUM"]).parent)
+    return [p for p in dict.fromkeys(paths) if p.resolve() not in isolation.SYSTEM_DIRS]
+
+
+def read_session(session_dir: Path, *, root: Path | None = None, root_fd: int | None = None) -> list[dict[str, Any]]:
+    """The newest session file's lines. The agent's UID owned the directory: it is listed and read without
+    following symlinks below `root` (the episode directory, through its pinned fd `root_fd`)."""
+    session_dir = Path(session_dir)
+    base = root or session_dir
+    names = sorted(n for n in isolation.list_agent_dir(session_dir, base, root_fd=root_fd) if n.endswith(".jsonl"))
+    if not names:
         return []
     lines = []
-    for raw in files[-1].read_text(encoding="utf-8").split("\n"):
+    text = isolation.read_agent_file(session_dir / names[-1], base, root_fd=root_fd) or ""
+    for raw in text.split("\n"):
         if raw.strip():
             with suppress(ValueError):
                 lines.append(json.loads(raw))
@@ -433,6 +464,9 @@ class Pi:
     ) -> AsyncIterator[Runner]:
         """Pi has no server: the session installs it; every episode is its own process and workspace."""
         node, cli = await asyncio.to_thread(install, self.profile, cache)
+        await asyncio.to_thread(isolation.preflight)  # before any episode, so before any spend
+        if isolation.enabled():  # agents run as other users: they need Node, Pi and the task's tools, nothing else
+            await asyncio.to_thread(isolation.grant_read, [node.parent.parent, cli_root(cli), *task_tool_paths()])
         with tempfile.TemporaryDirectory(prefix="agent-distill-pi-") as root:
             yield Runner(node, cli, task, Path(root))
 
@@ -444,14 +478,17 @@ class Pi:
         self, runner: Runner, task: Task, row: dict[str, Any], endpoint: Endpoint, limits: Limits, *, title: str = ""
     ) -> Episode:
         row_id = task.row_id(row)
-        # Each episode gets its own private directory (0700), not a folder in a shared one, and it is removed once the
-        # episode is read, so a finished episode's page is gone before the next starts. Concurrent episodes still run
-        # as the same OS user; DESIGN.md §15 (agent isolation) says what that leaves open.
+        # Each episode gets its own private directory (0700), removed once the episode is read. As root, the agent runs
+        # as its own UID that owns only that directory (agent_distill.harnesses.isolation); otherwise it runs as the
+        # stage's user, with a warning (DESIGN.md §15).
         episode_dir = Path(tempfile.mkdtemp(prefix="agent-distill-episode-"))
+        root_fd = isolation.open_root(episode_dir)  # pinned before the agent can rename or replace anything
         try:
-            with key_proxies([endpoint]) as (routed,):  # a teacher's real key stays in this process
-                return await self._run_in(episode_dir, runner, task, row, row_id, routed, limits)
+            with isolation.agent_user() as uid, key_proxies([endpoint]) as (routed,):  # the real key stays here
+                return await self._run_in(episode_dir, runner, task, row, row_id, routed, limits, uid=uid,
+                                          root_fd=root_fd)  # fmt: skip
         finally:
+            os.close(root_fd)
             await asyncio.to_thread(shutil.rmtree, episode_dir, True)
 
     async def _run_in(
@@ -463,9 +500,13 @@ class Pi:
         row_id: str,
         endpoint: Endpoint,
         limits: Limits,
+        *,
+        uid: int | None = None,
+        root_fd: int | None = None,
     ) -> Episode:
         workspace, agent_dir, sessions = episode_dir / "workspace", episode_dir / "agent", episode_dir / "sessions"
-        for path in (workspace, agent_dir, sessions):
+        home = episode_dir / "home"
+        for path in (workspace, agent_dir, sessions, home):
             path.mkdir()
         if task.setup is not None:
             await asyncio.to_thread(task.setup, row, workspace)
@@ -474,13 +515,20 @@ class Pi:
         config.write_text(json.dumps(extension_config(task, limits, endpoint)))
         env = pi_base_env()
         env.update(PI_CODING_AGENT_DIR=str(agent_dir), AGENT_DISTILL_PI_CONFIG=str(config))
+        user: dict[str, Any] = {}
+        if uid is not None:  # the agent's own UID, owning only this episode's directory
+            for key in [k for k in env if k.startswith("XDG_")]:
+                del env[key]
+            env.update(HOME=str(home), USER="agent", LOGNAME="agent", TMPDIR=str(home))
+            await asyncio.to_thread(isolation.give, episode_dir, uid)
+            user = {"user": uid, "group": uid, "extra_groups": [], "umask": 0o077}
         system_prompt = task.system_prompt_for("pi", self.version, "submit_tool")
         command = pi_command(runner.node, runner.cli, task, endpoint, sessions, task.render_prompt(row), system_prompt)
         started = time.monotonic()
         failure: str | None = None
         process = await asyncio.create_subprocess_exec(
             *command, cwd=workspace, env=env, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE, start_new_session=True, limit=64 * 1024 * 1024,
+            stderr=asyncio.subprocess.PIPE, start_new_session=True, limit=64 * 1024 * 1024, **user,
         )  # fmt: skip
         stderr = bytearray()
 
@@ -496,14 +544,18 @@ class Pi:
             failure = f"episode timed out after {limits.timeout:g} seconds"
         finally:
             await _terminate(process)
+            if uid is not None:  # also what escaped the process group (setsid, double fork): nothing may run on
+                await asyncio.to_thread(isolation.kill_user, uid)  # while the stage reads the agent's files
         if failure is None and process.returncode:
             tail = stderr.decode(errors="replace").strip().splitlines()[-3:]
             failure = f"pi exited with {process.returncode}: {' | '.join(tail)}"[:500]
-        lines = read_session(sessions)
+        lines = read_session(sessions, root=episode_dir, root_fd=root_fd)
         elapsed = round(time.monotonic() - started, 3)
         episode = episode_from_session(lines, task=task, row_id=row_id, version=self.version, workspace=workspace,
-                                       failure=failure, elapsed_seconds=elapsed)  # fmt: skip
+                                       failure=failure, elapsed_seconds=elapsed, root=episode_dir,
+                                       root_fd=root_fd)  # fmt: skip
         episode.metadata["cwd"] = str(workspace)
+        episode.metadata["agent_user"] = "own-uid" if uid is not None else isolation.mode()
         episode.raw = {"session": lines, "stderr": stderr.decode(errors="replace")[-4000:]}
         return episode
 

@@ -32,9 +32,11 @@ JOB_EXTRAS = ("hub",)  # the package extras every job installs (from uv.lock)
 VENV_PYTHON = "/work/venv/bin/python"
 # Printed by every dry run and recorded in the run manifest (DESIGN.md §6, credentials).
 RESIDUAL_RISKS = (
-    "the job's own HF token (its HF_TOKEN secret) is in the stage process's environment and token cache; the "
-    "harness runs as the same user, so an agent could read it from /proc/<pid>/environ although the harness's own "
-    "environment is stripped (teacher keys reach the harness only as key-proxy session keys)",
+    "the job's own HF token (its HF_TOKEN secret) is in the stage process's environment and token cache. Pi agents "
+    "run as their own unprivileged users and cannot read it (agent_distill.harnesses.isolation); OpenCode agents, "
+    "and Pi agents in a stage that is not root or has AGENT_DISTILL_AGENT_USERS=off, run as the stage's user and "
+    "could read it from /proc/<pid>/environ, although the harness's own environment is stripped (teacher keys reach "
+    "the harness only as key-proxy session keys)",
 )
 
 
@@ -147,6 +149,8 @@ def prelude(code_repo: str, rev: str, setup: list[str] = ()) -> str:
             "command -v uvx >/dev/null || python3 -m pip install -q uv",
             'export PATH="$HOME/.local/bin:$PATH"',
             "nvidia-smi --query-gpu=name,memory.total --format=csv 2>/dev/null || true",
+            # uv's Python outside root's home: isolated agents run the stage's Python for task tools (`./preview`).
+            'export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-/opt/uv/python}"',
             "mkdir -p /work && cd /work",
             f"{HF_CLI} download {q(code_repo)} --include 'code/{rev}/*' --local-dir /work/stage >/dev/null",
             f"cp -r /work/stage/code/{rev}/. /work/",

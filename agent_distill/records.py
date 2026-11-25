@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +30,7 @@ from agent_distill.export.pi_session import (
     session_filename,
     write_session,
 )
+from agent_distill.harnesses import isolation
 from agent_distill.rubrics import RubricResult
 
 RECORD_VERSION = 2
@@ -117,6 +118,9 @@ class RecordWriter:
         self.sessions = self.root / "sessions" / prefix
         for path in (self.episodes.parent, self.raw.parent, self.sessions):
             path.mkdir(parents=True, exist_ok=True)
+        if isolation.enabled():  # agents run as other users: the records are none of their business
+            isolation.private(self.root)
+            isolation.private(self.raw_root)
 
     def write(
         self, episode: Episode, result: RubricResult, native_trace: list[dict] | None = None, **extra: Any
@@ -214,7 +218,9 @@ def summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             only_b = sum(b[k] and not a[k] for k in shared)
             paired[f"{first}|{second}"] = {"rows": len(shared), f"{first}_only": only_a, f"{second}_only": only_b,
                                             "mcnemar_exact_p": mcnemar_exact(only_a, only_b)}  # fmt: skip
-    return {"labels": labels, "paired": paired}
+    # How the agents ran: "own-uid" (agent isolation) or as the stage's user (OpenCode, or a stage that is not root).
+    agent_users = Counter(str((r.get("metadata") or {}).get("agent_user") or "stage-user") for r in records)
+    return {"labels": labels, "paired": paired, "agent_users": dict(agent_users)}
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:

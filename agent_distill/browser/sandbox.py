@@ -21,8 +21,10 @@ measures above are what stand between a page and the stage.
 from __future__ import annotations
 
 import asyncio
+import atexit
 import os
 import re
+import shutil
 import tempfile
 from collections.abc import Callable
 from typing import Any
@@ -44,11 +46,22 @@ CHROMIUM_ARGS = [
 ]
 
 
+_HOME: str | None = None
+
+
+def browser_home() -> str:
+    """This process's own browser HOME: a fresh 0700 directory (never a fixed path another user could create first
+    and fill with, e.g., fontconfig for root's Chromium), removed when the process exits."""
+    global _HOME
+    if _HOME is None or not os.path.isdir(_HOME):
+        _HOME = tempfile.mkdtemp(prefix="agent-distill-browser-home-")
+        atexit.register(shutil.rmtree, _HOME, True)
+    return _HOME
+
+
 def browser_env() -> dict[str, str]:
     env = {key: os.environ[key] for key in BROWSER_ENV_KEEP if key in os.environ}
-    home = os.path.join(tempfile.gettempdir(), "agent-distill-browser-home")
-    os.makedirs(home, exist_ok=True)
-    env["HOME"] = home
+    env["HOME"] = browser_home()
     return env
 
 

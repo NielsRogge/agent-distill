@@ -456,7 +456,10 @@ def test_default_cache_is_per_user(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     assert default_cache() == tmp_path / "agent-distill"
     monkeypatch.delenv("XDG_CACHE_HOME")
+    monkeypatch.setattr("os.geteuid", lambda: 1000)
     assert default_cache() == Path.home() / ".cache" / "agent-distill"
+    monkeypatch.setattr("os.geteuid", lambda: 0)  # root: outside its home, so agent users can run the installs
+    assert default_cache() == Path("/var/cache/agent-distill")
 
 
 def test_v2_password_read_respects_the_startup_deadline(tmp_path) -> None:

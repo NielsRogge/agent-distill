@@ -47,8 +47,12 @@ task = Task(
     limits=Limits(timeout=900, max_tool_calls=30),
     judge="gemini-4-hydrogen",  # the user's choice (2026-11-23); Qwen3.8-27B is the second judge
     extras=("browser",),
-    # Chromium for `preview` and the gates, at the version the pinned Playwright drives.
-    job_setup=["uvx --from playwright==1.65.2 playwright install --with-deps chromium >/dev/null"],
+    # Chromium for `preview` and the gates, at the version the pinned Playwright drives, outside root's home: the
+    # agents that run `preview` are other users (agent_distill.harnesses.isolation).
+    job_setup=[
+        "export PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright",
+        "uvx --from playwright==1.65.2 playwright install --with-deps chromium >/dev/null",
+    ],
 )
 
 __all__ = ["task", "user_prompt"]
