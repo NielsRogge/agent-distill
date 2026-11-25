@@ -31,6 +31,7 @@ from typing import Any
 
 from agent_distill.config import Student, load_profile
 from agent_distill.harnesses.base import Endpoint, default_cache, load_harness
+from agent_distill.reasoning import LeakGuard
 from agent_distill.records import RecordWriter, raw_root_for, read_jsonl, summarize_records
 from agent_distill.rubrics import ErrorBudget
 from agent_distill.rubrics.judge import make_judge_runner
@@ -316,6 +317,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--max-error-rate", type=float, default=0.05,
                         help="Stop once more than this share of episodes (after 20) had a rubric error")  # fmt: skip
+    parser.add_argument("--max-reasoning-leak-rate", type=float, default=0.2,
+                        help="Stop once more than this share of episodes (after 20) leaked reasoning (</think>) into "
+                             "their visible content; negative: never stop, only warn and count")  # fmt: skip
     parser.add_argument("--timeout", type=float, default=180)
     parser.add_argument("--max-tool-calls", type=int, default=15)
     parser.add_argument("--output-dir", type=Path, default=Path("/eval"))
@@ -391,6 +395,7 @@ def main(argv: list[str] | None = None) -> None:
         if server is not None:
             wait_for_vllm(server)
         errors = ErrorBudget(max_rate=args.max_error_rate)
+        leaks = LeakGuard(max_rate=args.max_reasoning_leak_rate)
         for label, endpoint in targets:
             prefix = args.prefix or f"{label}/{args.split}"
             if args.output_repo:
@@ -421,6 +426,7 @@ def main(argv: list[str] | None = None) -> None:
                         note=args.collection_note,
                     ),
                     errors=errors,
+                    leaks=leaks,
                 )
             )
             summary = summarize_records(read_jsonl(writer.episodes))

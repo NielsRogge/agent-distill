@@ -18,6 +18,7 @@ from typing import Any
 
 from agent_distill.harnesses.base import Endpoint, HarnessError
 from agent_distill.harnesses.opencode import harness_failure
+from agent_distill.reasoning import LeakGuard, leaked
 from agent_distill.records import RecordWriter, read_jsonl
 from agent_distill.rubrics import ErrorBudget, TooManyErrors, episode_context
 from agent_distill.task import Limits, Task
@@ -108,17 +109,20 @@ async def run_episodes(
     max_restarts: int = 3,
     checkpoint: Checkpoint | None = None,
     errors: ErrorBudget | None = None,
+    leaks: LeakGuard | None = None,
 ) -> None:
     """Run the plan, resuming from what `writer` already holds and restarting the harness after a harness
     failure (such an episode says nothing about the model and is not recorded). Cut-short episodes are rerun
     up to `plan.rerun_cut_short` times per row. A `checkpoint` uploads the records as they grow. `errors` stops
     the stage (`TooManyErrors`, after recording the episode) once too many episodes were unscorable because a
-    rubric errored, e.g. a judge outage; the stages still publish what finished."""
+    rubric errored, e.g. a judge outage; the stages still publish what finished. Every episode is marked
+    `metadata["reasoning_leak"]` (agent_distill.reasoning), and `leaks` stops the stage the same way once too many
+    episodes leak reasoning into their visible content."""
     restarts = 0
     try:
         while work := pending_work(task, rows, writer, plan):
             outcome = await _run_once(harness, task, work, endpoint, writer, plan, limits, concurrency, cache,
-                                      checkpoint, errors)  # fmt: skip
+                                      checkpoint, errors, leaks)  # fmt: skip
             if outcome == "budget":
                 return
             if outcome == "broken":
@@ -145,6 +149,7 @@ async def _run_once(
     cache: Path,
     checkpoint: Checkpoint | None = None,
     errors: ErrorBudget | None = None,
+    leaks: LeakGuard | None = None,
 ) -> str:
     """Run `work` on one fresh harness: "broken" when the harness broke (the rest is left for a restart),
     "budget" when the budget stopped it, else "done".
@@ -168,7 +173,7 @@ async def _run_once(
 
     try:
         await _run_session(harness, task, by_row, endpoint, writer, plan, limits, cache, checkpoint, errors, semaphore,
-                           state, broken, stopped, harness_broke)  # fmt: skip
+                           state, broken, stopped, harness_broke, leaks)  # fmt: skip
     except HarnessError as exc:  # the harness did not start (or failed while stopping)
         harness_broke("-", str(exc))
     if state["over_budget"]:
@@ -194,6 +199,7 @@ async def _run_session(
     broken: asyncio.Event,
     stopped: asyncio.Event,
     harness_broke: Callable[[str, str], None],
+    leaks: LeakGuard | None = None,
 ) -> None:
     async with harness.session([endpoint], cache=cache, task=task) as runner:
 
@@ -221,6 +227,8 @@ async def _run_session(
                         tokens_in, tokens_out = episode.usage.get("input", 0), episode.usage.get("output", 0)
                         episode.usage["cost"] = (tokens_in * price_in + tokens_out * price_out) / 1e6
                         episode.usage["cost_estimated"] = True
+                    leak = leaked(episode)
+                    episode.metadata["reasoning_leak"] = leak
                     context = episode_context(episode, row, limits=limits, task=task, judge=plan.judge)
                     result = await task.rubrics.ascore(context, mode="eval")
                     writer.write(episode, result, harness.native_trace(episode), label=plan.label, attempt=attempt,
@@ -234,8 +242,17 @@ async def _run_session(
                         + (f" cut_short={cut}" if cut else ""),
                         flush=True,
                     )
+                    if leak:
+                        print(f"  [{plan.label}] {row_id}: WARNING reasoning leaked into the visible content",
+                              flush=True)  # fmt: skip
                     if checkpoint is not None:
                         checkpoint.maybe()
+                    if leaks is not None:
+                        try:
+                            leaks.record(leak)
+                        except TooManyErrors:
+                            stopped.set()
+                            raise
                     if errors is not None:
                         try:
                             errors.record(result)
