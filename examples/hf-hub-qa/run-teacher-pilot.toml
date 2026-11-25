@@ -1,5 +1,6 @@
 # Teacher pilot: GLM-5.3 answers the 51 seed questions in Pi 1.6.0 with the pinned hf CLI and skill, scored by the
-# task's rubrics. GLM-5.3 -> Qwen3.5-4B is the pair for this task and its hf-mcp sibling (the user's choice). It checks the task and its verifiers against human judgement before any traces are bought.
+# task's rubrics. GLM-5.3 -> Qwen3.5-4B is the pair for this task and its hf-mcp sibling (the user's choice).
+# It checks the task and its verifiers against human judgement before any traces are bought.
 #
 #   distill run examples/hf-hub-qa/run-teacher-pilot.toml --dry-run
 task = "."
