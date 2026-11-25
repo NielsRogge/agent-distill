@@ -1,6 +1,6 @@
 # hf-hub-qa-mcp: Hub questions answered through the Hugging Face MCP server
 
-**Status: design approved (SFT first); dataset published; smoke run next.**
+**Status: design approved (SFT first); dataset published; smoke run passed (2026-11-25). Full run awaits the user's go.**
 
 A Pi agent answers questions about the Hugging Face Hub using only the tools of the
 [Hugging Face MCP server](https://huggingface.co/docs/hub/en/agents-mcp), through
@@ -159,3 +159,39 @@ Specific to this task:
 | Phase 2 — GRPO (2× H200: vLLM + trainer; ~150 steps) | ≈ 16 H200-h | 20 GPU-h |
 
 Each figure is checked with `--dry-run` and the budget pilot before launch.
+
+## Smoke run (2026-11-25)
+
+`distill smoke run.toml --set 'stages=["traces","sft","merge","eval"]' --set 'eval.variants=["base","sft","teacher"]'`
+→ run `qwen35-4b-hf-hub-qa-mcp-glm-53-pi-160-smoke`.
+
+| Stage | Result |
+|---|---|
+| traces (GLM-5.3, 8 train rows) | 8/8 accepted, $0.06; 1–2 MCP calls per episode |
+| sft (2 steps) | adapter `…-smoke-lora` (public, in the collection) |
+| merge | `…-smoke-sft-merged` |
+| eval, 5 test rows | base 5/5, SFT 4/5, teacher 4/5 |
+
+Cost: $0.12 teacher, ≈ 0.25 H200-h + 2 A100-min (≈ $1.5).
+
+Checks:
+
+- Pi offers exactly the three allowed MCP tools.
+- Every session header carries `pi@1.6.0` and the MCP pin (server 0.4.39, tools sha256, `drift: false`).
+- Sessions sit under `sessions/` for the agent-traces viewer.
+
+Issues found and fixed:
+
+- **Pi's `--no-extensions` also disables its built-in MCP.** The teacher got no tools and wrote fake tool calls as
+  text. Fixed with `-e builtin:mcp`.
+- **The first SFT upload failed** on the account's private-storage cap. Fixed by #10: models are public from
+  creation.
+- **The teacher's one failure was a grounding false positive.** The old checker counted the prose pair
+  `text2text-generation/summarization` as a repo id. The shared stricter checker (#9) no longer counts it.
+- **SFT's one failure was the hedge rule working as meant.** It answered "text classification … actually
+  question-answering", which names two pipeline tags.
+
+**Headroom risk.** The base student solved all 5 test rows. They were library and pipeline questions, which
+make up about a third of the dataset. Before buying traces, a baseline of base and teacher on the 127 validation
+rows (≈ $1 teacher, ≈ 0.5 H200-h) should show per-template accuracy. If base is already near the ceiling, the
+traces should weight the harder templates: parameters, base model and its license, papers and first author.
