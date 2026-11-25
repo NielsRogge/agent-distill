@@ -13,6 +13,9 @@ Each question has one gold value of a kind:
 - `title`: the paper's title (or its part before a colon, if that has at least three words) appears in the answer.
 - `first_author`: the author is named, before any other author of the paper.
 - `arxiv`: the answer names one of the gold arXiv ids and no other arXiv id.
+- `count`: the first standalone integer in the answer is the value ("The repo has **12** GGUF files"). Digits inside
+  words, ids, file names and decimals do not count (`Q4_K_M`, `model-00001-of-00004`, `Qwen3.5-9B`, `4.5`), so an
+  answer that lists files after stating the count is fine, and one that only lists them fails.
 
 `check(kind, gold, answer, **extra) -> bool`; `render(kind, gold)` is the gold value as a sentence (the oracle answer
 used to validate questions).
@@ -158,6 +161,14 @@ def check_arxiv(gold: list[str], answer: str) -> bool:
     return bool(named & set(gold)) and not (named - set(gold))
 
 
+STANDALONE_INT = re.compile(r"(?<![\w.,/:-])(\d{1,3}(?:,\d{3})+|\d+)(?![\w/-]|[.,]\d)")
+
+
+def check_count(gold: int, answer: str) -> bool:
+    found = STANDALONE_INT.search(answer.replace("*", " ").replace("`", " "))
+    return found is not None and int(found.group(1).replace(",", "")) == int(gold)
+
+
 def check(kind: str, gold: Any, answer: str | None, **extra: Any) -> bool:
     if not answer:
         return False
@@ -173,6 +184,8 @@ def check(kind: str, gold: Any, answer: str | None, **extra: Any) -> bool:
         return check_first_author(str(gold), answer, extra.get("authors"))
     if kind == "arxiv":
         return check_arxiv(list(gold), answer)
+    if kind == "count":
+        return check_count(int(gold), answer)
     raise ValueError(f"unknown answer kind {kind!r}")
 
 
@@ -182,6 +195,8 @@ def render(kind: str, gold: Any) -> str:
         return f"It has {int(gold):,} parameters."
     if kind == "arxiv":
         return f"The linked paper is arXiv {next(iter(gold))}."
+    if kind == "count":
+        return f"There are {int(gold)} of them."
     if isinstance(gold, list):
         return f"The answer is {' and '.join(map(str, gold))}."
     return f"The answer is {gold}."

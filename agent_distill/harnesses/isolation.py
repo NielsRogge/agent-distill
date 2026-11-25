@@ -173,6 +173,30 @@ def kill_user(uid: int) -> None:
                 os.kill(int(entry.name), signal.SIGKILL)
 
 
+def agent_can_read(path: Path) -> bool:
+    """Can an agent UID read this file? (Checked as one, so every parent directory counts.)"""
+    with agent_user() as uid:
+        if uid is None:
+            return os.access(path, os.R_OK)
+        command = ["/bin/sh", "-c", 'test -r "$1"', "sh", str(path)]
+        done = subprocess.run(command, user=uid, group=uid, extra_groups=[], env={"PATH": "/usr/bin:/bin"},
+                              capture_output=True, timeout=30)  # fmt: skip
+        return done.returncode == 0
+
+
+def agent_can_run(command: str) -> bool:
+    """Is `command` on the PATH agents inherit and executable by an agent UID? (Checked as one, like
+    `agent_can_read`: a command under a private directory such as /root is on root's PATH but not an agent's.)"""
+    with agent_user() as uid:
+        if uid is None:
+            return shutil.which(command) is not None
+        script = 'p=$(command -v "$1") && test -x "$p"'
+        done = subprocess.run(["/bin/sh", "-c", script, "sh", command], user=uid, group=uid, extra_groups=[],
+                              env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")}, capture_output=True,
+                              timeout=30)  # fmt: skip
+        return done.returncode == 0
+
+
 def open_root(path: Path) -> int:
     """A directory fd to read an episode through later, pinned before the agent can touch the directory."""
     return os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)

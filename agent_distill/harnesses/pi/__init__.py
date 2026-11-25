@@ -476,8 +476,21 @@ class Pi:
         """Pi has no server: the session installs it; every episode is its own process and workspace."""
         node, cli = await asyncio.to_thread(install, self.profile, cache)
         await asyncio.to_thread(isolation.preflight)  # before any episode, so before any spend
-        if isolation.enabled():  # agents run as other users: they need Node, Pi and the task's tools, nothing else
-            await asyncio.to_thread(isolation.grant_read, [node.parent.parent, cli_root(cli), *task_tool_paths()])
+        if isolation.enabled():  # agents run as other users: they need Node, Pi, the task's tools and skills only
+            skills = [Path(skill) for skill in task.skills]
+            await asyncio.to_thread(
+                isolation.grant_read, [node.parent.parent, cli_root(cli), *task_tool_paths(), *skills]
+            )
+            unreadable = [s for s in skills if not await asyncio.to_thread(isolation.agent_can_read, s / "SKILL.md")]
+            if unreadable:  # Pi would silently skip them: fail before any episode (and any spend)
+                raise RuntimeError(
+                    f"agents cannot read the task's skills {unreadable} (a parent directory is private?)"
+                )
+            commands = getattr(task, "commands", ())
+            unrunnable = [c for c in commands if not await asyncio.to_thread(isolation.agent_can_run, c)]
+            if unrunnable:  # on the stage's PATH (Task.missing_commands) is not enough: agents run as other users
+                raise RuntimeError(f"agents cannot run the task's commands {unrunnable} (installed under a private "
+                                   "directory?)")  # fmt: skip
         with tempfile.TemporaryDirectory(prefix="agent-distill-pi-") as root:
             yield Runner(node, cli, task, Path(root))
 

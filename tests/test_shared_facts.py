@@ -93,11 +93,24 @@ def test_repo_number_title_author_arxiv():
     ("category", "apache-2.0"), ("category", ["cc-by-sa-3.0", "gfdl"]), ("repo", "Qwen/Qwen3.5-4B-Base"),
     ("number", 4659865088),
     ("title", "Knowledge Distillation of Russian Language Models"), ("first_author", "Alina Kolesnikova"),
-    ("arxiv", ["2205.02340"]),
+    ("arxiv", ["2205.02340"]), ("count", 12),
 ])  # fmt: skip
 def test_oracle_passes_and_no_op_fails(kind, gold):
     assert facts.check(kind, gold, facts.render(kind, gold))
     assert not facts.check(kind, gold, "I could not find this on the Hub.")
+
+
+@pytest.mark.parametrize(("gold", "answer", "ok"), [
+    (12, "The repo has **12** GGUF files: Q4_K_M, Q8_0.", True),
+    (4, "There are 4 safetensors files (model-00001-of-00004.safetensors, ...).", True),
+    (4, "It is sharded as model-00001-of-00004.safetensors and model-00002-of-00004.safetensors.", False),
+    (3, "1. a.gguf 2. b.gguf 3. c.gguf", False),  # a list without the count
+    (7, "`Qwen/Qwen3.5-9B-GGUF` has 7 GGUF files.", True),
+    (5, "Its largest file is 4.5 GB; there are 5 files.", True),
+    (1200, "1,200 files", True),
+])  # fmt: skip
+def test_count(gold, answer, ok):
+    assert facts.check("count", gold, answer) is ok
 
 
 def test_cited_ids(monkeypatch):
@@ -136,6 +149,9 @@ class FakeHub:
     def space_info(self, ident, expand=None, token=None):
         return SimpleNamespace(sdk="gradio")
 
+    def list_repo_files(self, ident, repo_type="model", token=None):
+        return ["a.gguf", "sub/b.GGUF", "model.safetensors", "README.md"]
+
     def paper_info(self, ident):
         return SimpleNamespace(title="A  Title\n Split", authors=[SimpleNamespace(name="Ada Lovelace")])
 
@@ -150,6 +166,9 @@ class FakeHub:
     ({"type": "space", "id": "s/x", "field": "sdk"}, "gradio"),
     ({"type": "paper", "id": "2205.02340", "field": "title"}, "A Title Split"),
     ({"type": "paper", "id": "2205.02340", "field": "first_author"}, "Ada Lovelace"),
+    ({"type": "paper_of", "id": "org/ft", "field": "title"}, "A Title Split"),
+    ({"type": "files", "id": "org/ft", "field": ".gguf"}, 2),
+    ({"type": "sum", "ids": ["org/ft", "org/base"], "field": "params"}, 14),
 ])  # fmt: skip
 def test_live_value(spec, value):
     assert hub_facts.live_value(spec, hub=FakeHub()) == value
