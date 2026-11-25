@@ -94,3 +94,13 @@ def test_leftover_processes_are_killed(tmp_path):
     with isolation.agent_user() as uid:
         process = subprocess.Popen(["sleep", "600"], user=uid, group=uid, extra_groups=[], start_new_session=True)
     assert process.wait(timeout=10) == -9
+
+
+def test_record_writer_keeps_its_outputs_from_agents(tmp_path, monkeypatch):
+    from agent_distill.records import RecordWriter
+
+    monkeypatch.setattr(isolation, "enabled", lambda: True)
+    writer = RecordWriter(tmp_path / "eval", "sft/test", raw_root=tmp_path / "eval-raw")
+    for root in (tmp_path / "eval", tmp_path / "eval-raw"):
+        assert root.stat().st_mode & 0o777 == 0o700  # an agent user can neither list nor delete what is inside
+    assert writer.episodes.parent.is_relative_to(tmp_path / "eval")
