@@ -247,6 +247,8 @@ def annotate_native_session(
     if lines and lines[0].get("type") == "session":
         lines[0].update({"harness": episode.harness, "harness_version": episode.harness_version,
                          "task": episode.task, "row_id": episode.row_id, "model": episode.model})  # fmt: skip
+        if episode.metadata.get("mcp"):  # the pinned MCP servers (URL, version, tools digest) next to the harness
+            lines[0]["mcp"] = episode.metadata["mcp"]
     entries = [line for line in lines[1:] if line.get("id")]
     last = entries[-1] if entries else None
     stamp = (last or {}).get("timestamp") or (lines[0].get("timestamp") if lines else None)
