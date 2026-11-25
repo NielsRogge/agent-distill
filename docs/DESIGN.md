@@ -193,6 +193,11 @@ Task(
 - **Answers.** `answer` is either a pydantic model or a `FileAnswer`. A pydantic model is a structured
   answer. `FileAnswer` means the answer is a file in the workspace, such as `index.html` for example 2.
   Whatever the harness and answer mode, rubrics receive the parsed answer or `None` ("no answer").
+- **Required commands.** `commands` names the shell commands the agent is expected to run (its prompt, skills or
+  the teacher's traces use them), e.g. `("hf", "curl", "jq")`. Every job checks them after the task's `job_setup`,
+  and every episode stage checks them again before its first episode. Teacher and student jobs run in different
+  images, so without the check a student could imitate teacher commands that do not exist in its image, and its
+  numbers would be understated rather than measured.
 - **Workspaces.** `setup` fills a fresh temporary workspace for each episode, for example the HTML task's
   `preview` CLI.
 - **Scoring hooks.** `score_hooks` run once per episode after the agent stops and before the rubrics, in the
@@ -437,6 +442,9 @@ instead.
   - Datasets are created private and made public only by `publish`, after a credential scan of every text
     file passes. The scan looks for `hf_`, `sk-`, `ghp_`, `github_pat_` and Google API keys.
   - `-code` and `-raw` repos are always private, and `publish` never touches them.
+  - Episode stages (`traces`, `probe`, `eval`) never upload into a public dataset. `distill run` checks
+    before staging or launching anything (the dry run too) and refuses when a stage's dataset was already
+    published. `--reprivatize` makes it private again first; a later `publish` scans and republishes it.
 - **Never deleted.** The tool never deletes Hub repos or files.
 
 **Credentials.**

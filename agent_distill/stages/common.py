@@ -24,6 +24,15 @@ from agent_distill.rubrics import ErrorBudget, TooManyErrors, episode_context
 from agent_distill.task import Limits, Task
 
 
+class PublishRefused(RuntimeError):
+    """An upload the stage must not make, e.g. unscanned episodes into a public dataset.
+
+    A normal exception, never `SystemExit`: it is raised in a checkpoint's upload thread inside the event loop, where a
+    `SystemExit` escapes the loop instead of stopping the stage (pending episodes, harness subprocesses and executor
+    threads are then torn down by `asyncio.run`'s shutdown, if at all). A checkpoint that hits it stops the stage.
+    """
+
+
 @dataclass
 class Plan:
     """What to run for one label: `attempts` per row; with `stop_when_passed`, a row stops at its first pass
@@ -118,9 +127,14 @@ async def run_episodes(
     rubric errored, e.g. a judge outage; the stages still publish what finished. Every episode is marked
     `metadata["reasoning_leak"]` (agent_distill.reasoning), and `leaks` stops the stage the same way once too many
     episodes leak reasoning into their visible content."""
+    if missing := task.missing_commands():
+        raise RuntimeError(f"{plan.label}: commands the task needs are not on the PATH: {', '.join(missing)}")
     restarts = 0
+    owner = asyncio.current_task()
+    if checkpoint is not None and owner is not None:
+        checkpoint.bind(owner)  # a refused checkpoint upload cancels the episodes and ends up raised here
     try:
-        while work := pending_work(task, rows, writer, plan):
+        while (checkpoint is None or checkpoint.error is None) and (work := pending_work(task, rows, writer, plan)):
             outcome = await _run_once(harness, task, work, endpoint, writer, plan, limits, concurrency, cache,
                                       checkpoint, errors, leaks)  # fmt: skip
             if outcome == "budget":
@@ -132,6 +146,10 @@ async def run_episodes(
                 left = len(pending_work(task, rows, writer, plan))
                 print(f"[{plan.label}] restarting the harness after a harness failure ({left} left)", flush=True)
             # "done": every pending row recorded at least one episode; another pass reruns cut-short episodes.
+    except asyncio.CancelledError:
+        if checkpoint is None or checkpoint.error is None or owner is None:
+            raise
+        owner.uncancel()  # our own cancellation: the episodes and the harness are stopped; flush() raises the error
     finally:
         if checkpoint is not None:
             await checkpoint.flush()
@@ -276,7 +294,9 @@ class Checkpoint:
 
     The folder (and the separate raw-log folder, `raw_dir`) is copied first (writes happen on the event loop, so the
     copy is consistent) and the copies are uploaded in a thread, off the event loop, as `upload(folder, raw_folder)`.
-    A failed checkpoint upload is reported, never fatal."""
+    A failed checkpoint upload is reported and retried later, except a refused one (`PublishRefused`, or a
+    `SystemExit` from the upload): that is kept in `error`, cancels the task bound with `bind` (the episode loop, so
+    its episodes and harness stop at once) and is raised by `flush` and `maybe`."""
 
     def __init__(
         self,
@@ -292,8 +312,17 @@ class Checkpoint:
         self.last = time.monotonic()
         self.dirty = False
         self.task: asyncio.Task | None = None
+        self.error: PublishRefused | None = None
+        self._owner: asyncio.Task | None = None
+        self._flushing = False
+
+    def bind(self, owner: asyncio.Task) -> None:
+        """Cancel `owner` when an upload is refused."""
+        self._owner = owner
 
     def maybe(self) -> None:
+        if self.error is not None:
+            raise self.error
         self.dirty = True
         if self.every_seconds <= 0 or time.monotonic() - self.last < self.every_seconds:
             return
@@ -312,13 +341,32 @@ class Checkpoint:
                 shutil.copytree(self.raw_dir, raw_copy)
             try:
                 await asyncio.to_thread(self.upload, copy, raw_copy)
-            except Exception as exc:  # the final publish retries; a checkpoint must not kill the stage
+            except asyncio.CancelledError:
+                raise
+            except PublishRefused as exc:
+                self._refused(exc)
+            except Exception as exc:  # the final publish retries; a transient failure must not kill the stage
                 self.dirty = True
                 print(f"checkpoint upload failed ({type(exc).__name__}: {exc}); continuing", flush=True)
+            except BaseException as exc:  # SystemExit from the upload thread: never let it escape the event loop
+                self._refused(PublishRefused(str(exc) or type(exc).__name__))
+
+    def _refused(self, error: PublishRefused) -> None:
+        self.error = error
+        print(f"checkpoint upload refused: {error}; stopping", flush=True)
+        if self._owner is not None and not self._owner.done() and not self._flushing:
+            self._owner.cancel(f"checkpoint upload refused: {error}")
 
     async def flush(self) -> None:
-        if self.task is not None:
-            await self.task
+        """Wait for the upload in flight; raise the refusal if an upload was refused."""
+        self._flushing = True
+        try:
+            if self.task is not None:
+                await self.task
+        finally:
+            self._flushing = False
+        if self.error is not None:
+            raise self.error
 
 
 def resume_from_hub(

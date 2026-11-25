@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -140,8 +141,9 @@ def stage_code(
     return rev
 
 
-def prelude(code_repo: str, rev: str, setup: list[str] = ()) -> str:
-    """Shell lines every job starts with: uv, the staged code, the task's own setup commands."""
+def prelude(code_repo: str, rev: str, setup: list[str] = (), commands: Sequence[str] = ()) -> str:
+    """Shell lines every job starts with: uv, the staged code, the task's own setup commands, then a check that the
+    commands the task's agents need are on the PATH (Task.commands), so a job image without them fails at once."""
     return "\n".join(
         [
             "set -euo pipefail",
@@ -159,7 +161,18 @@ def prelude(code_repo: str, rev: str, setup: list[str] = ()) -> str:
             f"uv pip install -q --python {VENV_PYTHON} --require-hashes -r /work/requirements.txt",
             f'uv pip install -q --python {VENV_PYTHON} --no-deps "$WHEEL"',
             *setup,
+            *([require(commands)] if commands else []),
         ]
+    )
+
+
+def require(commands: Sequence[str]) -> str:
+    """A shell line that fails the job, naming the missing ones, unless every command is on the PATH."""
+    names = " ".join(q(command) for command in commands)
+    return (
+        f'missing=(); for c in {names}; do command -v "$c" >/dev/null || missing+=("$c"); done; '
+        'if [ ${#missing[@]} -gt 0 ]; then echo "this job image lacks commands the task needs: ${missing[*]}" >&2; '
+        "exit 1; fi"
     )
 
 

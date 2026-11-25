@@ -179,3 +179,27 @@ def test_captured_tool_definitions():
     assert names == ["bash", "read", "write", "submit"]
     submit = next(tool for tool in harness_tools("pi@1.6.0", PAPERS) if tool["function"]["name"] == "submit")
     assert "github_url" in submit["function"]["parameters"]["properties"]
+
+
+def test_terminate_kills_the_agent_when_cancelled_while_waiting_for_it() -> None:
+    """A second cancellation during the SIGTERM grace period (a stage shutting down) still kills the process group."""
+    import asyncio
+    import time
+
+    from agent_distill.harnesses.pi import _terminate
+
+    async def main() -> int:
+        process = await asyncio.create_subprocess_exec(
+            "sh", "-c", "trap '' TERM; while :; do sleep 0.05; done", start_new_session=True
+        )
+        await asyncio.sleep(0.2)  # let the shell install its trap
+        terminating = asyncio.create_task(_terminate(process))
+        await asyncio.sleep(0.2)
+        terminating.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await terminating
+        return await asyncio.wait_for(process.wait(), 5)
+
+    started = time.monotonic()
+    assert asyncio.run(main()) != 0  # killed, long before the 10-second grace period
+    assert time.monotonic() - started < 5
