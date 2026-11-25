@@ -697,13 +697,15 @@ budget pilot.
 
 ## 15. Open items
 
-- **Agent isolation.** Agents run as the stage's OS user. Each Pi episode has its own 0700 directory, removed
-  when it ends, but a concurrent episode (e.g. a sibling GRPO rollout of the same prompt) could still find and
-  read another's workspace under the temp directory, and any agent can read the stage process's environment
-  (`/proc/<pid>/environ`), which holds `HF_TOKEN` and judge keys. Records and sessions redact credentials, and
-  generated pages run in a credential-free browser, but the fix is one OS user per episode (jobs run as root),
-  which needs the episode's tools (Pi, Node, the `preview` Python and Chromium) installed where that user can read
-  them. Until then, check GRPO groups for copied pages.
+- **Agent isolation.** Done for Pi (M5): when the stage runs as root (HF Jobs), every Pi episode's agent runs as
+  its own unprivileged UID (`agent_distill/harnesses/isolation.py`) that owns only its 0700 episode directory.
+  It cannot read the stage's environment (`HF_TOKEN`, judge keys), root's home or the stage's records (0700), nor
+  delete them, and its leftover processes are killed. Node, Pi, the stage's Python and Chromium live outside
+  root's home (`/var/cache/agent-distill`, `UV_PYTHON_INSTALL_DIR`, `PLAYWRIGHT_BROWSERS_PATH`) and are made
+  readable to agents. Answer and session files are read without following symlinks. This was prompted by the M5
+  SFT evaluation, where an episode deleted the stage's `/eval/episodes` mid-run. Still open: OpenCode episodes
+  (paper-urls) run as the stage's user. Agents can also reach the stage's local services (the vLLM server, the
+  key proxy), as they must.
 - **Gemini credits.** Top up the project's prepaid credits, then re-run the one-request check. Until then,
   Qwen3.8-27B is the fallback judge.
 - **Terms of use.** Check Gemini's terms for training on scalar judge scores.

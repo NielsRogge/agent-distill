@@ -14,6 +14,9 @@ Pi (`@earendil-works/pi-coding-agent`) runs one process per episode:
   per-episode `KeyProxy` in the stage process: `models.json` gets the proxy's URL and a session key that is
   worthless outside it. A non-secret literal key (the GRPO capture session id) is written as is.
 - **Credentials.** The Pi process gets a credential-free environment: no real key, not even the teacher's.
+- **Agent user.** When the stage runs as root (HF Jobs), every episode's Pi runs as its own unprivileged UID that
+  owns only its episode directory (`isolation`), so an agent cannot read the job's token, other episodes or the
+  stage's records, or delete them. The answer and session files are read back without following symlinks.
 - **Extension** (`extension.ts`): the `submit` tool (the answer schema, or no arguments for a `FileAnswer`), the
   exact tool-call limit, the credential-free `bash`.
 - **Records.** Pi's own session file is the episode's native trace (the agent-traces viewer reads it as is); the
@@ -41,6 +44,7 @@ from typing import Any
 from agent_distill.config import HarnessProfile
 from agent_distill.credentials import strip_credentials
 from agent_distill.episode import Episode, ToolEvent
+from agent_distill.harnesses import isolation
 from agent_distill.harnesses.base import Endpoint, architecture, download_verified
 from agent_distill.harnesses.opencode import key_proxies
 from agent_distill.harnesses.opencode_v1_reader import answer_from_text, json_text
@@ -340,11 +344,12 @@ def episode_from_session(
     answer_error: str | None = None
     if isinstance(task.answer, FileAnswer):
         mode = "file"
-        path = Path(workspace or ".") / task.answer.path
-        if path.is_file():
-            answer = path.read_text(encoding="utf-8", errors="replace")
-        else:
-            answer_error = f"{task.answer.path} was not written"
+        root = Path(workspace or ".")
+        answer = isolation.read_agent_file(root / task.answer.path, root)
+        if answer is None:
+            written = os.path.lexists(root / task.answer.path)
+            problem = "is not a regular file in the workspace" if written else "was not written"
+            answer_error = f"{task.answer.path} {problem}"
     else:
         mode = "submit_tool" if submitted is not None else "final_json"
         if submitted is not None:
@@ -391,12 +396,30 @@ def _tools(messages: list[dict[str, Any]]) -> list[str]:
     return [str(tool.get("name")) for tool in system.get("toolsAdded") or []]
 
 
+def cli_root(cli: Path) -> Path:
+    """The Pi install (`<cache>/pi-<version>`) that holds `cli`."""
+    return next(parent for parent in cli.parents if parent.name.startswith("pi-"))
+
+
+def task_tool_paths() -> list[Path]:
+    """What a task's workspace tools run with: the stage's Python (e.g. `./preview`) and Playwright's Chromium."""
+    import sys
+
+    paths = [Path(sys.prefix), Path(sys.base_prefix)]
+    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        paths.append(Path(os.environ["PLAYWRIGHT_BROWSERS_PATH"]))
+    if os.environ.get("AGENT_DISTILL_CHROMIUM"):
+        paths.append(Path(os.environ["AGENT_DISTILL_CHROMIUM"]).parent)
+    return paths
+
+
 def read_session(session_dir: Path) -> list[dict[str, Any]]:
     files = sorted(Path(session_dir).glob("*.jsonl"))
     if not files:
         return []
     lines = []
-    for raw in files[-1].read_text(encoding="utf-8").split("\n"):
+    text = isolation.read_agent_file(files[-1], session_dir) or ""  # the agent's UID owned this directory
+    for raw in text.split("\n"):
         if raw.strip():
             with suppress(ValueError):
                 lines.append(json.loads(raw))
@@ -433,6 +456,8 @@ class Pi:
     ) -> AsyncIterator[Runner]:
         """Pi has no server: the session installs it; every episode is its own process and workspace."""
         node, cli = await asyncio.to_thread(install, self.profile, cache)
+        if isolation.enabled():  # agents run as other users: they need Node, Pi and the task's tools, nothing else
+            await asyncio.to_thread(isolation.grant_read, [node.parent.parent, cli_root(cli), *task_tool_paths()])
         with tempfile.TemporaryDirectory(prefix="agent-distill-pi-") as root:
             yield Runner(node, cli, task, Path(root))
 
@@ -449,8 +474,8 @@ class Pi:
         # as the same OS user; DESIGN.md §15 (agent isolation) says what that leaves open.
         episode_dir = Path(tempfile.mkdtemp(prefix="agent-distill-episode-"))
         try:
-            with key_proxies([endpoint]) as (routed,):  # a teacher's real key stays in this process
-                return await self._run_in(episode_dir, runner, task, row, row_id, routed, limits)
+            with isolation.agent_user() as uid, key_proxies([endpoint]) as (routed,):  # the real key stays here
+                return await self._run_in(episode_dir, runner, task, row, row_id, routed, limits, uid=uid)
         finally:
             await asyncio.to_thread(shutil.rmtree, episode_dir, True)
 
@@ -463,9 +488,12 @@ class Pi:
         row_id: str,
         endpoint: Endpoint,
         limits: Limits,
+        *,
+        uid: int | None = None,
     ) -> Episode:
         workspace, agent_dir, sessions = episode_dir / "workspace", episode_dir / "agent", episode_dir / "sessions"
-        for path in (workspace, agent_dir, sessions):
+        home = episode_dir / "home"
+        for path in (workspace, agent_dir, sessions, home):
             path.mkdir()
         if task.setup is not None:
             await asyncio.to_thread(task.setup, row, workspace)
@@ -474,13 +502,20 @@ class Pi:
         config.write_text(json.dumps(extension_config(task, limits, endpoint)))
         env = pi_base_env()
         env.update(PI_CODING_AGENT_DIR=str(agent_dir), AGENT_DISTILL_PI_CONFIG=str(config))
+        user: dict[str, Any] = {}
+        if uid is not None:  # the agent's own UID, owning only this episode's directory
+            for key in [k for k in env if k.startswith("XDG_")]:
+                del env[key]
+            env.update(HOME=str(home), USER="agent", LOGNAME="agent", TMPDIR=str(home))
+            await asyncio.to_thread(isolation.give, episode_dir, uid)
+            user = {"user": uid, "group": uid, "extra_groups": [], "umask": 0o077}
         system_prompt = task.system_prompt_for("pi", self.version, "submit_tool")
         command = pi_command(runner.node, runner.cli, task, endpoint, sessions, task.render_prompt(row), system_prompt)
         started = time.monotonic()
         failure: str | None = None
         process = await asyncio.create_subprocess_exec(
             *command, cwd=workspace, env=env, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE, start_new_session=True, limit=64 * 1024 * 1024,
+            stderr=asyncio.subprocess.PIPE, start_new_session=True, limit=64 * 1024 * 1024, **user,
         )  # fmt: skip
         stderr = bytearray()
 

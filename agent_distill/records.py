@@ -30,6 +30,7 @@ from agent_distill.export.pi_session import (
     session_filename,
     write_session,
 )
+from agent_distill.harnesses import isolation
 from agent_distill.rubrics import RubricResult
 
 RECORD_VERSION = 2
@@ -117,6 +118,9 @@ class RecordWriter:
         self.sessions = self.root / "sessions" / prefix
         for path in (self.episodes.parent, self.raw.parent, self.sessions):
             path.mkdir(parents=True, exist_ok=True)
+        if isolation.enabled():  # agents run as other users: the records are none of their business
+            isolation.private(self.root)
+            isolation.private(self.raw_root)
 
     def write(
         self, episode: Episode, result: RubricResult, native_trace: list[dict] | None = None, **extra: Any

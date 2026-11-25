@@ -122,9 +122,13 @@ def architecture() -> str:
 
 
 def default_cache() -> Path:
-    """The per-user download cache: `$XDG_CACHE_HOME/agent-distill`, else `~/.cache/agent-distill`."""
-    root = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(root) / "agent-distill"
+    """The download cache: `$XDG_CACHE_HOME/agent-distill`, else `~/.cache/agent-distill`; as root (HF Jobs)
+    `/var/cache/agent-distill`, outside root's home, so agents running as other users can run what it holds."""
+    if os.environ.get("XDG_CACHE_HOME"):
+        return Path(os.environ["XDG_CACHE_HOME"]) / "agent-distill"
+    if os.geteuid() == 0:
+        return Path("/var/cache/agent-distill")
+    return Path.home() / ".cache" / "agent-distill"
 
 
 def download_verified(url: str, sha256: str, timeout: float = 180) -> bytes:

@@ -147,6 +147,8 @@ def prelude(code_repo: str, rev: str, setup: list[str] = ()) -> str:
             "command -v uvx >/dev/null || python3 -m pip install -q uv",
             'export PATH="$HOME/.local/bin:$PATH"',
             "nvidia-smi --query-gpu=name,memory.total --format=csv 2>/dev/null || true",
+            # uv's Python outside root's home: isolated agents run the stage's Python for task tools (`./preview`).
+            'export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-/opt/uv/python}"',
             "mkdir -p /work && cd /work",
             f"{HF_CLI} download {q(code_repo)} --include 'code/{rev}/*' --local-dir /work/stage >/dev/null",
             f"cp -r /work/stage/code/{rev}/. /work/",
