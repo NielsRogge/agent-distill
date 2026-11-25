@@ -239,3 +239,45 @@ def test_checkpoint_uploads_a_consistent_copy(tmp_path):
 
     asyncio.run(main())
     assert uploads == [["a.jsonl"]]
+
+
+def test_episodes_upload_before_raw_logs_and_raw_logs_can_stay_local(tmp_path, monkeypatch):
+    from agent_distill.stages import eval as eval_stage
+
+    calls = []
+
+    class FakeApi:
+        def list_repo_files(self, repo, repo_type):
+            return ["README.md"]
+
+        def upload_folder(self, folder_path, repo_id, repo_type, commit_message, ignore_patterns=None):
+            calls.append(repo_id)
+            if repo_id.endswith("-raw"):
+                raise RuntimeError("Private storage limit reached")
+
+    monkeypatch.setattr("huggingface_hub.HfApi", FakeApi)
+    monkeypatch.setattr(eval_stage, "private_dataset", lambda api, repo: False)
+    raw = tmp_path / "raw"
+    (raw / "base").mkdir(parents=True)
+    (raw / "base" / "test.jsonl").write_text("{}\n")
+    with pytest.raises(RuntimeError, match="Private storage"):
+        eval_stage.publish(tmp_path / "out", "org/run-eval", "pi@1.6.0", "t", raw_dir=raw, raw_repo="org/run-eval-raw")
+    assert calls == ["org/run-eval", "org/run-eval-raw"]  # the episodes were already uploaded
+    calls.clear()
+    eval_stage.publish(tmp_path / "out", "org/run-eval", "pi@1.6.0", "t", raw_dir=None, raw_repo="")
+    assert calls == ["org/run-eval"]
+
+
+def test_raw_logs_off_passes_no_raw_upload():
+    run = pipeline.make_run(load_run(SMOKE, {"hub.raw_logs": False}))
+    args = pipeline.output_args(run, "eval")
+    assert "--no-raw-upload" in args and "--raw-repo" not in args
+    assert "--raw-repo" in pipeline.output_args(pipeline.make_run(load_run(SMOKE)), "traces")
+    from agent_distill.stages.eval import parse_args as eval_args
+    from agent_distill.stages.traces import parse_args as traces_args
+
+    assert eval_args(["--task", "t", "--harness", "pi@1.6.0", "--student", "s", "--model", "m",
+                      "--split", "test", "--no-raw-upload"]).no_raw_upload  # fmt: skip
+    assert traces_args(
+        ["--task", "t", "--harness", "pi@1.6.0", "--teacher", "glm-5.3", "--no-raw-upload"]
+    ).no_raw_upload
