@@ -2,11 +2,13 @@
 
 - `answered` (gate): the episode ended with a final message (not cut off while still calling tools).
 - `read_only` (gate): no command that writes to the Hub or logs in (`hf upload`, `hf repos create|delete`, `hf jobs
-  run`, ...). The agent has no token, so such commands fail anyway; trying them still fails the episode.
+  run`, ...; `--help` on one is fine). The agent has no token, so such commands fail anyway; trying them still
+  fails the episode.
 - `used_hub` (gate): at least one successful `hf` command (or Hub API call). An answer from memory fails, however
   good: the task is to look things up.
-- `grounded`: of the Hub ids the answer names (repos `owner/name`, papers `2205.02340`, huggingface.co links), the
-  share that appears in the episode's own tool output. Ids the agent never saw are guesses. Not scored (None) when
+- `grounded`: of the Hub ids the answer names (repo ids written as ids, in `code` or a huggingface.co link; bare
+  `word/word` pairs only if they exist on the Hub; paper ids), the share that appears in the episode's own tool
+  output. Ids the agent never saw are guesses. Not scored (None) when
   the answer names no ids.
 - `reference`: for questions with a canonical answer (questions.py), the stage runs the reference `hf` command when
   it scores and checks the answer against it: recall of the top-k ids (a match anywhere in the listing's top 2k
@@ -52,6 +54,8 @@ HUB_COMMAND = re.compile(r"(?:^|[\s;&|(`])hf\s+[a-z]|huggingface\.co/api/|huggin
 REPO_ID = re.compile(r"(?<![\w./-])([A-Za-z0-9][\w.-]{0,95})/([A-Za-z0-9][\w.-]{0,95})(?![\w/-])")
 PAPER_ID = re.compile(r"(?<![\w.])(\d{4}\.\d{4,5})(?![\w]|\.\d)")
 HUB_LINK = re.compile(r"huggingface\.co/(?:(?:datasets|spaces)/)?([A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*)")
+ORG_PAGES = {"models", "datasets", "spaces", "collections", "papers", "activity", "posts", "followers"}
+HELP = re.compile(r"(?:^|\s)(?:--help|-h)(?:\s|$)")
 NOT_IDS = {"and/or", "input/output", "read/write", "train/test", "true/false", "yes/no", "on/off"}
 
 
@@ -68,21 +72,54 @@ def tool_text(tool_events: list[Any]) -> str:
     return "\n".join(f"{command_of(e)}\n{getattr(e, 'output', '') or ''}" for e in tool_events or [])
 
 
-def cited_ids(answer: str) -> set[str]:
-    """Hub ids an answer names: repo ids that look like ids, paper ids, and huggingface.co links."""
-    found: set[str] = set()
-    for owner, name in REPO_ID.findall(answer):
+CODE_SPAN = re.compile(r"`([^`\n]{3,200})`")
+LINK_TARGET = re.compile(r"\]\((https?://[^)\s]+)\)")
+
+
+def _repo_candidates(text: str) -> set[str]:
+    found = set()
+    for owner, name in REPO_ID.findall(text):
         candidate = f"{owner}/{name}".rstrip(".")
-        if candidate.lower() in NOT_IDS or "://" in candidate or owner.lower() in {"http", "https", "www"}:
+        if candidate.lower() in NOT_IDS or owner.lower() in {"http", "https", "www"}:
             continue
         if owner.lower() in {"huggingface.co", "hf.co", "datasets", "spaces", "models", "papers"}:
             continue
-        # Plain word pairs ("text/image") are not ids; ids have a capital, digit or separator somewhere.
-        if not re.search(r"[A-Z0-9_.-]", candidate.replace("/", "")):
+        if name.lower() in ORG_PAGES:  # huggingface.co/Qwen/models: an organisation's listing, not a repo
             continue
         found.add(candidate)
+    return found
+
+
+@lru_cache(maxsize=4096)
+def exists_on_hub(repo_id: str) -> bool:
+    """Is this a public model, dataset or Space (anonymous, like the agent)?"""
+    from huggingface_hub import HfApi
+
+    api = HfApi(token=False)
+    for kind in ("model", "dataset", "space"):
+        try:
+            if api.repo_exists(repo_id, repo_type=kind):
+                return True
+        except Exception:  # an invalid id, a rate limit: not evidence that it exists
+            continue
+    return False
+
+
+def cited_ids(answer: str, *, check_hub: bool = True) -> set[str]:
+    """Hub ids an answer names. Repo ids written as ids (in `code` or a huggingface.co link) always count, so an
+    invented id is caught; a bare `word/word` in prose ("PEFT/LoRA", "F16/BF16") counts only if it exists on the Hub.
+    Paper ids (2205.02340) count wherever they appear."""
+    marked = set()
+    for span in CODE_SPAN.findall(answer):
+        marked |= _repo_candidates(span)
+    marked.update(
+        link.rstrip(".")
+        for link in HUB_LINK.findall(answer)
+        if not link.startswith("papers/") and link.rstrip(".").split("/")[-1].lower() not in ORG_PAGES
+    )
+    prose = _repo_candidates(LINK_TARGET.sub("", CODE_SPAN.sub(" ", answer))) - marked
+    found = marked | {c for c in prose if check_hub and exists_on_hub(c)}
     found.update(PAPER_ID.findall(answer))
-    found.update(link.rstrip(".") for link in HUB_LINK.findall(answer) if not link.startswith("papers/"))
     return found
 
 
@@ -93,7 +130,8 @@ def answered(answer: Any) -> float:
 
 @process(weight=0.0)
 def read_only(tool_events: list[Any]) -> float:
-    return 0.0 if any(WRITE_COMMANDS.search(command_of(e)) for e in shell_events(tool_events)) else 1.0
+    writes = [c for c in map(command_of, shell_events(tool_events)) if WRITE_COMMANDS.search(c)]
+    return 0.0 if any(not HELP.search(c) for c in writes) else 1.0
 
 
 @process(weight=0.0)
