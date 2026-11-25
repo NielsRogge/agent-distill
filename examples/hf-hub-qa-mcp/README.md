@@ -1,7 +1,7 @@
 # hf-hub-qa-mcp: Hub questions answered through the Hugging Face MCP server
 
-**Status: v1 (single lookups) was a ceiling (base 96%), so the task moved to v2 (multi-hop and file counts; base 74.5%,
-teacher 97.4%). The full v2 SFT run (`qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160`) is running.**
+**Status: phase 1 (SFT) done on v2. Non-thinking Qwen3.5-4B goes from 73.3% to 80.0% on 150 test questions after
+SFT on 599 GLM-5.3 traces (teacher 98.7%), and its failed MCP calls drop from 41% to 13% (see "Results").**
 
 A Pi agent answers questions about the Hugging Face Hub using only the tools of the
 [Hugging Face MCP server](https://huggingface.co/docs/hub/en/agents-mcp), through
@@ -256,3 +256,53 @@ The teacher has 152 episodes because 3 cut-short episodes were rerun.
 The headroom is about 23 points. It sits in file counting (listing every folder with `hf_fs`), paper lookups through a
 model's tags, and the base model's size. Tool competence differs more than the pass rate: the base model fails 36% of
 its MCP calls (`mcp_errors`), the teacher 9%.
+
+## Results: v2 SFT run (2026-11-25)
+
+Run `qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160`. Three stages:
+
+- **Traces:** GLM-5.3 on 600 train questions, at most 2 attempts each. 599 accepted, $21.18.
+- **SFT:** Qwen3.5-4B LoRA, 1 epoch, on the accepted traces with reasoning dropped (`nielsr/…-lora`).
+- **Evaluation:** 150 test questions, `pi@1.6.0`, HF MCP server 0.4.39 with the pinned tools.
+
+The student is served **without thinking** (`qwen3.5-4b-nothink`, #14), matching its reasoning-free SFT data. The
+scoring is the task's rubrics with the corrected `allowed_tools` gate: invented tool names that Pi rejected count as
+failed calls, not as fallbacks.
+
+| | Passed | MCP calls / episode | Failed MCP calls |
+|---|---|---|---|
+| Qwen3.5-4B (base) | 110/150 (73.3%) | 5.85 | 41.2% |
+| **Qwen3.5-4B + SFT** | **120/150 (80.0%)** | **3.53** | **13.0%** |
+| GLM-5.3 (teacher) | 148/150 (98.7%) | 3.37 | 8.9% |
+
+Across the 450 episodes: no reasoning leaked, no episode was truncated, and none was unscorable. On the paired rows,
+SFT fixed 25 base failures and broke 15 base passes (exact McNemar p = 0.15), so the pass-rate gain is not yet
+significant at 150 rows. The tool-use change is large: SFT cut the base model's failed MCP calls from 41% to 13% and
+its calls per episode from 5.9 to 3.5, close to the teacher's 9% and 3.4.
+
+| Template | n | Base | SFT | Teacher |
+|---|---|---|---|---|
+| paper_title | 24 | 17 | **24** | 24 |
+| base_pipeline | 12 | 8 | 10 | 12 |
+| base_params | 30 | 21 | 22 | 30 |
+| safetensors_count | 12 | 7 | 8 | 12 |
+| paper_first_author | 26 | 24 | 25 | 26 |
+| base_license | 5 | 4 | 4 | 3 |
+| params_sum | 26 | 23 | 22 | 26 |
+| gguf_count | 15 | 6 | 5 | 15 |
+
+What remains is counting files across folders (`gguf_count` 5/15 against the teacher's 15/15) and the base model's
+size. These are the rows phase 2 (difficulty probe, then GRPO) would target.
+
+**Before the fix: the thinking student.** The first evaluation served Qwen3.5-4B in its default thinking mode, with no
+reasoning parser. Its reasoning landed in the answers: 148/150 base answers contained `</think>`. The numbers are
+kept for the record:
+
+| Scoring | Base | SFT | Teacher |
+|---|---|---|---|
+| as run | 76.7% | 78.7% | 98.7% |
+| lenient tool gate | 77.3% | 85.3% | 98.7% |
+| lenient gate, text after `</think>` only | 88.7% | 88.7% | 98.7% |
+
+Thinking mode is not comparable with the reasoning-free SFT data: SFT shows no gain there. Hence the non-thinking
+profile, and #14's guard that now flags reasoning leakage in every episode stage.
