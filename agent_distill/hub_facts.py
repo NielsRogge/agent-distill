@@ -4,8 +4,8 @@ answer. Reads are anonymous by default, as the agent sees the Hub.
 
 A row's `live` spec is `{"type": "model" | "base" | "dataset" | "space" | "paper", "id": ..., "field": ...}`:
 
-- model fields: `license`, `pipeline`, `library`, `params` (safetensors total), `base` (the single base model, or
-  None), `arxiv` (sorted linked arXiv ids);
+- model fields: `license` (a string, or a sorted list for a dual license), `pipeline`, `library`, `params`
+  (safetensors total), `base` (the single base model, or None), `arxiv` (sorted linked arXiv ids);
 - `base`: a field of the model's base model (e.g. its license);
 - dataset: `license`; space: `sdk`; paper: `title` or `first_author`.
 """
@@ -36,10 +36,18 @@ def single(value: Any) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def license_value(value: Any) -> str | list[str]:
+    """A card's `license`: one id as a string; several (a dual license) as a sorted list; "" when missing."""
+    if isinstance(value, list):
+        values = sorted({text(v) for v in value if text(v)})
+        return values[0] if len(values) == 1 else values if values else ""
+    return text(value)
+
+
 def model_fields(info: Any) -> dict[str, Any]:
     data = card(info)
     return {
-        "license": text(data.get("license")),
+        "license": license_value(data.get("license")),
         "pipeline": text(info.pipeline_tag),
         "library": text(info.library_name),
         "params": info.safetensors.total if getattr(info, "safetensors", None) else None,
@@ -61,7 +69,7 @@ def live_value(spec: dict[str, Any], hub: Any = None, token: bool | str | None =
         base = model_fields(hub.model_info(ident, expand=EXPAND, token=token))["base"]
         return model_fields(hub.model_info(base, expand=EXPAND, token=token)).get(field) if base else None
     if kind == "dataset":
-        return text(card(hub.dataset_info(ident, expand=["cardData"], token=token)).get("license"))
+        return license_value(card(hub.dataset_info(ident, expand=["cardData"], token=token)).get("license"))
     if kind == "space":
         return text(hub.space_info(ident, expand=["sdk"], token=token).sdk)
     if kind == "paper":
