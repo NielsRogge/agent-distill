@@ -196,3 +196,19 @@ def test_browser_home_is_private_to_this_process():
     home = Path(browser_home())
     assert home.name.startswith("agent-distill-browser-home-") and home.name != "agent-distill-browser-home"
     assert home.stat().st_uid == os.getuid() and home.stat().st_mode & 0o777 == 0o700
+
+
+@as_root
+def test_agent_can_read_sees_parent_directories():
+    base = Path(tempfile.mkdtemp(prefix="agent-distill-isolation-test-"))
+    try:
+        (base / "open").mkdir()
+        (base / "open" / "SKILL.md").write_text("---\nname: x\n---\n")
+        base.chmod(0o755)
+        assert isolation.agent_can_read(base / "open" / "SKILL.md")
+        base.chmod(0o700)  # a private parent: the agent cannot reach the skill
+        assert not isolation.agent_can_read(base / "open" / "SKILL.md")
+        isolation.grant_read([base / "open"])  # grants traversal of the parents too
+        assert isolation.agent_can_read(base / "open" / "SKILL.md")
+    finally:
+        shutil.rmtree(base)

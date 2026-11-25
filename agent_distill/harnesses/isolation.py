@@ -173,6 +173,17 @@ def kill_user(uid: int) -> None:
                 os.kill(int(entry.name), signal.SIGKILL)
 
 
+def agent_can_read(path: Path) -> bool:
+    """Can an agent UID read this file? (Checked as one, so every parent directory counts.)"""
+    with agent_user() as uid:
+        if uid is None:
+            return os.access(path, os.R_OK)
+        command = ["/bin/sh", "-c", 'test -r "$1"', "sh", str(path)]
+        done = subprocess.run(command, user=uid, group=uid, extra_groups=[], env={"PATH": "/usr/bin:/bin"},
+                              capture_output=True, timeout=30)  # fmt: skip
+        return done.returncode == 0
+
+
 def open_root(path: Path) -> int:
     """A directory fd to read an episode through later, pinned before the agent can touch the directory."""
     return os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
