@@ -17,7 +17,7 @@ from agent_distill.harnesses.pi import (
     tool_names,
 )
 from agent_distill.rubrics import RubricSet
-from agent_distill.task import DatasetSpec, FileAnswer, Limits, Task, load_task
+from agent_distill.task import DatasetSpec, FileAnswer, Limits, Task, TextAnswer, load_task
 
 PAPERS = load_task("examples/paper-urls")
 PROFILE = load_profile("harnesses", "pi@1.6.0")
@@ -92,6 +92,37 @@ def test_command_isolates_pi():
     assert command[command.index("-e") + 1] == str(EXTENSION)
     assert command[command.index("--tools") + 1] == "bash,read,write,submit" == ",".join(tool_names(html_task()))
     assert command[-2:] == ["--", "go"] and command[command.index("--system-prompt") + 1] == "sys"
+
+
+def text_task(**kw) -> Task:
+    return Task(name="qa", dataset=DatasetSpec(repo="x"), prompt="p", answer=TextAnswer(), rubrics=RubricSet([]),
+                row_id=lambda row: str(row["id"]), tools=("shell", "read"), **kw)  # fmt: skip
+
+
+def test_text_answer_task_has_no_submit_tool_and_loads_its_skills():
+    task = text_task(skills=(Path("/skills/hf-cli"),))
+    assert tool_names(task) == ["bash", "read"] and task.answer_schema() is None
+    assert extension_config(task, Limits(max_tool_calls=20), Endpoint("u", "m"))["submit"] == {"mode": "none"}
+    command = pi_command(Path("/n"), Path("/cli.js"), task, Endpoint("u", "m"), Path("/s"), "go", None)
+    assert command[command.index("--tools") + 1] == "bash,read"
+    assert "--no-skills" in command and command[command.index("--skill") + 1] == "/skills/hf-cli"
+    assert "--skill" not in pi_command(Path("/n"), Path("/cli.js"), html_task(), Endpoint("u", "m"), Path("/s"),
+                                       "go", None)  # fmt: skip
+
+
+def test_text_answer_episode():
+    answer = "The top trending model is [Qwen/Qwen3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B)."
+    lines = session(SYSTEM, USER, assistant(("c1", "bash", {"command": "hf models list"})),
+                    result("c1", "bash", "Qwen/Qwen3.5-9B"), assistant(text=answer, stop="stop"))  # fmt: skip
+    episode = episode_from_session(lines, task=text_task(), row_id="1", version="1.6.0")
+    assert episode.answer == answer and episode.answer_mode == "text" and episode.answer_error is None
+    assert episode.failure is None and episode.metadata["submitted"] is False
+    # Cut off at the tool-call limit: the last assistant turn still calls a tool, so there is no answer.
+    limited = session(SYSTEM, USER, assistant(("c1", "bash", {"command": "hf models list"}), text="Let me look."),
+                      result("c1", "bash", "tool-call limit reached (1)", error=True))  # fmt: skip
+    episode = episode_from_session(limited, task=text_task(), row_id="1", version="1.6.0")
+    assert episode.answer is None and "no final answer" in episode.answer_error
+    assert episode.failure == "tool-call limit reached (1)"
 
 
 def test_file_answer_episode(tmp_path):

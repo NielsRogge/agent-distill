@@ -48,7 +48,7 @@ from agent_distill.harnesses import isolation
 from agent_distill.harnesses.base import Endpoint, architecture, download_verified
 from agent_distill.harnesses.opencode import key_proxies
 from agent_distill.harnesses.opencode_v1_reader import answer_from_text, json_text
-from agent_distill.task import FileAnswer, Limits, Task
+from agent_distill.task import FileAnswer, Limits, Task, TextAnswer
 
 HERE = Path(__file__).parent
 EXTENSION = HERE / "extension.ts"
@@ -173,8 +173,10 @@ def models_json(endpoint: Endpoint) -> dict[str, Any]:
 
 
 def extension_config(task: Task, limits: Limits, endpoint: Endpoint) -> dict[str, Any]:
-    if isinstance(task.answer, FileAnswer):
-        submit: dict[str, Any] = {"mode": "file", "path": task.answer.path}
+    if isinstance(task.answer, TextAnswer):
+        submit: dict[str, Any] = {"mode": "none"}
+    elif isinstance(task.answer, FileAnswer):
+        submit = {"mode": "file", "path": task.answer.path}
     else:
         schema = task.answer_schema() or {"type": "object"}
         submit = {"mode": "schema", "schema": {k: v for k, v in schema.items() if k not in ("title", "description")}}
@@ -190,6 +192,8 @@ def tool_names(task: Task) -> list[str]:
     names = [tool for kind in task.tools for tool in KIND_TOOLS.get(kind, ())]
     if "shell" not in task.tools and "bash" in names:  # pragma: no cover - KIND_TOOLS keeps bash under shell
         names.remove("bash")
+    if isinstance(task.answer, TextAnswer):  # the final message is the answer: no submit tool
+        return [*dict.fromkeys(names)]
     return [*dict.fromkeys(names), "submit"]
 
 
@@ -198,7 +202,8 @@ def pi_command(node: Path, cli: Path, task: Task, endpoint: Endpoint, session_di
     command = [
         str(node), str(cli), "--mode", "json",
         "--no-context-files", "--no-extensions", "-e", str(EXTENSION),
-        "--no-skills", "--no-prompt-templates", "--no-themes", "--no-mcp", "--no-approve",
+        "--no-skills", *[arg for skill in task.skills for arg in ("--skill", str(skill))],
+        "--no-prompt-templates", "--no-themes", "--no-mcp", "--no-approve",
         "--session-dir", str(session_dir),
         "--provider", PROVIDER, "--model", endpoint.model,
         "--thinking", "off",
@@ -342,7 +347,13 @@ def episode_from_session(
     submitted = submitted_arguments(messages)
     answer: Any = None
     answer_error: str | None = None
-    if isinstance(task.answer, FileAnswer):
+    if isinstance(task.answer, TextAnswer):
+        mode = "text"
+        last = next((e for e in reversed(chat) if e["role"] == "assistant"), None)
+        answer = (last or {}).get("content") or None
+        if last is None or last.get("tool_calls") or not answer:  # cut off while still working
+            answer, answer_error = None, "no final answer (the run ended before a final message without tool calls)"
+    elif isinstance(task.answer, FileAnswer):
         mode = "file"
         root = Path(workspace or ".")
         answer = isolation.read_agent_file(root / task.answer.path, root)
