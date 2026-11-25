@@ -157,6 +157,12 @@ def test_correct_grounded_answer_passes_with_efficiency_bonus(monkeypatch):
     assert result.reward == pytest.approx(1.0 + 0.1 * (1 - 1 / 20))
 
 
+def test_failed_mcp_calls_are_counted_but_do_not_change_the_reward(monkeypatch):
+    failed = ToolEvent(kind="fetch", name="mcp__hf__hf_fs", input={}, success=False, error="unknown command")
+    result = score("The license of `acme/Model-1` is Apache 2.0.", [failed, call()], monkeypatch=monkeypatch)
+    assert result.passed and result.scores["mcp_errors"] == 1.0 and result.scores["mcp_calls"] == 2.0
+
+
 def test_answer_from_memory_or_other_tools_fails(monkeypatch):
     memory = score("Apache 2.0.", [], monkeypatch=monkeypatch)
     assert not memory.passed and memory.reward == 0.0 and memory.scores["used_hub"] == 0.0

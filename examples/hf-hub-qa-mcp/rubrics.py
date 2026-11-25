@@ -10,7 +10,7 @@ library's, shared with hf-hub-qa).
   unscorable (None), never a 0.
 - `grounded`: of the Hub ids the answer names (agent_distill.rubrics.grounding, shared with hf-hub-qa), the share that
   appears in the episode's own MCP calls and results. Not scored (None) when the answer names no ids.
-- Metrics: `mcp_calls`, `answer_chars`.
+- Metrics (recorded only): `mcp_calls`, `mcp_errors` (failed MCP calls), `answer_chars`.
 
 reward = gate(answered, gate(allowed_tools, gate(used_hub, weighted(fact_correct 1, grounded 0.25))))
          + 0.1 * (1 - mcp_calls / 20) when the episode passed    (the tool-efficiency bonus, for GRPO)
@@ -90,6 +90,13 @@ def mcp_calls(tool_events: list[Any]) -> float:
 
 
 @metric
+def mcp_errors(tool_events: list[Any]) -> float:
+    """MCP calls that failed (invalid arguments, unknown paths, server errors): tool competence beside the pass rate,
+    like hf-hub-qa's `hf_errors`."""
+    return float(sum(1 for e in mcp_events(tool_events) if not getattr(e, "success", False)))
+
+
+@metric
 def answer_chars(answer: Any) -> float | None:
     return float(len(str(answer))) if answer else None
 
@@ -110,7 +117,7 @@ def passed(scores: dict[str, float | None]) -> bool:
 
 
 RUBRICS = RubricSet(
-    [answered, allowed_tools, used_hub, fact_correct, grounded, mcp_calls, answer_chars],
+    [answered, allowed_tools, used_hub, fact_correct, grounded, mcp_calls, mcp_errors, answer_chars],
     reward=bonus_if(
         efficiency,
         gate("answered", gate("allowed_tools", gate("used_hub", weighted({"fact_correct": 1.0, "grounded": 0.25})))),
