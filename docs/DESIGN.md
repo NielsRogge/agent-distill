@@ -399,6 +399,10 @@ The stage graph is the one in url-extraction's `pipeline.py`, rewritten around a
 - uploads its records to its private dataset every `--upload-every` minutes, and a rerun of the same job first
   downloads them and resumes;
 - does not record a harness failure; it restarts the harness and runs the episode again.
+- marks every episode whose visible content carries reasoning (`</think>`, `<think>`: a thinking model served
+  without a reasoning parser), warns, counts such episodes in its summary (`reasoning_leaks`) and stops once more
+  than `--max-reasoning-leak-rate` (default 20%, after 20 episodes) leak (`agent_distill.reasoning`). Students whose
+  SFT data has no reasoning are served with thinking off, e.g. the `qwen3.5-4b-nothink` profile.
 
 The traces stage also reruns, up to `--rerun-cut-short` times per row, a teacher episode cut short by the timeout
 or a provider error (no answer, usually mid-tool-call). Such an episode is kept, marked `cut_short`, and its spend
