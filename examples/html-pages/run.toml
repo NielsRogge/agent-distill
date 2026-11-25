@@ -21,6 +21,7 @@ namespace = "nielsr"
 bill_to = "huggingface"
 collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
 
+
 [traces]
 split = "train"
 limit = 600  # first 600 train concepts (balanced categories); ~550 accepted at the baseline's pass rate
@@ -43,3 +44,8 @@ k = 4
 traces_usd = 600  # Kimi at ~$0.84 per episode (baseline), 600 rows plus reruns
 judge_usd = 100  # per stage, split over its jobs; Hydrogen costs ~$0.02-0.03 per page judged
 gpu_usd = 400
+
+[repos]
+# The run's default -eval repo holds the published (public) teacher validation baseline; student evaluations go to a
+# new private repo until `distill publish` scans them.
+eval = "nielsr/qwen35-9b-html-pages-kimi-k31-pro-pi-160-eval-test"
