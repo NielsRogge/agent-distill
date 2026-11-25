@@ -154,3 +154,20 @@ def test_v2_records_rescore(tmp_path):
     (item,) = rescore(read_jsonl(writer.episodes), TASK, {"1": row}, limits=Limits(max_tool_calls=15))
     assert item.result.scores == result.scores and item.result.passed is True
     assert json.loads(json.dumps(item.record))["label"] == "base"
+
+
+def test_every_job_checks_the_tasks_commands_after_its_setup(monkeypatch):
+    import dataclasses
+    import subprocess
+
+    run = make_run()
+    monkeypatch.setattr(run, "task", dataclasses.replace(run.task, commands=("curl", "jq")))
+    for job in pipeline.eval_jobs(run, "REV"):
+        assert "for c in curl jq; do command -v" in job.command
+        assert job.command.index("huggingface-hub>=1.13") < job.command.index("for c in curl jq")
+    assert "for c in" not in jobs.prelude("org/code", "REV", [])  # no commands: no check
+    ok = subprocess.run(["bash", "-c", jobs.require(["sh"])], capture_output=True, text=True)
+    missing = subprocess.run(
+        ["bash", "-c", jobs.require(["sh", "no-such-command-xyz"])], capture_output=True, text=True
+    )
+    assert ok.returncode == 0 and missing.returncode == 1 and "no-such-command-xyz" in missing.stderr
