@@ -4,12 +4,13 @@
     distill run examples/paper-urls/run.toml --stages eval --eval-model base=Qwen/Qwen3.5-9B --splits test
     distill run examples/paper-urls/run.toml --stages publish
 
-Stages: `traces` (teacher episodes, CPU jobs), `sft`, `merge` (SFT adapter into the student), `probe` (difficulty
-probe of the merged SFT policy), `grpo` (GRPO in the harness, then its merge), `eval` (base / sft / grpo / teacher,
-or explicit models) and `publish`. With several stages
-each waits for the previous one's jobs; a single stage runs detached unless `--wait`. `--dry-run` prints every job
-(image, flavor, command) and the cost estimate without staging code or launching anything. Every job's worst-case
-cost (all jobs running to their timeout) is checked against `[budget]` before launch.
+Stages: `traces` (teacher episodes, CPU jobs), `annotate` (CoT-proxy summaries of the traces' reasoning) and
+`replay` (the KL-replay pool of the initial student), both only for the cross-format SFT recipe, `sft`, `merge` (SFT
+adapter into the student), `probe` (difficulty probe of the merged SFT policy), `grpo` (GRPO in the harness, then
+its merge), `eval` (base / sft / grpo / teacher, or explicit models) and `publish`. With several stages each waits
+for the previous one's jobs; a single stage runs detached unless `--wait`. `--dry-run` prints every job (image,
+flavor, command) and the cost estimate without staging code or launching anything. Every job's worst-case cost (all
+jobs running to their timeout) is checked against `[budget]` before launch.
 
 Episode stages (`traces`, `probe`, `eval`) upload into private datasets only. Once `publish` has made a run's
 traces or eval dataset public, a later episode stage writing into it (an extended eval, a new probe) is refused up
@@ -34,7 +35,7 @@ from agent_distill import jobs
 from agent_distill.config import BUILTIN_PROFILES, UV_IMAGE, RunConfig, load_profile, load_run, slugify
 from agent_distill.task import Task, load_task
 
-STAGES = ("traces", "sft", "merge", "probe", "grpo", "eval", "publish")
+STAGES = ("traces", "annotate", "replay", "sft", "merge", "probe", "grpo", "eval", "publish")
 # Stages that only redo part of another one (not in a run's default list): `grpo-merge` reruns GRPO's merge.
 PARTIAL_STAGES = ("grpo-merge",)
 IMPLEMENTED = STAGES + PARTIAL_STAGES
@@ -480,6 +481,60 @@ def trace_jobs(run: Run, rev: str) -> list[jobs.Job]:
     return built
 
 
+def recipe_args(run: Run) -> list[str]:
+    """The SFT stage's inputs from the cross-format recipe's stages (`[sft] replay` / `summaries`)."""
+    args = []
+    if run.config.sft.replay:
+        args += ["--replay-repo", jobs.q(run.repo("replay"))]
+    if run.config.sft.summaries:
+        args += ["--summaries-repo", jobs.q(run.repo("summaries"))]
+    return args
+
+
+def vllm_job(run: Run, rev: str, stage: str, module: str, args: list[str], flavor: str, timeout: str) -> jobs.Job:
+    """An offline-vLLM GPU job (no harness, no episodes): the `annotate` and `replay` stages."""
+    student = student_profile(run)
+    serve = student.serve
+    deps = [*serve.deps, *([] if serve.vllm == "image" else [f"vllm=={serve.vllm_version}"]), "datasets>=4.0.0"]
+    command = "\n".join(
+        [
+            jobs.prelude(run.repo("code"), rev),
+            jobs.python_module(module, args, deps=deps),
+            f"echo {stage.upper()}_DONE",
+        ]
+    )
+    return jobs.Job(stage, f"{run.name}-{stage}"[:90], serve.image, flavor or serve.flavor, timeout, command,
+                    expected_minutes=jobs.timeout_minutes(timeout) / 3)  # fmt: skip
+
+
+def annotate_jobs(run: Run, rev: str) -> list[jobs.Job]:
+    """CoT-proxy summaries of the accepted traces' reasoning (stages.annotate)."""
+    settings = run.config.annotate
+    args = ["--traces-repo", jobs.q(run.repo("traces")), "--harness", jobs.q(harness_id(run)),
+            "--model", jobs.q(settings.model), "--output-dir", "/annotate",
+            "--output-repo", jobs.q(run.repo("summaries")), *model_collection_args(run, "summaries")]  # fmt: skip
+    return [vllm_job(run, rev, "annotate", "agent_distill.stages.annotate", args, settings.flavor, settings.timeout)]
+
+
+def replay_jobs(run: Run, rev: str) -> list[jobs.Job]:
+    """The KL-replay pool: the initial student's generations on out-of-domain prompts (stages.replay)."""
+    settings = run.config.replay
+    args = ["--student", jobs.q(run.config.student), "--profiles", "/work/profiles",
+            "--size", str(settings.size), "--heldout", str(settings.heldout), "--max-tokens", str(settings.max_tokens),
+            "--output-dir", "/replay", "--output-repo", jobs.q(run.repo("replay")),
+            *model_collection_args(run, "replay")]  # fmt: skip
+    return [vllm_job(run, rev, "replay", "agent_distill.stages.replay", args, "", settings.timeout)]
+
+
+def check_sft_args(run: Run, student: Any) -> None:
+    """Parse the SFT job's effective arguments (profile, recipe inputs, run) here, so a misconfigured recipe (e.g.
+    `[sft] summaries = true` without `--think-target empty`) is refused by the dry run, not on the GPU."""
+    from agent_distill.stages import sft as sft_stage
+
+    sft_stage.parse_args(["--task", "t", "--harness", "h", "--student", "s", "--traces-repo", "x", *student.sft.args,
+                          *[a.strip("'") for a in recipe_args(run)], *run.config.sft.args])  # fmt: skip
+
+
 def sft_jobs(run: Run, rev: str) -> list[jobs.Job]:
     student = student_profile(run)
     args = [
@@ -496,8 +551,10 @@ def sft_jobs(run: Run, rev: str) -> list[jobs.Job]:
         "--hub-model-id",
         jobs.q(run.repo("lora")),
         *model_collection_args(run, "lora"),
+        *recipe_args(run),
         *[jobs.q(a) for a in run.config.sft.args],
     ]
+    check_sft_args(run, student)
     deps = student.sft.deps or SFT_DEPS
     command = "\n".join(
         [
@@ -689,7 +746,24 @@ def artifacts(run: Run) -> list[tuple[str, str, str]]:
         (run.repo("grpo-lora"), "model", f"{prefix}: student GRPO LoRA adapter (from the SFT merge)"),
         (run.repo("grpo-merged"), "model", f"{prefix}: student SFT + GRPO merged checkpoint"),
         (run.repo("eval"), "dataset", f"{prefix}: evaluation episodes (and the difficulty probe)"),
+        (
+            run.repo("summaries"),
+            "dataset",
+            f"{prefix}: CoT-proxy summaries of the teacher's reasoning, one per turn "
+            f"(annotator {run.config.annotate.model})",
+        ),
+        (
+            run.repo("replay"),
+            "dataset",
+            f"{student_profile(run).model}: KL-replay pool, the initial student's own "
+            "generations on out-of-domain prompts (OpenR1-Math, OpenAssistant)",
+        ),
     ]
+
+
+# Datasets without episodes (no sessions needed): slim per-turn summaries and the replay pool.
+def sessionless(run: Run) -> set[str]:
+    return {run.repo("summaries"), run.repo("replay")}
 
 
 def collection_note(run: Run, suffix: str) -> str:
@@ -745,7 +819,7 @@ def publish(run: Run, *, dry_run: bool) -> None:
             files = api.list_repo_files(repo, repo_type="dataset")
             if any(name.startswith("raw/") for name in files):
                 raise SystemExit(f"{repo} contains raw harness logs (raw/); it stays private")
-            if not any(name.startswith("sessions/") for name in files):
+            if repo not in sessionless(run) and not any(name.startswith("sessions/") for name in files):
                 raise SystemExit(f"{repo} has no agent-trace sessions; it stays private")
             leaks = credential_files(api, repo, files)
             if leaks:
@@ -878,8 +952,8 @@ def stage_waves(stage: str, run: Run, rev: str) -> list[list[jobs.Job]]:
     """A stage's jobs in waves; each wave waits for the previous one (GRPO, then its merge)."""
     if stage == "grpo":
         return [grpo_jobs(run, rev), grpo_merge_jobs(run, rev)]
-    builders = {"traces": trace_jobs, "sft": sft_jobs, "merge": merge_jobs, "probe": probe_jobs, "eval": eval_jobs,
-                "grpo-merge": grpo_merge_jobs}  # fmt: skip
+    builders = {"traces": trace_jobs, "annotate": annotate_jobs, "replay": replay_jobs, "sft": sft_jobs,
+                "merge": merge_jobs, "probe": probe_jobs, "eval": eval_jobs, "grpo-merge": grpo_merge_jobs}  # fmt: skip
     return [builders[stage](run, rev)]
 
 
