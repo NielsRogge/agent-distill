@@ -2,11 +2,12 @@
  * agent-distill's Pi extension (DESIGN.md §6). Loaded with `pi --no-extensions -e <this file>`.
  *
  * Its configuration is a JSON file named by AGENT_DISTILL_PI_CONFIG:
- *   { "submit": { "mode": "schema", "schema": {...} } | { "mode": "file", "path": "index.html" },
+ *   { "submit": { "mode": "schema", "schema": {...} } | { "mode": "file", "path": "index.html" } | { "mode": "none" },
  *     "max_tool_calls": 30, "strip_env": ["HF_TOKEN"] }
  *
  * - `submit`: the agent's final action. In schema mode its parameters are the task's answer schema; in file mode it
- *   takes no arguments and marks the workspace file as final (it must exist). A successful submit ends the run.
+ *   takes no arguments and marks the workspace file as final (it must exist). A successful submit ends the run. In
+ *   none mode there is no submit tool: the agent's final message is its answer.
  * - The tool-call limit is exact: the call past the limit is blocked and the run terminates.
  * - `bash` runs without the environment variables in `strip_env` (the teacher's key, which only Pi itself needs to
  *   call the model) and without Pi's session variables.
@@ -18,7 +19,7 @@ import { createBashTool, type ExtensionAPI } from "@earendil-works/pi-coding-age
 import { Type } from "typebox";
 
 interface Config {
-	submit: { mode: "schema"; schema: Record<string, unknown> } | { mode: "file"; path: string };
+	submit: { mode: "schema"; schema: Record<string, unknown> } | { mode: "file"; path: string } | { mode: "none" };
 	max_tool_calls?: number;
 	strip_env?: string[];
 }
@@ -58,7 +59,7 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "Answer submitted." }], details: { answer: params }, terminate: true };
 			},
 		});
-	} else {
+	} else if (submit.mode === "file") {
 		pi.registerTool({
 			name: "submit",
 			label: "Submit",
