@@ -44,12 +44,18 @@ class FileAnswer:
     path: str
 
 
+@dataclass(frozen=True)
+class TextAnswer:
+    """The answer is the agent's final message, in natural language: no submit tool, the run ends when the agent
+    stops calling tools (Pi only, so far)."""
+
+
 @dataclass
 class Task:
     name: str
     dataset: DatasetSpec
     prompt: Callable[[Row], str] | str
-    answer: Any  # a pydantic model class or a FileAnswer
+    answer: Any  # a pydantic model class, a FileAnswer or a TextAnswer
     rubrics: RubricSet
     row_id: Callable[[Row], str]
     system_prompt: str | Path | None = None
@@ -65,6 +71,9 @@ class Task:
     job_setup: list[str] = field(default_factory=list)
     # The judge profile its judge rubrics use unless a run picks another (`--judge`), e.g. "qwen3.8-27b".
     judge: str = ""
+    # Agent Skills (directories holding a SKILL.md) the agent may load, e.g. a pinned `hf-cli` skill. Only harnesses
+    # with skill support pass them (Pi: `--skill`); everything else is discovered from nowhere (`--no-skills`).
+    skills: tuple[Path, ...] = ()
     # agent-distill extras the task's episode stages need beyond `hub`, e.g. ("browser",) for the `preview` tool.
     extras: tuple[str, ...] = ()
     # The limits a stored record ran with when the record does not say (`distill rescore`), from its file name,
@@ -81,7 +90,7 @@ class Task:
 
     def answer_schema(self) -> dict[str, Any] | None:
         """The answer's JSON schema (None for file answers), without the model docstring."""
-        if isinstance(self.answer, FileAnswer) or not hasattr(self.answer, "model_json_schema"):
+        if isinstance(self.answer, (FileAnswer, TextAnswer)) or not hasattr(self.answer, "model_json_schema"):
             return None
         return self.answer.model_json_schema()
 
