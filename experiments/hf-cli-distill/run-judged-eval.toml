@@ -1,0 +1,30 @@
+# Secondary generalization evaluation: 51 open-ended Hugging Face Hub questions (`examples/hf-hub-qa/judged.py`),
+# scored by live Hub references and Gemini 4 Hydrogen (compare against GLM-5.3 teacher pilot: 43/51).
+task = "../../examples/hf-hub-qa/judged.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think-sft"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-hf-hub-qa-judged-glm-53-pi-160"
+profiles = ["profiles"]
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+sft = "Qwen/Qwen3.5-4B+nielsr/cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160-lora"
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 25
