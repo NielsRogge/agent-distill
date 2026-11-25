@@ -92,4 +92,14 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
     29/29, `paper_first_author` 18/25 vs 25/25; everything else at least 84% for base.
   - The base model's commonest rejected calls are invented commands (`hf models show` 53, `hf search` 34, `hf papers
     view` 17) and `--limit` on a file listing (20). The teacher's are mostly `--tree` with `--format json` (9).
+- **Thinking off** (the user's choice; `qwen3.5-4b-nothink`, #14). The baseline above was served in Qwen3.5's
+  default thinking mode, with the reasoning inside the answer (128/149 base answers contain `</think>`; scoring only
+  the text after it gives 121/149). With thinking off, base Qwen3.5-4B scores **64/149 (43%)** on v2 validation, with no
+  reasoning in its answers:
+  - 59 episodes hit the 15-call limit (thinking: 21). Against the thinking run it lost 61 questions and gained 14.
+  - It mostly abandons the CLI. It writes Python against the Hub API or scrapes HTML (`requests`, `httpx`,
+    BeautifulSoup), runs into 401s on authenticated endpoints and runs out of calls. It read the skill in 13 of 149
+    episodes; the CLI rejected 9% of its `hf` calls (it rarely tries `hf`).
+  - The MCP twin's base, also with thinking off, scores 73.3% on its 150 test questions: without a shell it cannot
+    wander off the tools.
 - **Full v2 run:** not started yet.
