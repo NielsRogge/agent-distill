@@ -27,6 +27,7 @@ from typing import Any
 
 from agent_distill.config import load_profile
 from agent_distill.harnesses.base import default_cache, load_harness, teacher_endpoint
+from agent_distill.reasoning import LeakGuard
 from agent_distill.records import RecordWriter, raw_root_for, read_jsonl, summarize_records
 from agent_distill.rubrics import ErrorBudget
 from agent_distill.rubrics.judge import make_judge_runner
@@ -70,6 +71,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--collection-note", default="")
     parser.add_argument("--max-error-rate", type=float, default=0.05,
                         help="Stop once more than this share of episodes (after 20) had a rubric error")  # fmt: skip
+    parser.add_argument("--max-reasoning-leak-rate", type=float, default=0.2,
+                        help="Stop once more than this share of episodes (after 20) leaked reasoning (</think>) into "
+                             "their visible content; negative: never stop, only warn and count")  # fmt: skip
     parser.add_argument("--cache", type=Path, default=None, help="Binary cache (default: the per-user cache)")
     return parser.parse_args(argv)
 
@@ -151,6 +155,7 @@ def main(argv: list[str] | None = None) -> None:
                     note=args.collection_note,
                 ),
                 errors=ErrorBudget(max_rate=args.max_error_rate),
+                leaks=LeakGuard(max_rate=args.max_reasoning_leak_rate),
             )
         )
     finally:

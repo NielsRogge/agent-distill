@@ -1,0 +1,10 @@
+# Qwen3.5-9B served with thinking off: the qwen3.5-9b profile plus vLLM's server-wide chat-template default
+# `enable_thinking: false` (see qwen3.5-4b-nothink and agent_distill.reasoning).
+name = "qwen3.5-9b-nothink"
+model = "Qwen/Qwen3.5-9B"
+
+[serve]
+vllm_extra_args = "--default-chat-template-kwargs '{\"enable_thinking\": false}'"
+
+[grpo]
+args = ["--max-concurrent-rollouts", "16"]
