@@ -5,7 +5,7 @@
 #   distill run examples/hf-hub-qa/run-judged-pilot.toml --dry-run
 task = "judged.py"
 teacher = "glm-5.3"
-student = "qwen3.5-4b"  # unused by this run (teacher only); the student of later runs
+student = "qwen3.5-4b-nothink"  # unused by this run (teacher only); the student of later runs
 harness = "pi@1.6.0"
 name = "hf-hub-qa-pilot-glm-53-pi-160"  # the first pilot ran Kimi-K3.1-Pro (-kimi-k31-pro-pi-160)
 stages = ["eval"]
