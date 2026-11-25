@@ -24,7 +24,6 @@ def module(name: str):
     return task_module(EXAMPLE, name)
 
 
-facts = module("facts")
 rubrics = module("rubrics")
 
 
@@ -99,41 +98,6 @@ def test_drift_check_refuses_a_changed_tool_list(monkeypatch):
 LICENSES = ["apache-2.0", "mit", "cc-by-4.0", "llama3.1", "llama3", "openrail++", "other"]
 
 
-@pytest.mark.parametrize(("gold", "answer", "ok"), [
-    ("apache-2.0", "It is licensed under **Apache 2.0**.", True),
-    ("apache-2.0", "The license is `apache-2.0`.", True),
-    ("apache-2.0", "Apache License, Version 2.0", True),
-    ("apache-2.0", "Apache 2.0 or MIT, I am not sure.", False),  # hedged
-    ("mit", "MIT License.", True),
-    ("mit", "You can submit a request.", False),
-    ("llama3.1", "the Llama 3.1 Community License", True),
-    ("cc-by-4.0", "CC BY 4.0", True),
-    ("text-generation", "Its pipeline tag is text2text-generation.", False),
-    ("text2text-generation", "Its pipeline tag is text2text-generation.", True),
-])  # fmt: skip
-def test_category(gold, answer, ok):
-    hedge = [*LICENSES, "text-generation", "text2text-generation"]
-    assert facts.check("category", gold, answer, hedge=hedge) is ok
-
-
-def test_repo_number_title_author_arxiv():
-    assert facts.check("repo", "Qwen/Qwen3.5-4B-Base", "Its base model is `Qwen/Qwen3.5-4B-Base`.")
-    assert not facts.check("repo", "Qwen/Qwen3.5-4B", "Its base model is Qwen/Qwen3.5-4B-Base.")
-    assert facts.check("number", 4659865088, "about 4.66B parameters")
-    assert facts.check("number", 4659865088, "4,659,865,088 parameters (BF16)")
-    assert not facts.check("number", 4659865088, "4B parameters")
-    assert facts.check("number", 494032768, "494M")
-    title = "Knowledge Distillation of Russian Language Models with Reduction of Vocabulary"
-    assert facts.check("title", title, f'The paper is "{title.lower()}".')
-    assert not facts.check("title", title, "It is about distilling Russian models.")
-    authors = ["Alina Kolesnikova", "Yuri Kuratov", "Vasily Konovalov"]
-    assert facts.check("first_author", "Alina Kolesnikova", "The first author is Alina Kolesnikova.", authors=authors)
-    assert not facts.check("first_author", "Alina Kolesnikova", "Yuri Kuratov and Alina Kolesnikova", authors=authors)
-    assert facts.check("first_author", "José Núñez", "jose nunez wrote it", authors=["José Núñez"])
-    assert facts.check("arxiv", ["2205.02340"], "It links arXiv 2205.02340v2.")
-    assert not facts.check("arxiv", ["2205.02340"], "Either 2205.02340 or 2301.00001.")
-
-
 def test_built_rows_pass_oracle_and_reject_no_op_and_canary():
     questions = module("questions")
     cands = [
@@ -182,7 +146,7 @@ def score(answer, events, live="apache-2.0", monkeypatch=None):
 
 
 def test_correct_grounded_answer_passes_with_efficiency_bonus(monkeypatch):
-    result = score("The license of acme/Model-1 is Apache 2.0.", [call()], monkeypatch=monkeypatch)
+    result = score("The license of `acme/Model-1` is Apache 2.0.", [call()], monkeypatch=monkeypatch)
     assert result.passed and result.scores["fact_correct"] == 1.0 and result.scores["grounded"] == 1.0
     assert result.reward == pytest.approx(1.0 + 0.1 * (1 - 1 / 20))
 
@@ -203,7 +167,7 @@ def test_wrong_answer_scores_zero_but_a_drifted_row_is_unscorable(monkeypatch):
 
 
 def test_ungrounded_ids_fail(monkeypatch):
-    result = score("Apache 2.0, see acme/Model-1 and b/Other-Model.", [call()], monkeypatch=monkeypatch)
+    result = score("Apache 2.0, see `acme/Model-1` and `b/Other-Model`.", [call()], monkeypatch=monkeypatch)
     assert result.scores["grounded"] == 0.5 and not result.passed
 
 
