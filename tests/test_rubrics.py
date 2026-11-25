@@ -260,6 +260,25 @@ def test_judge_score_parsing_takes_the_last_score(reply, expected):
     assert parse_score(reply, JudgeSpec(prompt="", scale=(0, 10))) == pytest.approx(expected)
 
 
+def test_empty_judge_reply_is_not_cached(tmp_path):
+    import asyncio
+
+    client = FakeClient("")
+    runner = JudgeRunner(client, JudgeCache(tmp_path / "verdicts.jsonl"))
+    assert asyncio.run(runner("p")) == "" and asyncio.run(runner("p")) == ""
+    assert client.calls == 2 and not (tmp_path / "verdicts.jsonl").exists()
+
+
+def test_judge_criteria_become_metrics():
+    @judge("x", scale=(1, 10), criteria=("creativity", "polish"))
+    def j():
+        return {}
+
+    reply = "creativity: 10\npolish = 4\nSCORE: 7"
+    result = RubricSet([j]).score(context(judge=JudgeRunner(FakeClient(reply))))
+    assert result.scores["j"] == 6 / 9 and result.metrics == {"j/creativity": 1.0, "j/polish": 3 / 9}
+
+
 def test_from_callable_accepts_tinker_reward_fn():
     async def reward_fn(messages):
         return float(messages[-1]["content"] == "a"), {"turns": len(messages)}
@@ -301,3 +320,43 @@ def test_ascore_inside_event_loop():
         return await RubricSet([one]).ascore(context())
 
     assert asyncio.run(main()).reward == 1.0
+
+
+def test_criteria_take_the_last_value_and_allow_markdown():
+    from agent_distill.rubrics.judge import JudgeSpec, parse_criteria
+
+    spec = JudgeSpec(prompt="", scale=(1.0, 10.0), criteria=("visual_quality", "creativity"))
+    reply = "visual_quality: 3 at first glance... on reflection\n**visual_quality:** 8\ncreativity: **6**"
+    found = parse_criteria(reply, spec)
+    assert found["visual_quality"] == pytest.approx(7 / 9) and found["creativity"] == pytest.approx(5 / 9)
+
+
+def test_judge_budget_stops_calls_and_needs_a_price(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from agent_distill.rubrics import clients
+
+    price = SimpleNamespace(input=1.5, output=7.5)
+    profile = SimpleNamespace(name="g", model="g", api="gemini", key_env="", max_tokens=10, price=price)
+    client = clients.judge_client(profile, budget_usd=0.01)
+    client.usage.add(1000, 2000, client.price)  # $0.0165
+    with pytest.raises(clients.JudgeError, match="budget reached"):
+        asyncio.run(client.complete("p", []))
+    monkeypatch.setenv(clients.JUDGE_BUDGET_ENV, "5")
+    assert clients.judge_client(profile).usage.budget_usd == 5.0
+    unpriced = SimpleNamespace(**{**vars(profile), "price": SimpleNamespace(input=0.0, output=0.0)})
+    with pytest.raises(ValueError, match="no price"):
+        clients.judge_client(unpriced)
+
+
+def test_jobs_get_a_share_of_the_judge_budget():
+    from pathlib import Path
+
+    from agent_distill import pipeline
+    from agent_distill.config import load_run
+
+    run = pipeline.make_run(load_run(Path("examples/html-pages/run.toml"), {"budget.judge_usd": 60}))
+    built = pipeline.trace_jobs(run, "R")
+    pipeline.apply_judge_budget(run, built)
+    assert len(built) == 6 and all(job.env["AGENT_DISTILL_JUDGE_BUDGET_USD"] == "10.0000" for job in built)

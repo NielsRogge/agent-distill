@@ -7,7 +7,7 @@ prompt, images); the rendered prompt contains the template, so editing a prompt 
 scale and pattern are applied to the cached reply each time, so editing them never returns a stale score. Only
 replies that parse are cached. Trace filtering, GRPO, evaluation and rescoring never pay twice for a judgement.
 
-Concrete clients (HF router, Gemini) arrive with the HTML example (M4); any object with
+Concrete clients (HF router, Gemini) are in `rubrics.clients`, selected by judge profiles; any object with
 `async complete(prompt: str, images: list[bytes]) -> str` and a `model` attribute works.
 """
 
@@ -39,6 +39,9 @@ class JudgeSpec:
     # First group is the score. The *last* match in the reply counts (a reply may discuss sub-scores first, e.g.
     # "Overall score: 6 ... SCORE: 9"), and Markdown emphasis around the label is allowed ("**SCORE:** 8").
     pattern: str = r"(?i)\bscore\s*\**\s*[:=]\s*\**\s*(-?\d+(?:\.\d+)?)"
+    # Named sub-scores in the same reply ("creativity: 7"), recorded as metrics `<rubric>/<criterion>`, scaled
+    # like the score.
+    criteria: tuple[str, ...] = ()
 
 
 class JudgeCache:
@@ -115,13 +118,14 @@ def judge(
     *,
     scale: tuple[float, float] = (0.0, 1.0),
     pattern: str | None = None,
+    criteria: tuple[str, ...] = (),
     weight: float = 1.0,
     name: str | None = None,
     train_only: bool = False,
     eval_only: bool = False,
 ) -> Callable[[Callable[..., Any]], Rubric]:
     """Declare a judge rubric. The function returns a mapping of template variables (plus optional `images`)."""
-    spec = JudgeSpec(prompt=prompt, scale=scale, pattern=pattern or JudgeSpec.pattern)
+    spec = JudgeSpec(prompt=prompt, scale=scale, pattern=pattern or JudgeSpec.pattern, criteria=tuple(criteria))
 
     def wrap(function: Callable[..., Any]) -> Rubric:
         return Rubric(
@@ -166,4 +170,32 @@ async def run_judge_rubric(rubric: Rubric, context: Mapping[str, Any]) -> tuple[
         reply = await runner(prompt, images, check=lambda text: parse_score(text, spec))
     else:  # any `async (prompt, images) -> str`
         reply = await runner(prompt, images)
-    return parse_score(reply, spec), {}
+    metrics = {f"{rubric.name}/{name}": value for name, value in parse_criteria(reply, spec).items()}
+    return parse_score(reply, spec), metrics
+
+
+def parse_criteria(reply: str, spec: JudgeSpec) -> dict[str, float]:
+    low, high = spec.scale
+    found: dict[str, float] = {}
+    for name in spec.criteria:
+        # The last mention wins (a reply may discuss a criterion before giving its final value), and markdown around
+        # the name or the number ("**visual_quality:** 8") is allowed.
+        matches = re.findall(rf"(?i)\b{re.escape(name)}\**\s*[:=]\s*\**\s*(-?\d+(?:\.\d+)?)", reply)
+        if matches and low <= float(matches[-1]) <= high and high != low:
+            found[name] = (float(matches[-1]) - low) / (high - low)
+    return found
+
+
+def make_judge_runner(
+    name: str, *, cache_dir: str | Path | None = None, bill_to: str = "", profiles: list[Path] | None = None
+) -> JudgeRunner | None:
+    """A judge runner for a judge profile (`profiles/judges/<name>.toml`), caching verdicts in
+    `<cache_dir>/judge-cache/<name>.jsonl`; None for an empty name."""
+    if not name:
+        return None
+    from agent_distill.config import load_profile
+    from agent_distill.rubrics.clients import judge_client
+
+    client = judge_client(load_profile("judges", name, profiles), bill_to)
+    cache = JudgeCache(Path(cache_dir) / "judge-cache" / f"{name}.jsonl" if cache_dir else None)
+    return JudgeRunner(client, cache)

@@ -1,3 +1,7 @@
 # GLM-5.3 through HF Inference Providers (automatic routing). Text-only on the router.
 name = "glm-5.3"
 model = "zai-org/GLM-5.3"
+
+[price]  # USD per 1M tokens, for budgets when the harness reports no cost: the dearest router provider (2026-11-23)
+input = 1.68
+output = 5.28

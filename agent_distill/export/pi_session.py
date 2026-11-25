@@ -215,24 +215,43 @@ def episode_to_pi_session(
     flush_assistant()
 
     if verification is not None:
-        scores = verification.get("scores") or {}
-        summary = [f"{name}: {value}" for name, value in scores.items()]
-        summary.append(f"reward: {verification.get('reward')}  passed: {verification.get('passed')}")
-        if episode.failure:
-            summary.append(f"failure: {episode.failure}")
-        add(
-            {
-                "type": "message",
-                "message": {
-                    "role": "custom",
-                    "customType": "verification",
-                    "content": redact_credentials("\n".join(summary)),
-                    "display": True,
-                    "details": _redact_value({"answer": _jsonable(episode.answer), **verification}),
-                },
-            },
-            None,
-        )
+        add(verification_entry(episode, verification), None)
+    return lines
+
+
+def verification_entry(episode: Episode, verification: dict[str, Any]) -> dict[str, Any]:
+    """The final custom message with the rubric scores (shown by the agent-traces viewer)."""
+    scores = verification.get("scores") or {}
+    summary = [f"{name}: {value}" for name, value in scores.items()]
+    summary.append(f"reward: {verification.get('reward')}  passed: {verification.get('passed')}")
+    if episode.failure:
+        summary.append(f"failure: {episode.failure}")
+    return {
+        "type": "message",
+        "message": {
+            "role": "custom",
+            "customType": "verification",
+            "content": redact_credentials("\n".join(summary)),
+            "display": True,
+            "details": _redact_value({"answer": _jsonable(episode.answer), **verification}),
+        },
+    }
+
+
+def annotate_native_session(
+    lines: list[dict[str, Any]], episode: Episode, verification: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """A harness's own Pi session (Pi episodes) with what every exported session carries: `harness` and
+    `harness_version` in the header and the verification as the last message, chained to the last entry."""
+    lines = [dict(line) for line in lines]
+    if lines and lines[0].get("type") == "session":
+        lines[0].update({"harness": episode.harness, "harness_version": episode.harness_version,
+                         "task": episode.task, "row_id": episode.row_id, "model": episode.model})  # fmt: skip
+    entries = [line for line in lines[1:] if line.get("id")]
+    last = entries[-1] if entries else None
+    stamp = (last or {}).get("timestamp") or (lines[0].get("timestamp") if lines else None)
+    lines.append({"id": "verification", "parentId": last["id"] if last else None, "timestamp": stamp,
+                  **verification_entry(episode, verification)})  # fmt: skip
     return lines
 
 

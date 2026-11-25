@@ -104,7 +104,8 @@ def teacher_endpoint(teacher: Any, harness: HarnessProfile, bill_to: str = "") -
     native_id = teacher.opencode_id if harness.name == "opencode" else ""
     native_entry = teacher.opencode_model_entry if harness.name == "opencode" else {}
     return Endpoint(base_url=HF_ROUTER, model=teacher.routed_model, key_env="HF_TOKEN", name=teacher.name,
-                    headers=headers, native_id=native_id, native_entry=native_entry)  # fmt: skip
+                    headers=headers, native_id=native_id, native_entry=native_entry, context=teacher.context,
+                    max_output_tokens=teacher.max_output_tokens)  # fmt: skip
 
 
 def load_harness(profile: HarnessProfile, **options: Any) -> Harness:

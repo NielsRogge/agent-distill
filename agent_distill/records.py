@@ -24,7 +24,12 @@ from typing import Any
 
 from agent_distill.credentials import record_line
 from agent_distill.episode import Episode, ToolEvent
-from agent_distill.export.pi_session import episode_to_pi_session, session_filename, write_session
+from agent_distill.export.pi_session import (
+    annotate_native_session,
+    episode_to_pi_session,
+    session_filename,
+    write_session,
+)
 from agent_distill.rubrics import RubricResult
 
 RECORD_VERSION = 2
@@ -122,12 +127,20 @@ class RecordWriter:
         with self.raw.open("a", encoding="utf-8") as handle:
             raw = {"session_id": episode.session_id, "row_id": episode.row_id, **extra, "raw": episode.raw}
             handle.write(record_line(raw))
-        lines = native_trace or episode_to_pi_session(episode, verification=result.to_dict())
+        if native_trace:
+            lines = annotate_native_session(native_trace, episode, result.to_dict())
+        else:
+            lines = episode_to_pi_session(episode, verification=result.to_dict())
         name = session_filename(episode)
         label = extra.get("label")
         if label:
             name = f"{label}_{name}"
-        write_session(_redacted_lines(lines), self.sessions / name)
+        # A rerun of a cut-short episode has the same row and attempt: number it rather than overwrite the first.
+        path, run = self.sessions / name, 1
+        while path.exists():
+            run += 1
+            path = self.sessions / name.replace(".jsonl", f"_r{run}.jsonl")
+        write_session(_redacted_lines(lines), path)
         return record
 
     def done(self, key: str = "label") -> set[tuple[str, str]]:

@@ -34,7 +34,12 @@ class Plan:
     budget_usd: float = 0.0
     price: tuple[float, float] | None = None  # USD per 1M input/output tokens, when the harness reports no cost
     rerun_cut_short: int = 0  # reruns per row of episodes cut short by a timeout or provider error (traces)
+    judge: Any = None  # the JudgeRunner judge rubrics use (`rubrics.judge.make_judge_runner`)
     extra: dict[str, Any] = field(default_factory=dict)
+
+
+# Failures that are the model's own doing, never rerun: the harnesses' tool-call-limit and output-truncation messages.
+OWN_FAILURES = ("tool-call limit", "response truncated at the output token limit")
 
 
 def cut_short(episode: Any) -> str | None:
@@ -42,10 +47,12 @@ def cut_short(episode: Any) -> str | None:
 
     An episode is cut short when it ended without an answer because of the timeout or a provider/harness error,
     typically mid-tool-call. Such a teacher episode says little about the row, so the traces stage reruns it
-    (`Plan.rerun_cut_short`) instead of spending an attempt on it. Hitting the tool-call limit is the model's own
-    doing and is not a cut. Evaluation never reruns (a student's timeout counts against it).
+    (`Plan.rerun_cut_short`) instead of spending an attempt on it. Hitting the tool-call limit or the output token
+    limit (reasoning that never reaches a tool call) is the model's own doing and is not a cut. Evaluation never
+    reruns (a student's timeout counts against it).
     """
-    if episode.answer is not None or not episode.failure or str(episode.failure).startswith("tool-call limit"):
+    failure = str(episode.failure or "")
+    if episode.answer is not None or not failure or failure.startswith(OWN_FAILURES):
         return None
     last = episode.messages[-1] if episode.messages else {}
     where = "mid-tool-call" if last.get("role") == "tool" or last.get("tool_calls") else "mid-turn"
@@ -214,7 +221,7 @@ async def _run_session(
                         tokens_in, tokens_out = episode.usage.get("input", 0), episode.usage.get("output", 0)
                         episode.usage["cost"] = (tokens_in * price_in + tokens_out * price_out) / 1e6
                         episode.usage["cost_estimated"] = True
-                    context = episode_context(episode, row, limits=limits, task=task)
+                    context = episode_context(episode, row, limits=limits, task=task, judge=plan.judge)
                     result = await task.rubrics.ascore(context, mode="eval")
                     writer.write(episode, result, harness.native_trace(episode), label=plan.label, attempt=attempt,
                                  cut_short=cut, **plan.extra)  # fmt: skip

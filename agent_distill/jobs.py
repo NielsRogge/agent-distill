@@ -16,6 +16,7 @@ are unsatisfiable. Jobs run in the `[hub] bill_to` namespace with the caller's t
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -46,6 +47,9 @@ class Job:
     timeout: str  # e.g. "4h"
     command: str
     env: dict[str, str] = field(default_factory=dict)
+    # Environment variables passed from the launcher's environment as job secrets, besides HF_TOKEN (e.g. a Gemini
+    # judge's GEMINI_API_KEY). Names only; values are read at launch and never printed.
+    secret_envs: tuple[str, ...] = ()
     expected_minutes: float = 0.0  # for the cost estimate (the timeout bounds the worst case)
 
 
@@ -94,13 +98,21 @@ def git_commit() -> str:
         return "unknown"
 
 
-def stage_code(code_repo: str, task_dir: Path, extra: list[Path], *, dry_run: bool, manifest: dict[str, Any]) -> str:
-    """Upload the wheel, the hash-pinned requirements, the task folder, extra files and the run manifest under
-    code/<rev>/; returns <rev>."""
+def stage_code(
+    code_repo: str,
+    task_dir: Path,
+    extra: list[Path],
+    *,
+    dry_run: bool,
+    manifest: dict[str, Any],
+    extras: tuple[str, ...] = JOB_EXTRAS,
+) -> str:
+    """Upload the wheel, the hash-pinned requirements (the package plus `extras`, e.g. a task's `browser`), the task
+    folder, extra files and the run manifest under code/<rev>/; returns <rev>."""
     rev = time.strftime("%Y%m%d-%H%M%S")
     if dry_run:
         print(f"[dry-run] would stage the agent-distill wheel, requirements.txt (uv export --frozen --no-dev "
-              f"--extra {','.join(JOB_EXTRAS)}, hash-pinned), {task_dir} and {len(extra)} files to {code_repo} "
+              f"--extra {','.join(extras)}, hash-pinned), {task_dir} and {len(extra)} files to {code_repo} "
               f"(private) under code/{rev}/")  # fmt: skip
         return rev
     from huggingface_hub import HfApi
@@ -112,7 +124,7 @@ def stage_code(code_repo: str, task_dir: Path, extra: list[Path], *, dry_run: bo
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         build_wheel(root)
-        export_requirements(root)
+        export_requirements(root, extras)
         shutil.copytree(task_dir, root / "task", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         for path in extra:
             if path.is_dir():
@@ -183,7 +195,8 @@ def estimate(jobs: list[Job], prices: dict[str, float] | None = None) -> dict[st
 def describe(jobs: list[Job], namespace: str) -> None:
     for job in jobs:
         print(f"\n[dry-run] job {job.name}: image={job.image} flavor={job.flavor} timeout={job.timeout} "
-              f"namespace={namespace or '(your account)'} env={job.env} secrets=HF_TOKEN")  # fmt: skip
+              f"namespace={namespace or '(your account)'} env={job.env} "
+              f"secrets={','.join(('HF_TOKEN', *job.secret_envs))}")  # fmt: skip
         print(job.command)
 
 
@@ -193,11 +206,15 @@ def launch(jobs: list[Job], namespace: str) -> list[str]:
     api, token = HfApi(), get_token()
     if not token:
         raise SystemExit("no Hugging Face token (set HF_TOKEN or run `hf auth login`)")
+    missing = sorted({name for job in jobs for name in job.secret_envs if not os.environ.get(name)})
+    if missing:
+        raise SystemExit(f"jobs need secrets missing from this environment: {', '.join(missing)}")
     ids = []
     for job in jobs:
         kwargs: dict[str, Any] = {"namespace": namespace} if namespace else {}
+        secrets = {"HF_TOKEN": token, **{name: os.environ[name] for name in job.secret_envs}}
         info = api.run_job(image=job.image, command=["bash", "-c", job.command], env=job.env or None,
-                           secrets={"HF_TOKEN": token}, flavor=job.flavor, timeout=job.timeout, name=job.name,
+                           secrets=secrets, flavor=job.flavor, timeout=job.timeout, name=job.name,
                            **kwargs)  # fmt: skip
         print(f"launched {job.name}: {info.id} ({info.url})", flush=True)
         ids.append(info.id)

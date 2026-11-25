@@ -203,12 +203,16 @@ def test_cut_short_episodes_are_rerun_without_using_an_attempt(tmp_path, monkeyp
     records = read_jsonl(writer.episodes)
     assert sum(1 for r in records if r["cut_short"]) == 4
     assert records[0]["cut_short"].startswith("mid-tool-call: episode timed out")
+    assert len(list(writer.sessions.glob("*.jsonl"))) == len(records)  # reruns get their own session files
     attempts, passed, spent = progress(writer, "teacher", rerun_cut_short=2)
     assert attempts == {"1": 1, "2": 1} and passed == {"2"} and spent == pytest.approx(0.05)
     assert progress(writer, "teacher")[0] == {"1": 3, "2": 2}  # without reruns every cut uses an attempt
     tool_limit = Episode(task="t", row_id="1", harness="opencode", harness_version="2.3.2", model="m",
                          failure="tool-call limit reached (15)")  # fmt: skip
     assert cut_short(tool_limit) is None
+    truncated = Episode(task="t", row_id="1", harness="pi", harness_version="1.6.0", model="m",
+                        failure="response truncated at the output token limit")  # fmt: skip
+    assert cut_short(truncated) is None
 
 
 def test_checkpoint_uploads_a_consistent_copy(tmp_path):

@@ -66,12 +66,42 @@ def make_run(config: RunConfig) -> Run:
     return Run(config, task, task_dir if task_dir.is_dir() else task_dir.parent, name, namespace)
 
 
+def episode_extras(run: Run) -> str:
+    """The wheel extras of stages that run episodes: `hub` plus the task's own (e.g. `browser`)."""
+    return ",".join(dict.fromkeys(["hub", *run.task.extras]))
+
+
+def judge_name(run: Run) -> str:
+    return run.task.judge if run.config.judge is None else run.config.judge
+
+
+def judge_secrets(run: Run) -> tuple[str, ...]:
+    """The judge's key variable when it is not the HF token every job already has (e.g. GEMINI_API_KEY)."""
+    name = judge_name(run)
+    if not name:
+        return ()
+    profile = load_profile("judges", name, run.config.profile_paths)
+    key = profile.key_env or ("GEMINI_API_KEY" if profile.api == "gemini" else "HF_TOKEN")
+    return () if key == "HF_TOKEN" else (key,)
+
+
+def judge_args(run: Run, *, bill_to: bool = True) -> list[str]:
+    """`--judge` (always explicit in jobs) and, for a judge, `--bill-to` (router judges bill like teachers)."""
+    name = judge_name(run)
+    args = ["--judge", jobs.q(name)]
+    if name and bill_to and run.config.hub.bill_to:
+        args += ["--bill-to", jobs.q(run.config.hub.bill_to)]
+    return args
+
+
 def profile_files(run: Run) -> dict[str, Path]:
-    """The student, harness and teacher profile files a job needs (staged under profiles/<kind>/)."""
+    """The student, harness, teacher and judge profile files a job needs (staged under profiles/<kind>/)."""
     files = {}
     kinds = [("students", run.config.student), ("harnesses", run.config.harness)]
     if run.config.teacher:
         kinds.append(("teachers", run.config.teacher))
+    if judge_name(run):
+        kinds.append(("judges", judge_name(run)))
     for kind, name in kinds:
         for folder in [*(p / kind for p in run.config.profile_paths), BUILTIN_PROFILES / kind]:
             if (folder / f"{name}.toml").exists():
@@ -278,7 +308,8 @@ def served_job(
     if serve.vllm != "image":
         deps.append(f"vllm=={serve.vllm_version}")
     full = [*common_args(run), "--student", jobs.q(run.config.student), "--model", jobs.q(model),
-            *image_vllm(student), *args, *output_args(run, "eval")]  # fmt: skip
+            *image_vllm(student), *args, *output_args(run, "eval"),
+            *judge_args(run)]  # fmt: skip
     if adapter:
         full += ["--adapter", jobs.q(adapter), "--adapter-label", jobs.q(label), "--adapter-only"]
     else:
@@ -298,6 +329,7 @@ def served_job(
         (run.config.probe.timeout or student.probe.timeout) if stage == "probe" else serve.timeout,
         command,
         expected_minutes=expected_minutes,
+        secret_envs=judge_secrets(run),
     )
 
 
@@ -336,7 +368,8 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
 def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minutes: float) -> jobs.Job:
     teacher = teacher_profile(run)
     full = [*common_args(run), "--teacher", jobs.q(run.config.teacher), *args,
-            *output_args(run, "traces" if stage == "traces" else "eval")]  # fmt: skip
+            *output_args(run, "traces" if stage == "traces" else "eval"),
+            *judge_args(run, bill_to=False)]  # fmt: skip
     if run.config.hub.bill_to:
         full += ["--bill-to", jobs.q(run.config.hub.bill_to)]
     command = "\n".join(
@@ -347,7 +380,14 @@ def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minu
         ]
     )
     return jobs.Job(
-        stage, name[:90], UV_IMAGE, teacher.traces.flavor, teacher.traces.timeout, command, expected_minutes=minutes
+        stage,
+        name[:90],
+        UV_IMAGE,
+        teacher.traces.flavor,
+        teacher.traces.timeout,
+        command,
+        expected_minutes=minutes,
+        secret_envs=judge_secrets(run),
     )
 
 
@@ -516,6 +556,7 @@ def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
         *image_vllm(student),
         *([] if student.serve.vllm == "image" else ["--vllm-version", jobs.q(student.serve.vllm_version)]),
         *GRPO_RECIPE,
+        *judge_args(run),
         *[jobs.q(a) for a in grpo.args],
         *[jobs.q(a) for a in settings.args],
         "--launch",
@@ -542,6 +583,7 @@ def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
             timeout,
             command,
             expected_minutes=jobs.timeout_minutes(timeout) * 0.75,
+            secret_envs=judge_secrets(run),
         )
     ]
 
@@ -783,6 +825,22 @@ def smoke_main(argv: list[str] | None = None) -> int:
     return main([items[0], *(arg for pair in sets for arg in ("--set", pair)), *items[1:]])
 
 
+def apply_judge_budget(run: Run, built: list[jobs.Job]) -> None:
+    """Split `[budget] judge_usd` evenly over a stage's judging jobs; each job's judge client stops at its share."""
+    cap = run.config.budget.judge_usd
+    judging = [job for job in built if "--judge " in job.command and "--judge ''" not in job.command]
+    name = judge_name(run)
+    if name and judging:
+        profile = load_profile("judges", name, run.config.profile_paths)
+        if cap and profile.api == "gemini" and not (profile.price.input or profile.price.output):
+            raise SystemExit(f"[budget] judge_usd needs a price in the {name} judge profile")
+        print(f"judge {name}: cap {'$' + format(cap / len(judging), '.2f') + ' per job' if cap else 'none'} "
+              f"({len(judging)} judging jobs)")  # fmt: skip
+    for job in judging:
+        if cap:
+            job.env["AGENT_DISTILL_JUDGE_BUDGET_USD"] = f"{cap / len(judging):.4f}"
+
+
 def check_budget(run: Run, built: list[jobs.Job], *, over_budget: bool) -> None:
     cost = jobs.estimate(built)
     cap = run.config.budget.gpu_usd
@@ -836,12 +894,14 @@ def main(argv: list[str] | None = None) -> int:
             extra = [tmp / "profiles", *hook_files.values()]  # hook modules land in each job's working directory
         elif hook_files:
             print(f"[dry-run] would stage the student's hook modules {sorted(hook_files)}")
-        rev = jobs.stage_code(run.repo("code"), run.task_dir, extra, dry_run=args.dry_run, manifest=manifest)
+        rev = jobs.stage_code(run.repo("code"), run.task_dir, extra, dry_run=args.dry_run, manifest=manifest,
+                              extras=tuple(episode_extras(run).split(",")))  # fmt: skip
     for stage in stages:
         if stage == "publish":
             publish(run, dry_run=args.dry_run)
             continue
         waves = stage_waves(stage, run, rev)
+        apply_judge_budget(run, [job for wave in waves for job in wave])
         check_budget(run, [job for wave in waves for job in wave], over_budget=args.over_budget)
         for index, wave in enumerate(waves):
             if args.dry_run:

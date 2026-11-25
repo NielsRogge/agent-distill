@@ -137,7 +137,7 @@ def test_requires_are_staged_with_the_job_code(tmp_path, monkeypatch):
     run_toml = project(tmp_path, hooks=HOOKS, requires=["hook_mod.py", "hook_patch.py"])
     staged = {}
 
-    def stage_code(code_repo, task_dir, extra, *, dry_run, manifest):
+    def stage_code(code_repo, task_dir, extra, *, dry_run, manifest, extras=()):
         staged["extra"] = {path.name: path for path in extra}
         staged["profiles"] = sorted(str(p.relative_to(extra[0])) for p in extra[0].rglob("*.toml"))
         return "REV"

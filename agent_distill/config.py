@@ -68,6 +68,11 @@ class Teacher:
     opencode_model: str = ""  # OpenCode PROVIDER/MODEL (default: huggingface/<model>[:provider])
     opencode_model_entry: dict[str, Any] = field(default_factory=dict)
     capabilities: list[str] = field(default_factory=list)  # e.g. ["image_input"]
+    # What harnesses that declare the model themselves (Pi) are told; OpenCode uses `opencode_model_entry`.
+    context: int = 131072
+    # Frontier teachers reason before their first tool call (Pi sends no thinking setting, they think anyway); a
+    # page-writing turn needed more than 32k tokens in 4 of 12 HTML pilot episodes.
+    max_output_tokens: int = 65536
     price: Price = field(default_factory=Price)
     notes: str = ""
     traces: TraceSettings = field(default_factory=TraceSettings)
@@ -226,7 +231,21 @@ def _build(cls: type, data: dict[str, Any], where: str) -> Any:
     return cls(**kwargs)
 
 
-KINDS = {"teachers": Teacher, "students": Student, "harnesses": HarnessProfile}
+@dataclass
+class JudgeProfile:
+    """A judge model (DESIGN.md §10): the Gemini API or an OpenAI-compatible model on the HF router."""
+
+    name: str
+    model: str
+    api: str = "router"  # router | gemini
+    key_env: str = ""  # default: HF_TOKEN (router) / GEMINI_API_KEY (gemini)
+    capabilities: list[str] = field(default_factory=list)  # e.g. ["image_input"]
+    max_tokens: int = 1024
+    price: Price = field(default_factory=Price)
+    notes: str = ""
+
+
+KINDS = {"teachers": Teacher, "students": Student, "harnesses": HarnessProfile, "judges": JudgeProfile}
 
 
 def profile_dirs(kind: str, extra: list[Path] | None = None) -> list[Path]:
@@ -322,6 +341,7 @@ class RunConfig:
     student: str
     harness: str
     teacher: str = ""
+    judge: str | None = None  # judge profile for judge rubrics (None: the task's; "" for none)
     name: str = ""
     stages: list[str] = field(default_factory=lambda: ["eval"])
     hub: HubSettings = field(default_factory=HubSettings)

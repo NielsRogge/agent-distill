@@ -1,0 +1,267 @@
+{
+ "p001": {
+  "choice": -2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p002": {
+  "choice": 1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p003": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p004": {
+  "choice": 2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p005": {
+  "choice": 2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p006": {
+  "choice": -2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p007": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p008": {
+  "choice": 1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p009": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p010": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p011": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p012": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p013": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p014": {
+  "choice": 1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p015": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p016": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p017": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p018": {
+  "choice": 1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p019": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p020": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p021": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p022": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p023": {
+  "choice": -2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p024": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p025": {
+  "choice": 1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p026": {
+  "choice": 1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p027": {
+  "choice": 1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p028": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p029": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p030": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p031": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p032": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p033": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p034": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p035": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p036": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p037": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p038": {
+  "choice": -2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p039": {
+  "choice": 1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p040": {
+  "choice": -2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p041": {
+  "choice": 2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p042": {
+  "choice": -2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p043": {
+  "choice": -2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p044": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p045": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p046": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p047": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p048": {
+  "choice": 2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p049": {
+  "choice": -1,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p050": {
+  "choice": -2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p051": {
+  "choice": 2,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p052": {
+  "choice": 0,
+  "broken_left": false,
+  "broken_right": false
+ },
+ "p110": {
+  "choice": -2,
+  "broken_left": false,
+  "broken_right": false
+ }
+}

@@ -1,0 +1,7 @@
+# Gemini 4 Neon through the Gemini API: the HTML example's primary judge (screenshots). Its key is read only by the
+# judge client in the stage process. Prices: USD per 1M tokens (fill in from the Gemini pricing page before a run).
+name = "gemini-4-neon"
+model = "gemini-4-neon"
+api = "gemini"
+key_env = "GEMINI_API_KEY"
+capabilities = ["image_input"]

@@ -1,0 +1,11 @@
+# Qwen3.8-27B on HF Inference Providers (image input): the second evaluation judge, and the training judge while
+# Gemini is unavailable. Billed to the run's `[hub] bill_to`. Price: the cheapest router provider on 2026-11-23.
+name = "qwen3.8-27b"
+model = "Qwen/Qwen3.8-27B"
+api = "router"
+capabilities = ["image_input"]
+max_tokens = 4096  # it reasons before answering; 1024 left no room for the scores
+
+[price]
+input = 0.225
+output = 1.98
