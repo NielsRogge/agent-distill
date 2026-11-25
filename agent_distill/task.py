@@ -76,6 +76,10 @@ class Task:
     skills: tuple[Path, ...] = ()
     # agent-distill extras the task's episode stages need beyond `hub`, e.g. ("browser",) for the `preview` tool.
     extras: tuple[str, ...] = ()
+    # Name prefix of the harness's temporary workspace ("" for the adapter's default). The agent sees the path
+    # (OpenCode puts its working directory in the prompt), so a parity task uses the reference harness's prefix:
+    # a model trained there can otherwise name a training-time directory that does not exist here.
+    workspace_prefix: str = ""
     # The limits a stored record ran with when the record does not say (`distill rescore`), from its file name,
     # e.g. url-extraction's teacher trace files ran with 20 tool calls, its evaluations with 15. None: `limits`.
     record_limits: Callable[[str], Limits | None] | None = None

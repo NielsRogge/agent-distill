@@ -92,6 +92,22 @@ Both are within the ±5-point tolerance. GRPO vs base: 9 papers solved only by G
 p = 0.065). The base model uses fewer tool calls than in url-extraction's run (4.5 vs 6.8); url-extraction's evaluator
 did not pin vLLM, so the serving stack differs (here vLLM 0.33.0).
 
+#### Repeats and the `workdir` stall (2026-11-25)
+
+Five more runs per model (one re-run, three repeats, one GRPO-only) put run-to-run noise at about ±3 points (SD) and
+showed the GRPO model ~6.5 points under 82.1% on average (75.0%), while base stayed within tolerance (77.7%). The
+gap came from episodes that stalled on their first call until the 180 s limit: the GRPO model sometimes passes
+`"workdir": "/tmp/url-traces-<random>"`, a directory it memorized from url-extraction's trace-generation workspaces,
+and OpenCode 1.2.4 never spawns a command whose `workdir` is missing (no error, the tool stays "running"). All 17
+stalls in 7 runs were such calls; none of the 58 calls naming the real workspace stalled; base never names one.
+url-extraction's evaluation ran in `/tmp/url-eval-*`, which OpenCode shows the agent, and its GRPO run named that
+directory correctly. Without the stalled episodes GRPO averaged 80.0%.
+
+The fix: the task's `workspace_prefix = "url-eval-"` (the agent now sees url-extraction's workspace name), and an
+OpenCode plugin (`harnesses/opencode_plugins/workdir-guard.js`, on by default, off in this parity run) that fails
+such a call with `workdir does not exist: ...` instead of letting it hang. OpenCode 2.3.2 already refuses
+directories outside the workspace (`external_directory: deny`).
+
 ### OpenCode 2.3.2 smoke test
 
 `distill run examples/paper-urls/run-opencode2.toml --stages eval`: Qwen3.5-9B base on 6 test papers ran end to end

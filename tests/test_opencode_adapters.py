@@ -560,3 +560,114 @@ def test_real_opencode_against_a_fake_model(profile, keyed, tmp_path, monkeypatc
     assert "hf_should_not_leak" not in json.dumps(requests)
     if keyed:
         assert authorizations and all(a == "Bearer real-teacher-key-xyz" for a in authorizations)
+
+
+# --------------------------------------------------------------------------------------------------
+# Workdir guard and workspace prefix
+# --------------------------------------------------------------------------------------------------
+
+
+def test_workdir_guard_plugin_is_configured_and_shipped() -> None:
+    guarded = opencode.with_workdir_guard({"provider": {}}, True)
+    (uri,) = guarded["plugin"]
+    assert uri.startswith("file://") and opencode.WORKDIR_GUARD.is_file()
+    assert "tool.execute.before" in opencode.WORKDIR_GUARD.read_text()
+    assert "plugin" not in opencode.with_workdir_guard({"provider": {}}, False)
+    from agent_distill.harnesses.opencode_v2 import server_config
+
+    assert "plugin" in server_config(TASK, [ENDPOINT], "2.3.2")
+    assert "plugin" not in server_config(TASK, [ENDPOINT], "2.3.2", workdir_guard=False)
+    assert OpenCodeV1(V1).workdir_guard and not OpenCodeV1(V1, workdir_guard=False).workdir_guard
+
+
+def test_workspace_prefix_comes_from_the_task() -> None:
+    assert TASK.workspace_prefix == "url-eval-"  # url-extraction's evaluation workspaces
+    assert opencode.workspace_prefix(TASK) == "url-eval-"
+    assert opencode.workspace_prefix(replace(TASK, workspace_prefix="")) == opencode.DEFAULT_WORKSPACE_PREFIX
+
+
+def test_paper_urls_parity_run_turns_the_guard_off() -> None:
+    from agent_distill import pipeline
+    from agent_distill.config import load_run
+    from agent_distill.stages.eval import parse_args
+
+    run = pipeline.make_run(load_run("examples/paper-urls/run.toml"))
+    jobs = pipeline.eval_jobs(run, "REV")
+    assert jobs and all("--no-workdir-guard" in job.command for job in jobs)
+    assert parse_args(
+        ["--task", "t", "--harness", "h", "--student", "s", "--model", "m", "--split", "test"]
+    ).workdir_guard
+    assert not parse_args(["--task", "t", "--harness", "h", "--student", "s", "--model", "m", "--split", "test",
+                           "--no-workdir-guard"]).workdir_guard  # fmt: skip
+
+
+@pytest.mark.skipif(not os.environ.get("AGENT_DISTILL_REAL_OPENCODE"), reason="set AGENT_DISTILL_REAL_OPENCODE=1")
+@pytest.mark.parametrize("profile", [V1, V2], ids=["1.2.4", "2.3.2"])
+def test_real_opencode_rejects_a_missing_workdir(profile, tmp_path) -> None:
+    """The model names a directory that does not exist: with the guard it gets an error and goes on to answer, in
+    the task's `url-eval-` workspace (without the guard, OpenCode 1.2.4 hangs until the episode times out)."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    answer = {"reasoning": "x", "github_url": None, "project_page_url": None}
+    cwd: list[str] = []
+
+    class Model(BaseHTTPRequestHandler):
+        def log_message(self, *args: Any) -> None:
+            pass
+
+        def do_POST(self) -> None:
+            request = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            messages, tools = request["messages"], [t["function"]["name"] for t in request.get("tools") or []]
+            cwd.extend(m["content"] for m in messages if m["role"] == "system" and isinstance(m["content"], str))
+            self.send_response(200)
+            self.send_header("content-type", "text/event-stream")
+            self.end_headers()
+            base = {"id": "c", "object": "chat.completion.chunk", "created": 1, "model": "policy"}
+            shell = "bash" if "bash" in tools else "shell"
+            if not any(m["role"] == "tool" for m in messages) and shell in tools:
+                args = {"command": "echo hi", "description": "x", "timeout": 120000,
+                        "workdir": "/tmp/url-traces-doesnotexist"}  # fmt: skip
+                call = {
+                    "index": 0,
+                    "id": "w1",
+                    "type": "function",
+                    "function": {"name": shell, "arguments": json.dumps(args)},
+                }
+                delta, finish = {"role": "assistant", "tool_calls": [call]}, "tool_calls"
+            elif "StructuredOutput" in tools:
+                call = {"index": 0, "id": "s1", "type": "function",
+                        "function": {"name": "StructuredOutput", "arguments": json.dumps(answer)}}  # fmt: skip
+                delta, finish = {"role": "assistant", "tool_calls": [call]}, "tool_calls"
+            else:
+                delta, finish = {"role": "assistant", "content": json.dumps(answer)}, "stop"
+            for chunk in (
+                {**base, "choices": [{"index": 0, "delta": delta, "finish_reason": None}]},
+                {**base, "choices": [{"index": 0, "delta": {}, "finish_reason": finish}],
+                 "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}},
+            ):  # fmt: skip
+                self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
+            self.wfile.write(b"data: [DONE]\n\n")
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Model)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    endpoint = Endpoint(base_url=f"http://127.0.0.1:{server.server_address[1]}/v1", model="policy")
+    harness = load_harness(profile)
+    cache = Path(os.environ.get("AGENT_DISTILL_CACHE", tmp_path))
+
+    async def go():
+        async with harness.session([endpoint], cache=cache, task=TASK) as runner:
+            return await harness.run_episode(runner, TASK, ROW_OF["correct_and_complete"], endpoint,
+                                             Limits(timeout=60, max_tool_calls=15))  # fmt: skip
+
+    episode = asyncio.run(go())
+    server.shutdown()
+    assert episode.failure is None and episode.answer is not None, episode.failure
+    first = episode.tool_events[0]
+    error = str(first.error or first.output)
+    assert not first.success
+    if profile.version == "1.2.4":  # our guard (1.2.4 would otherwise hang)
+        assert "workdir does not exist: /tmp/url-traces-doesnotexist" in error
+    else:  # 2.x refuses directories outside the workspace itself (external_directory: deny)
+        assert "external_directory" in error or "workdir does not exist" in error
+    assert any("/url-eval-" in text for text in cwd)  # OpenCode showed the agent the task's workspace prefix

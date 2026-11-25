@@ -95,7 +95,7 @@ class Runner:
 
 
 class OpenCodeV1:
-    def __init__(self, profile: HarnessProfile, *, answer_retry: bool = False) -> None:
+    def __init__(self, profile: HarnessProfile, *, answer_retry: bool = False, workdir_guard: bool = True) -> None:
         if not profile.version.startswith("1."):
             raise ValueError(f"OpenCodeV1 cannot run OpenCode {profile.version}")
         if answer_retry:
@@ -103,6 +103,7 @@ class OpenCodeV1:
         self.profile = profile
         self.name = profile.name
         self.version = profile.version
+        self.workdir_guard = workdir_guard
 
     def install(self, cache: Path | None = None) -> Path:
         return opencode.install(self.profile, cache)
@@ -119,13 +120,15 @@ class OpenCodeV1:
         """`opencode serve` in a fresh temporary workspace, configured for `endpoints`, without credentials: keyed
         endpoints are reached through a key proxy with a session key (one per session: 1.x shares the server)."""
         executable = await asyncio.to_thread(self.install, cache)
-        workspace = tempfile.TemporaryDirectory(prefix="agent-distill-opencode-")
+        workspace = tempfile.TemporaryDirectory(prefix=opencode.workspace_prefix(task))
         try:
             with opencode.key_proxies(endpoints) as routed:
                 env = opencode.server_env(
                     routed,
                     {
-                        "OPENCODE_CONFIG_CONTENT": json.dumps(opencode.provider_config(routed)),
+                        "OPENCODE_CONFIG_CONTENT": json.dumps(
+                            opencode.with_workdir_guard(opencode.provider_config(routed), self.workdir_guard)
+                        ),
                         **opencode.xdg_dirs(Path(workspace.name)),
                     },
                 )

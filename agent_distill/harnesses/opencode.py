@@ -145,6 +145,24 @@ def provider_config(endpoints: list[Endpoint]) -> dict[str, Any]:
     return config
 
 
+WORKDIR_GUARD = Path(__file__).parent / "opencode_plugins" / "workdir-guard.js"
+DEFAULT_WORKSPACE_PREFIX = "agent-distill-opencode-"
+
+
+def with_workdir_guard(config: dict[str, Any], enabled: bool) -> dict[str, Any]:
+    """`config` plus the workdir-guard plugin: a bash call naming a missing `workdir` fails with an error the model
+    sees, instead of hanging until the episode times out (OpenCode 1.2.4 never spawns such a command)."""
+    if enabled:
+        config = {**config, "plugin": [*config.get("plugin", []), WORKDIR_GUARD.resolve().as_uri()]}
+    return config
+
+
+def workspace_prefix(task: Any, default: str = DEFAULT_WORKSPACE_PREFIX) -> str:
+    """The temporary workspace's name prefix: the task's `workspace_prefix`, else `default`. The agent sees the path
+    (OpenCode puts the working directory in its prompt), so parity runs use the reference harness's."""
+    return getattr(task, "workspace_prefix", "") or default
+
+
 def model_ref(endpoint: Endpoint) -> tuple[str, str]:
     """(providerID, modelID) OpenCode uses for an endpoint."""
     if endpoint.native_id:

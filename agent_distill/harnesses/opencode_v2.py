@@ -64,8 +64,8 @@ def permissions(kinds: tuple[str, ...] | list[str]) -> list[dict[str, str]]:
     ]
 
 
-def server_config(task: Task, endpoints: list[Endpoint], version: str) -> dict[str, Any]:
-    config = opencode.provider_config(endpoints)
+def server_config(task: Task, endpoints: list[Endpoint], version: str, workdir_guard: bool = True) -> dict[str, Any]:
+    config = opencode.with_workdir_guard(opencode.provider_config(endpoints), workdir_guard)
     config["agents"] = {
         AGENT_ID: {
             "system": task.system_prompt_for("opencode", version, "final_json") or "",
@@ -77,7 +77,9 @@ def server_config(task: Task, endpoints: list[Endpoint], version: str) -> dict[s
     return config
 
 
-def server_env(task: Task, endpoints: list[Endpoint], version: str, workspace: Path) -> dict[str, str]:
+def server_env(
+    task: Task, endpoints: list[Endpoint], version: str, workspace: Path, workdir_guard: bool = True
+) -> dict[str, str]:
     """No server password in the environment (it is generated), no ~/.claude prompts or skills, the bundled model
     catalog instead of a live models.dev fetch, per-workspace data/config/state directories."""
     env = opencode.server_env(
@@ -85,7 +87,7 @@ def server_env(task: Task, endpoints: list[Endpoint], version: str, workspace: P
         {
             "OPENCODE_DISABLE_CLAUDE_CODE": "1",
             "OPENCODE_DISABLE_MODELS_FETCH": "1",
-            "OPENCODE_CONFIG_CONTENT": json.dumps(server_config(task, endpoints, version)),
+            "OPENCODE_CONFIG_CONTENT": json.dumps(server_config(task, endpoints, version, workdir_guard)),
             **opencode.xdg_dirs(workspace),
         },
     )
@@ -287,13 +289,14 @@ class Runner:
 
 
 class OpenCodeV2:
-    def __init__(self, profile: HarnessProfile, *, answer_retry: bool = False) -> None:
+    def __init__(self, profile: HarnessProfile, *, answer_retry: bool = False, workdir_guard: bool = True) -> None:
         if not profile.version.startswith("2."):
             raise ValueError(f"OpenCodeV2 cannot run OpenCode {profile.version}")
         self.profile = profile
         self.name = profile.name
         self.version = profile.version
         self.answer_retry = answer_retry
+        self.workdir_guard = workdir_guard
 
     def install(self, cache: Path | None = None) -> Path:
         return opencode.install(self.profile, cache)
@@ -327,12 +330,14 @@ class OpenCodeV2:
             return
         if runner.executable is None:
             raise ValueError("the runner has neither an attached server nor an executable")
-        workspace = tempfile.TemporaryDirectory(prefix="agent-distill-opencode2-")
+        workspace = tempfile.TemporaryDirectory(
+            prefix=opencode.workspace_prefix(runner.task, "agent-distill-opencode2-")
+        )
         stack = ExitStack()
         try:
             root = Path(workspace.name)
             endpoints = stack.enter_context(opencode.rekey(runner.endpoints))  # a key for this episode only
-            env = server_env(runner.task, endpoints, self.version, root)
+            env = server_env(runner.task, endpoints, self.version, root, self.workdir_guard)
             server = await asyncio.to_thread(
                 opencode.start_server, runner.executable, self.version, root, env, startup_timeout=60
             )

@@ -17,6 +17,7 @@ bill_to = "huggingface"
 collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
 
 [eval]
+workdir_guard = false   # parity: the reference harness had no guard (the url-eval- workspace prefix avoids the hang)
 splits = ["test"]
 limit = 50
 concurrency = 8
