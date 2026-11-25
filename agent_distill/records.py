@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -218,7 +218,9 @@ def summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
             only_b = sum(b[k] and not a[k] for k in shared)
             paired[f"{first}|{second}"] = {"rows": len(shared), f"{first}_only": only_a, f"{second}_only": only_b,
                                             "mcnemar_exact_p": mcnemar_exact(only_a, only_b)}  # fmt: skip
-    return {"labels": labels, "paired": paired}
+    # How the agents ran: "own-uid" (agent isolation) or as the stage's user (OpenCode, or a stage that is not root).
+    agent_users = Counter(str((r.get("metadata") or {}).get("agent_user") or "stage-user") for r in records)
+    return {"labels": labels, "paired": paired, "agent_users": dict(agent_users)}
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
