@@ -164,7 +164,8 @@ def score_fact(monkeypatch, answer, events, live="apache-2.0"):
 
 
 def test_facts_task_shape():
-    assert FACTS.dataset.repo == "nielsr/hf-hub-facts" and FACTS.dataset.splits["eval"] == ["test", "validation"]
+    assert FACTS.dataset.repo == "nielsr/hf-hub-facts-v2" and FACTS.version == "2"
+    assert FACTS.dataset.splits["eval"] == ["test", "validation"]
     assert FACTS.limits.max_tool_calls == 15 and FACTS.limits.timeout == 300  # the MCP twin's limits
     assert FACTS.judge == "" and FACTS.skills == TASK.skills and FACTS.job_setup == TASK.job_setup
 

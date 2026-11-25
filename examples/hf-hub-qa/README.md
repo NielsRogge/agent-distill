@@ -11,12 +11,15 @@ Qwen3.5-4B), dataset and checker, so only the tool surface differs.
   - The pinned `hf` CLI (huggingface_hub 2.4.0), logged out, so it can only read from the Hub.
   - The `hf-cli` Agent Skill generated from that same CLI version (`skills/hf-cli/SKILL.md`, loaded with `--skill`).
   - No submit tool: the agent's final message, in natural language, is the answer.
-- **Main task** (`task.py`): the Hub facts in `nielsr/hf-hub-facts` (1,068 train / 127 validation / 359 test,
-  frozen 2026-11-25), shared with the MCP twin. Each question has one gold value, for example:
-  - a model's license, library or pipeline tag;
-  - its parameter count or base model;
-  - a Space's SDK;
-  - a paper's title, first author or arXiv id.
+- **Main task** (`task.py`): the Hub facts in `nielsr/hf-hub-facts-v2` (1,162 train / 149 validation / 377 test,
+  frozen 2026-11-25), shared with the MCP twin. Every question needs at least two lookups or a file listing:
+  - a model's base model's license, pipeline tag or size (asked only when the base differs);
+  - the title or first author of the one paper a model links;
+  - the total size of three models;
+  - a repo's GGUF or safetensors file count, across every folder.
+
+  v1 (`nielsr/hf-hub-facts`, single lookups) was too easy: base Qwen3.5-4B passed 96% of its validation questions
+  through MCP.
 - **Second task** (`judged.py`): 51 open-ended questions in `nielsr/hf-hub-questions` (`questions.py`), such as
   "What are the top trending models?" or "What are some good papers on knowledge distillation?". These are the
   secondary evaluation of both twins.

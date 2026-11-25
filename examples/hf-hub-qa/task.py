@@ -4,7 +4,7 @@ Episodes run in Pi with `bash` and `read`, the pinned `hf` CLI (huggingface_hub 
 `hf-cli` Agent Skill generated from that same version (`skills/hf-cli/SKILL.md`). There is no submit tool: the
 agent's final message, in natural language, is the answer (`TextAnswer`), checked against a frozen gold value.
 
-Both twins train and evaluate on `nielsr/hf-hub-facts` with the same deterministic checker, so only the tool surface
+Both twins train and evaluate on `nielsr/hf-hub-facts-v2` with the same deterministic checker, so only the tool surface
 differs. The open-ended judged questions are a second task in this folder (judged.py).
 """
 
@@ -33,7 +33,10 @@ def user_prompt(row: dict[str, Any]) -> str:
 
 task = Task(
     name="hf-hub-qa",
-    dataset=DatasetSpec(repo="nielsr/hf-hub-facts", splits={"train": "train", "eval": ["test", "validation"]}),
+    # v2: multi-hop and count questions, shared with the MCP twin. v1 (nielsr/hf-hub-facts, single lookups) was too
+    # easy: base Qwen3.5-4B passed 96% of its validation rows through MCP (README).
+    dataset=DatasetSpec(repo="nielsr/hf-hub-facts-v2", splits={"train": "train", "eval": ["test", "validation"]}),
+    version="2",
     system_prompt=HERE / "system_prompt.txt",
     prompt=user_prompt,
     answer=TextAnswer(),
