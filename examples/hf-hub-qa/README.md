@@ -102,4 +102,33 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
     episodes; the CLI rejected 9% of its `hf` calls (it rarely tries `hf`).
   - The MCP twin's base, also with thinking off, scores 73.3% on its 150 test questions: without a shell it cannot
     wander off the tools.
-- **Full v2 run:** not started yet.
+  - Part of that was the job image, not the model: the student's `huggingface/trl` image had no `curl`, `jq` or
+    `wget` (139 `curl: command not found`), while the teacher's image has `curl`. `JOB_SETUP` now installs all three
+    in every image, and the task declares the commands it needs (`Task.commands`), checked in every job and as an
+    agent user before the first episode. Rerun with the tools: **91/149 (61%)**; 51 questions gained, 24 lost
+    (McNemar p ≈ 0.002); 29 episodes hit the call limit (was 59). It still read the skill in 1 of 149 episodes.
+- **Full v2 run** (`run.toml`, `qwen35-4b-hf-hub-qa-v2-glm-53-pi-160`): 600 GLM-5.3 traces (all accepted), SFT of
+  Qwen3.5-4B (thinking off) on them, evaluated on 150 test questions with the shell tools installed:
+
+  | | Base Qwen3.5-4B | SFT | GLM-5.3 |
+  | --- | --- | --- | --- |
+  | Passed | 71/150 (47.3%) | **117/150 (78.0%)** | 148/150 (98.7%) |
+  | Hit the 15-call limit | 40 | 19 | 0 |
+  | Tool calls per episode | 8.6 | 7.2 | 4.6 |
+  | `hf` calls / rejected per episode | 4.2 / 0.36 | 5.5 / 0.95 | 3.2 / 0.08 |
+  | Read the skill | 2% | 93% | 93% |
+  | Episodes using `curl` | 130 | 40 | 27 |
+
+  - SFT against base, paired: 62 questions fixed, 16 broken (sign test p ≈ 1.5e-7).
+  - The MCP twin on the same 150 test questions: base 73.3%, SFT 80.0%, GLM-5.3 98.7%. SFT brings the CLI student
+    level with the MCP one, from a much weaker base (47% vs 73%): with a shell, the base model wanders off to
+    scrapers, and SFT teaches it the CLI and the skill.
+  - Per template (base / SFT / teacher): `base_params` 10 / 27 / 30 of 30, `params_sum` 11 / 22 / 26 of 26,
+    `paper_first_author` 16 / 23 / 26 of 26, `paper_title` 15 / 21 / 24 of 24, `base_license` 2 / 5 / 4 of 5,
+    `base_pipeline` 7 / 8 / 11 of 12, `gguf_count` 6 / 6 / 15 of 15, `safetensors_count` 4 / 5 / 12 of 12. File counts
+    across folders barely moved with SFT. The student finds the right listing command but cycles through flag
+    combinations the CLI rejects (`--tree` with `--format json`, `--expand files`) until it runs out of calls (11 of
+    its 16 count failures). The teacher writes `--recursive --format json` to a file and counts with a short script.
+    A GRPO stage on the efficiency-shaped reward is the obvious next step for these.
+  - Spend: teacher traces about $21 (one shard's upload hit the account's private storage limit and was resumed),
+    teacher evaluation $4.49, GPU about $12 (SFT 82 min, two evaluations and the merge on H200).
