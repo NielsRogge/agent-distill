@@ -23,6 +23,7 @@ HF_VERSION = "2.4.0"  # the CLI the agent runs and the skill was generated from 
 # curl but no jq, the student's huggingface/trl image has none of them, so install all three everywhere. Otherwise SFT
 # imitates teacher commands that fail in the student's image, and every student number is understated (README).
 SHELL_TOOLS = ("curl", "jq", "wget")
+COMMANDS = ("hf", "python3", *SHELL_TOOLS)  # what the agents run: checked in every job and as an agent user
 # The pinned CLI, outside root's home so isolated agents can run it, on the PATH agents inherit.
 JOB_SETUP = [
     " && ".join(f"command -v {tool} >/dev/null" for tool in SHELL_TOOLS)
@@ -55,6 +56,7 @@ task = Task(
     network=True,  # the Hub API, anonymously
     limits=Limits(timeout=300, max_tool_calls=15),  # the MCP twin's limits
     job_setup=JOB_SETUP,
+    commands=COMMANDS,
 )
 
-__all__ = ["JOB_SETUP", "SHELL_TOOLS", "task", "user_prompt"]
+__all__ = ["COMMANDS", "JOB_SETUP", "SHELL_TOOLS", "task", "user_prompt"]

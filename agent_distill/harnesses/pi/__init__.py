@@ -486,6 +486,11 @@ class Pi:
                 raise RuntimeError(
                     f"agents cannot read the task's skills {unreadable} (a parent directory is private?)"
                 )
+            commands = getattr(task, "commands", ())
+            unrunnable = [c for c in commands if not await asyncio.to_thread(isolation.agent_can_run, c)]
+            if unrunnable:  # on the stage's PATH (Task.missing_commands) is not enough: agents run as other users
+                raise RuntimeError(f"agents cannot run the task's commands {unrunnable} (installed under a private "
+                                   "directory?)")  # fmt: skip
         with tempfile.TemporaryDirectory(prefix="agent-distill-pi-") as root:
             yield Runner(node, cli, task, Path(root))
 

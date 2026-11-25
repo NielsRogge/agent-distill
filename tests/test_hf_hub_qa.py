@@ -176,6 +176,7 @@ def test_facts_task_shape():
     assert FACTS.dataset.splits["eval"] == ["test", "validation"]
     assert FACTS.limits.max_tool_calls == 15 and FACTS.limits.timeout == 300  # the MCP twin's limits
     assert FACTS.judge == "" and FACTS.skills == TASK.skills and FACTS.job_setup == TASK.job_setup
+    assert set(FACTS.commands) >= {"hf", "curl", "jq", "wget"} and TASK.commands == FACTS.commands
 
 
 def test_right_fact_passes_with_the_efficiency_bonus(monkeypatch):

@@ -9,7 +9,7 @@ from __future__ import annotations
 from agent_distill.task import DatasetSpec, Limits, Task, TextAnswer
 
 from .judged_rubrics import RUBRICS
-from .task import HERE, JOB_SETUP, user_prompt
+from .task import COMMANDS, HERE, JOB_SETUP, user_prompt
 
 task = Task(
     name="hf-hub-qa-judged",
@@ -25,6 +25,7 @@ task = Task(
     limits=Limits(timeout=600, max_tool_calls=20),
     judge="gemini-4-hydrogen",
     job_setup=JOB_SETUP,
+    commands=COMMANDS,
 )
 
 __all__ = ["task"]

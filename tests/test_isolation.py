@@ -212,3 +212,21 @@ def test_agent_can_read_sees_parent_directories():
         assert isolation.agent_can_read(base / "open" / "SKILL.md")
     finally:
         shutil.rmtree(base)
+
+
+@as_root
+def test_agent_can_run_checks_the_path_as_an_agent(monkeypatch):
+    base = Path(tempfile.mkdtemp(prefix="agent-distill-isolation-test-"))
+    try:
+        (base / "bin").mkdir()
+        tool = base / "bin" / "private-tool-xyz"
+        tool.write_text("#!/bin/sh\n")
+        tool.chmod(0o755)
+        monkeypatch.setenv("PATH", f"{base / 'bin'}:/usr/bin:/bin")
+        assert isolation.agent_can_run("sh") and not isolation.agent_can_run("no-such-command-xyz")
+        base.chmod(0o755)
+        assert isolation.agent_can_run("private-tool-xyz")
+        base.chmod(0o700)  # on root's PATH, but under a private directory: not the agent's
+        assert shutil.which("private-tool-xyz") and not isolation.agent_can_run("private-tool-xyz")
+    finally:
+        shutil.rmtree(base)
