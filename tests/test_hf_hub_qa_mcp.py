@@ -163,6 +163,15 @@ def test_failed_mcp_calls_are_counted_but_do_not_change_the_reward(monkeypatch):
     assert result.passed and result.scores["mcp_errors"] == 1.0 and result.scores["mcp_calls"] == 2.0
 
 
+def test_rejected_unknown_tool_names_are_errors_not_fallbacks(monkeypatch):
+    invented = ToolEvent(kind="fetch", name="mcp__hf__hub_fs", input={}, success=False,
+                         error="Tool mcp__hf__hub_fs not found")  # fmt: skip
+    result = score("The license of `acme/Model-1` is Apache 2.0.", [invented, call()], monkeypatch=monkeypatch)
+    assert result.passed and result.scores["allowed_tools"] == 1.0 and result.scores["mcp_errors"] == 1.0
+    ran = ToolEvent(kind="shell", name="bash", input={"command": "ls"}, success=False, error="exit code 1")
+    assert not score("Apache 2.0.", [call(), ran], monkeypatch=monkeypatch).passed
+
+
 def test_answer_from_memory_or_other_tools_fails(monkeypatch):
     memory = score("Apache 2.0.", [], monkeypatch=monkeypatch)
     assert not memory.passed and memory.reward == 0.0 and memory.scores["used_hub"] == 0.0

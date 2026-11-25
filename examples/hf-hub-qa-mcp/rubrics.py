@@ -2,8 +2,9 @@
 library's, shared with hf-hub-qa).
 
 - `answered` (gate): the episode ended with a final message (not cut off while still calling tools).
-- `allowed_tools` (gate): every tool call was one of the task's MCP tools. Pi only declares those, so this is a
-  backstop; anything else fails the episode.
+- `allowed_tools` (gate): every tool call that ran was one of the task's MCP tools. Pi only declares those, so this is
+  a backstop; anything else fails the episode. A call to a tool name that does not exist, which Pi rejects without
+  running it, counts as a failed call (`mcp_errors`) instead.
 - `used_hub` (gate): at least one successful MCP call. An answer from memory fails, however right.
 - `fact_correct`: the answer states the row's frozen gold value (facts.py). When it does not, the value is re-read
   from the Hub (anonymously); if the Hub changed since the snapshot, the row has drifted and the episode is
@@ -49,7 +50,15 @@ def answered(answer: Any) -> float:
 
 @process(weight=0.0)
 def allowed_tools(tool_events: list[Any]) -> float:
-    return float(all(getattr(e, "name", "") in ALLOWED for e in tool_events or []))
+    """Every call that ran used an allowed tool. A call to a tool name that does not exist (`mcp__hf__hub_fs`), which
+    Pi rejects without running anything, is a failed call (`mcp_errors`), not a fallback to another tool."""
+    ran = [e for e in tool_events or [] if not rejected_unknown(e)]
+    return float(all(getattr(e, "name", "") in ALLOWED for e in ran))
+
+
+def rejected_unknown(event: Any) -> bool:
+    error = str(getattr(event, "error", "") or "")
+    return not getattr(event, "success", False) and error.startswith("Tool ") and error.rstrip().endswith("not found")
 
 
 @process(weight=0.0)

@@ -1,0 +1,10 @@
+# Qwen3.5-4B served with thinking off: the qwen3.5-4b profile plus vLLM's server-wide chat-template default
+# `enable_thinking: false` (vLLM >= 0.33 `--default-chat-template-kwargs`; a request's own chat_template_kwargs would
+# still win, and the harnesses send none). Without it Qwen3.5 thinks by default, and with no reasoning parser its
+# reasoning lands in the answer text, while SFT trains on teacher turns without reasoning (keep_reasoning = false).
+# This profile keeps serving consistent with that training data.
+name = "qwen3.5-4b-nothink"
+model = "Qwen/Qwen3.5-4B"
+
+[serve]
+vllm_extra_args = "--default-chat-template-kwargs '{\"enable_thinking\": false}'"
