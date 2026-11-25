@@ -75,6 +75,10 @@ task = Task(
     # The agent runs `hf papers info/read` (anonymous: agents get no HF token).
     job_setup=["command -v hf >/dev/null || uv tool install -q 'huggingface-hub>=1.13'"],
     record_limits=record_limits,
+    # url-extraction's evaluation workspaces were /tmp/url-eval-*, which OpenCode shows the agent. Under another name,
+    # its GRPO model sometimes names a training-time /tmp/url-traces-* directory as `workdir`, which hangs OpenCode
+    # 1.2.4 (parity tier 2 lost ~5 points to it).
+    workspace_prefix="url-eval-",
 )
 
 __all__ = ["FIELDS", "SYSTEM_PROMPT", "PaperCandidate", "URLFindings", "candidate_from_row", "task", "user_prompt"]

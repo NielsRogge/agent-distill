@@ -296,6 +296,9 @@ class EvalSettings:
     # ... or explicit models, label -> "model[+adapter]" (replaces `variants`)
     models: dict[str, str] = field(default_factory=dict)
     answer_retry: bool = False  # OpenCode 2.x: ask once for the JSON answer when an episode ends without one
+    # OpenCode: a bash call naming a missing `workdir` fails with an error the model sees (instead of hanging until
+    # the episode times out). Off only for parity runs that must match the reference harness exactly.
+    workdir_guard: bool = True
 
 
 @dataclass

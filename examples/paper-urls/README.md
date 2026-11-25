@@ -47,7 +47,7 @@ passed = all_fields_correct and protocol
 | Tier | Check | Status |
 |---|---|---|
 | 1 | Every published url-extraction record rescored by both scorers: same answer, per-field verification, completeness and reason, success criterion, and GRPO reward | **Passed** (2026-11-23): 7,241 episodes in 35 files of 7 repos, 0 differences |
-| 2 | `opencode@1.2.4` re-evaluation of Qwen3.5-9B base and `qwen35-9b-url-agent-grpo-merged-kimi` within noise of 75.0% / 82.1% | **Passed** (2026-11-23): 78.6% (+3.6) / 84.5% (+2.4), see below |
+| 2 | `opencode@1.2.4` re-evaluation of Qwen3.5-9B base and `qwen35-9b-url-agent-grpo-merged-kimi` within noise of 75.0% / 82.1%, GRPO ahead of base on the paired papers | **Passed** (2026-11-25, mean of 3 runs in `url-eval-` workspaces): 79.8% (+4.8) / 86.1% (+4.0); GRPO-only passes 27 vs base-only 5 (sign test p = 0.0001). See below |
 | 3 | OpenCode 2.x cross-check against url-extraction's V2 experiment | M6 |
 | 4 | Full recipe re-run | M7 |
 
@@ -91,6 +91,35 @@ split, 42 fully scoreable papers (84 fields), OpenCode 1.2.4, 180 s, 15 tool cal
 Both are within the ±5-point tolerance. GRPO vs base: 9 papers solved only by GRPO, 2 only by base (McNemar
 p = 0.065). The base model uses fewer tool calls than in url-extraction's run (4.5 vs 6.8); url-extraction's evaluator
 did not pin vLLM, so the serving stack differs (here vLLM 0.33.0).
+
+#### Repeats and the `workdir` stall (2026-11-25)
+
+Five more runs per model (one re-run, three repeats, one GRPO-only) put run-to-run noise at about ±3 points (SD) and
+showed the GRPO model ~6.5 points under 82.1% on average (75.0%), while base stayed within tolerance (77.7%). The
+gap came from episodes that stalled on their first call until the 180 s limit: the GRPO model sometimes passes
+`"workdir": "/tmp/url-traces-<random>"`, a directory it memorized from url-extraction's trace-generation workspaces,
+and OpenCode 1.2.4 never spawns a command whose `workdir` is missing (no error, the tool stays "running"). All 17
+stalls in 7 runs were such calls; none of the 58 calls naming the real workspace stalled; base never names one.
+url-extraction's evaluation ran in `/tmp/url-eval-*`, which OpenCode shows the agent, and its GRPO run named that
+directory correctly. Without the stalled episodes GRPO averaged 80.0%.
+
+The fix: the task's `workspace_prefix = "url-eval-"` (the agent now sees url-extraction's workspace name), and an
+OpenCode plugin (`harnesses/opencode_plugins/workdir-guard.js`, on by default, off in this parity run) that fails
+such a call with `workdir does not exist: ...` instead of letting it hang. OpenCode 2.3.2 already refuses
+directories outside the workspace (`external_directory: deny`).
+
+Three runs per model with the fix (guard off, so only the workspace name changed), each 42 papers / 84 fields:
+
+| Model | Run 1 | Run 2 | Run 3 | Mean ± SD | url-extraction |
+|---|---:|---:|---:|---:|---:|
+| Qwen3.5-9B base | 79.8% | 81.0% | 78.6% | 79.8 ± 1.2% (+4.8) | 75.0% |
+| Qwen3.5-9B SFT + GRPO | 82.1% | 86.9% | 89.3% | 86.1 ± 3.6% (+4.0) | 82.1% |
+
+No `url-traces` directory was named (24 GRPO calls passed a `workdir`, all the real workspace), and 2 GRPO episodes
+of 126 timed out (both on slow research, not stalls). On the paired papers GRPO is ahead: it alone passed 27,
+base alone 5 (two-sided sign test p = 0.0001), and it had more correct fields on 23 papers, base on 9. Both means
+sit inside the ±5-point band but near its top: this stack (vLLM 0.33.0) scores both models a few points above
+url-extraction's unpinned one.
 
 ### OpenCode 2.3.2 smoke test
 
