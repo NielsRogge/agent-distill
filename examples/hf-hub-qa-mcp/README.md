@@ -344,3 +344,25 @@ checkpoint, with the student served non-thinking and MCP rollouts through the ca
 the adapter was pushed and merged. This is the first time Pi GRPO has made a step in this repository. On unfiltered
 train rows the SFT student is right 95.5% of the time, so the in-group reward spread was only 0.04. A real GRPO run
 first needs the difficulty probe, to keep the rows it solves only sometimes.
+
+## CLI vs MCP (v2, the same 150 test questions)
+
+Both tasks: GLM-5.3 → Qwen3.5-4B, served without thinking, in `pi@1.6.0`, on the first 150 rows of the
+`nielsr/hf-hub-facts-v2` test split, scored by the shared checker (`agent_distill.rubrics.facts`). The CLI numbers are
+from the hf-hub-qa run (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160`).
+
+| Pass rate | hf CLI (`bash` + `hf` 2.4.0 + skill) | HF MCP server (3 tools) |
+|---|---|---|
+| Qwen3.5-4B (base) | 71/150 (47.3%) | 110/150 (73.3%) |
+| Qwen3.5-4B + SFT | 117/150 (78.0%) | 120/150 (80.0%) |
+| GLM-5.3 (teacher) | 148/150 (98.7%) | 148/150 (98.7%) |
+| SFT vs base (fixed / broken) | 62 / 16 | 25 / 15 |
+
+- **Base:** MCP is much easier for an untrained small model. With a shell, the base model mostly leaves `hf` for
+  hand-written API calls and HTML scraping, and runs out of tool calls. It read the skill in 2% of episodes. With only
+  three MCP tools it has nowhere else to go.
+- **After SFT:** the gap closes. SFT teaches the CLI student to read the skill (93% of episodes) and use `hf` (+30.7
+  points); the MCP student gains 6.7 points on 150 rows (+9.3 points, p = 0.001, on all 377). Both end near 80%.
+- **Teacher:** GLM-5.3 is equally strong through both interfaces (98.7%).
+- **What remains in both:** counting a repo's files (`gguf_count`: CLI 6/15 and MCP 5/15 after SFT, teacher 15/15)
+  and the base model's parameter count.
