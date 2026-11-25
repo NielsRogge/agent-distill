@@ -366,3 +366,18 @@ from the hf-hub-qa run (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160`).
 - **Teacher:** GLM-5.3 is equally strong through both interfaces (98.7%).
 - **What remains in both:** counting a repo's files (`gguf_count`: CLI 6/15 and MCP 5/15 after SFT, teacher 15/15)
   and the base model's parameter count.
+
+### Caveat: SFT trained with the wrong tool list
+
+Found after the run (PR #19). The SFT stage renders the tool definitions from `agent_distill.harnesses.tools.
+harness_tools`, which for this task returned only an argument-free `submit` tool. That function knows Pi's built-in tools,
+not `Task.mcp_servers`, and it gave `TextAnswer` tasks a phantom `submit`. So the 599 training conversations were
+rendered with `tools = [submit]`. At inference, Pi declares the three MCP tools and no `submit`. The student learned to
+call `mcp__hf__*` from the trajectories alone, without their schemas in the prompt.
+
+- The published results stand: base, SFT and teacher were all evaluated in the real harness, with the real tool
+  definitions. The 81.4% is what this SFT model does in Pi.
+- The SFT gain is probably a lower bound: training with the right schemas should only help.
+- GRPO is unaffected. Its rollouts run in Pi, so its token capture contains the real MCP tool definitions.
+- A future SFT rerun should use main after #19, which renders the MCP tools from `Task.mcp_servers` (once #13 lands)
+  and drops `submit` for `TextAnswer` tasks.
