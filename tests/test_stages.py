@@ -290,3 +290,22 @@ def test_probe_jobs_probe_the_whole_sample_not_the_eval_default_limit():
     for job in built:
         command = job.command
         assert "--sample 1162" in command and "--limit 1162" in command  # select_rows: sample, shard, then limit
+
+
+def test_an_episode_stage_refuses_to_start_without_the_tasks_commands(tmp_path):
+    import asyncio
+    import dataclasses
+
+    import pytest
+
+    from agent_distill.stages.common import run_episodes
+    from agent_distill.task import Limits
+
+    task = dataclasses.replace(TASK, commands=("sh", "no-such-command-xyz"))
+    assert task.missing_commands() == ["no-such-command-xyz"]
+    harness = ScriptedHarness({"1": ["pass"]})
+    plan = Plan(label="student", attempts=1, stop_when_passed=True)
+    with pytest.raises(RuntimeError, match="no-such-command-xyz"):
+        asyncio.run(run_episodes(harness, task, rows("1"), None, RecordWriter(tmp_path, "student/test"), plan,
+                                 limits=Limits(), concurrency=1, cache=tmp_path))  # fmt: skip
+    assert harness.runs == []  # no episode ran

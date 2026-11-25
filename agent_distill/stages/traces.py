@@ -32,7 +32,7 @@ from agent_distill.records import RecordWriter, raw_root_for, read_jsonl, summar
 from agent_distill.rubrics import ErrorBudget
 from agent_distill.rubrics.judge import make_judge_runner
 from agent_distill.stages.common import Plan, progress, resume_from_hub, run_episodes, shard
-from agent_distill.stages.eval import checkpoint, publish, select_rows
+from agent_distill.stages.eval import checkpoint, publish, refuse_public, select_rows
 from agent_distill.task import Limits, load_task
 
 
@@ -104,14 +104,16 @@ def main(argv: list[str] | None = None) -> None:
         timeout=args.timeout or max(settings.episode_timeout, task.limits.timeout),
         max_tool_calls=args.max_tool_calls or max(settings.max_tool_calls, task.limits.max_tool_calls or 0),
     )
+    raw_dir = args.raw_output_dir or raw_root_for(args.output_dir)
+    raw_repo = "" if args.no_raw_upload else args.raw_repo or (f"{args.output_repo}-raw" if args.output_repo else "")
+    upload_raw = None if args.no_raw_upload else raw_dir  # raw logs are still written in the job, never uploaded
+    if args.output_repo:
+        refuse_public(args.output_repo, raw_repo)
     rows = trace_rows(task, args)
     if not rows:
         raise SystemExit(f"no rows selected from {task.dataset.repo}:{args.split}")
     shard_suffix = f"-{args.shard.replace('/', 'of')}" if args.shard else ""
     prefix = args.prefix or f"{args.label}/{args.split}{shard_suffix}"
-    raw_dir = args.raw_output_dir or raw_root_for(args.output_dir)
-    raw_repo = "" if args.no_raw_upload else args.raw_repo or (f"{args.output_repo}-raw" if args.output_repo else "")
-    upload_raw = None if args.no_raw_upload else raw_dir  # raw logs are still written in the job, never uploaded
     if args.output_repo:
         resume_from_hub(args.output_repo, args.output_dir, prefix, raw_repo=raw_repo, raw_dir=raw_dir)
     writer = RecordWriter(args.output_dir, prefix, raw_dir)

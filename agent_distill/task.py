@@ -6,6 +6,7 @@ import hashlib
 import importlib.machinery
 import importlib.util
 import json
+import shutil
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -70,6 +71,11 @@ class Task:
     system_prompts: dict[str, str | Path] = field(default_factory=dict)
     # Shell commands every job of this task runs first (tools the agent's prompt relies on, e.g. the `hf` CLI).
     job_setup: list[str] = field(default_factory=list)
+    # Commands the agent is expected to run (its prompt, skills or the teacher's traces use them), e.g. ("hf", "curl",
+    # "jq"). Every job checks them after `job_setup` and every episode stage before its first episode, so the teacher
+    # and the student cannot silently run with different tool sets: a student that imitates `curl | jq` in an image
+    # without them is understated, not measured.
+    commands: tuple[str, ...] = ()
     # The judge profile its judge rubrics use unless a run picks another (`--judge`), e.g. "qwen3.8-27b".
     judge: str = ""
     # Agent Skills (directories holding a SKILL.md) the agent may load, e.g. a pinned `hf-cli` skill. Only harnesses
@@ -83,6 +89,10 @@ class Task:
     # The limits a stored record ran with when the record does not say (`distill rescore`), from its file name,
     # e.g. url-extraction's teacher trace files ran with 20 tool calls, its evaluations with 15. None: `limits`.
     record_limits: Callable[[str], Limits | None] | None = None
+
+    def missing_commands(self) -> list[str]:
+        """The task's `commands` not on this process's PATH (the PATH its agents inherit)."""
+        return [command for command in self.commands if shutil.which(command) is None]
 
     def render_prompt(self, row: Row) -> str:
         if callable(self.prompt):

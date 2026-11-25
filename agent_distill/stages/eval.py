@@ -35,7 +35,7 @@ from agent_distill.reasoning import LeakGuard
 from agent_distill.records import RecordWriter, raw_root_for, read_jsonl, summarize_records
 from agent_distill.rubrics import ErrorBudget
 from agent_distill.rubrics.judge import make_judge_runner
-from agent_distill.stages.common import Checkpoint, Plan, resume_from_hub, run_episodes, shard
+from agent_distill.stages.common import Checkpoint, Plan, PublishRefused, resume_from_hub, run_episodes, shard
 from agent_distill.task import Limits, Task, load_task
 
 VLLM_PORT = 8000
@@ -212,7 +212,8 @@ def private_dataset(api: Any, repo: str) -> bool:
     """Create `repo` as a private dataset, or check that the existing one is private. Returns True when created.
 
     `create_repo(private=True, exist_ok=True)` leaves an existing public repo public, so unscanned episodes would be
-    uploaded straight into a public dataset: refuse instead.
+    uploaded straight into a public dataset: refuse instead (`PublishRefused`: this runs inside the episode loop's
+    checkpoints, where a `SystemExit` would escape the event loop instead of stopping the stage).
     """
     from huggingface_hub.utils import RepositoryNotFoundError
 
@@ -224,11 +225,32 @@ def private_dataset(api: Any, repo: str) -> bool:
     else:
         created = False
     if not info.private:
-        raise SystemExit(
-            f"{repo} is public: refusing to upload unscanned episodes into it. Use a new repo name, or make it "
-            "private and run `distill run ... --stages publish` after the upload to scan and publish it again."
-        )
+        raise PublishRefused(public_message(repo))
     return created
+
+
+def public_message(repo: str) -> str:
+    return (
+        f"{repo} is public: refusing to upload unscanned episodes into it. Use a new repo name, or relaunch "
+        "with `distill run ... --reprivatize` (makes it private first) and run `distill run ... --stages "
+        "publish` after the upload to scan and publish it again."
+    )
+
+
+def refuse_public(*repos: str) -> None:
+    """Refuse at startup, before any episode runs (or costs anything), when a dataset the stage uploads to exists and
+    is public. Read-only: `private_dataset` creates the repos at the first upload, and checks again then."""
+    from huggingface_hub import HfApi
+    from huggingface_hub.utils import RepositoryNotFoundError
+
+    api = HfApi()
+    for repo in dict.fromkeys(filter(None, repos)):
+        try:
+            info = api.repo_info(repo, repo_type="dataset")
+        except RepositoryNotFoundError:
+            continue
+        if not info.private:
+            raise PublishRefused(public_message(repo))
 
 
 def publish(
@@ -250,7 +272,7 @@ def publish(
     api = HfApi()
     has_raw = raw_dir is not None and raw_dir.exists() and any(raw_dir.rglob("*.jsonl"))
     if has_raw and not raw_repo:
-        raise SystemExit("raw harness logs need a private --raw-repo; they never go into the episode dataset")
+        raise PublishRefused("raw harness logs need a private --raw-repo; they never go into the episode dataset")
     created = private_dataset(api, repo)
     if created and collection:
         api.add_collection_item(collection, item_id=repo, item_type="dataset", note=note or f"{task}, {harness_id}",
@@ -359,6 +381,8 @@ def main(argv: list[str] | None = None) -> None:
     raw_repo = "" if args.no_raw_upload else args.raw_repo or (f"{args.output_repo}-raw" if args.output_repo else "")
     upload_raw = None if args.no_raw_upload else raw_dir  # raw logs are still written in the job, never uploaded
     limits = Limits(timeout=args.timeout, max_tool_calls=args.max_tool_calls)
+    if args.output_repo:
+        refuse_public(args.output_repo, raw_repo)
     rows = select_rows(
         task,
         args.split,

@@ -10,6 +10,14 @@ or explicit models) and `publish`. With several stages
 each waits for the previous one's jobs; a single stage runs detached unless `--wait`. `--dry-run` prints every job
 (image, flavor, command) and the cost estimate without staging code or launching anything. Every job's worst-case
 cost (all jobs running to their timeout) is checked against `[budget]` before launch.
+
+Episode stages (`traces`, `probe`, `eval`) upload into private datasets only. Once `publish` has made a run's
+traces or eval dataset public, a later episode stage writing into it (an extended eval, a new probe) is refused up
+front, the dry run included; `--reprivatize` makes it private again before launch, and a later `--stages publish`
+scans and republishes it:
+
+    distill run examples/paper-urls/run.toml --stages eval --limit 377 --reprivatize --wait
+    distill run examples/paper-urls/run.toml --stages publish
 """
 
 from __future__ import annotations
@@ -247,10 +255,17 @@ def harness_id(run: Run) -> str:
     return load_profile("harnesses", run.config.harness, run.config.profile_paths).id
 
 
+def job_task(run: Run) -> str:
+    """The task as jobs see it: the staged task folder, or the task file within it when the run names a file
+    (e.g. `task = "judged.py"` for a second task in the same folder)."""
+    path = run.config.path(run.config.task)
+    return "/work/task" if path.is_dir() else f"/work/task/{path.name}"
+
+
 def common_args(run: Run) -> list[str]:
     return [
         "--task",
-        "/work/task",
+        job_task(run),
         "--harness",
         jobs.q(harness_id(run)),
         "--profiles",
@@ -324,7 +339,7 @@ def served_job(
         full += ["--label", jobs.q(label)]
     command = "\n".join(
         [
-            jobs.prelude(run.repo("code"), rev, run.task.job_setup),
+            jobs.prelude(run.repo("code"), rev, run.task.job_setup, run.task.commands),
             jobs.python_module("agent_distill.stages.eval", full, deps=deps),
             f"echo {stage.upper()}_DONE",
         ]
@@ -382,7 +397,7 @@ def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minu
         full += ["--bill-to", jobs.q(run.config.hub.bill_to)]
     command = "\n".join(
         [
-            jobs.prelude(run.repo("code"), rev, run.task.job_setup),
+            jobs.prelude(run.repo("code"), rev, run.task.job_setup, run.task.commands),
             jobs.python_module("agent_distill.stages.traces", full),
             f"echo {stage.upper()}_DONE",
         ]
@@ -465,7 +480,7 @@ def sft_jobs(run: Run, rev: str) -> list[jobs.Job]:
     student = student_profile(run)
     args = [
         "--task",
-        "/work/task",
+        job_task(run),
         "--harness",
         jobs.q(harness_id(run)),
         "--profiles",
@@ -579,7 +594,7 @@ def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
     deps = grpo.deps or GRPO_DEPS
     command = "\n".join(
         [
-            jobs.prelude(run.repo("code"), rev, run.task.job_setup),
+            jobs.prelude(run.repo("code"), rev, run.task.job_setup, run.task.commands),
             jobs.python_module("agent_distill.stages.grpo", args, deps=deps),
             "echo GRPO_DONE",
         ]
@@ -741,6 +756,68 @@ def publish(run: Run, *, dry_run: bool) -> None:
         print(f"published {repo} ({kind})" + (f" in {collection}" if collection else ""), flush=True)
 
 
+# Stages whose jobs upload episodes: (episode dataset, its always-private raw-log sibling). The probe writes its
+# attempts and `difficulty/` into the eval dataset.
+EPISODE_REPOS = {"traces": ("traces", "raw"), "probe": ("eval", "eval-raw"), "eval": ("eval", "eval-raw")}
+
+
+def episode_datasets(run: Run, stages: list[str]) -> list[tuple[str, str]]:
+    """(episode dataset, raw dataset) of the given stages, deduplicated in order."""
+    pairs = [(run.repo(data), run.repo(raw)) for stage in stages if stage in EPISODE_REPOS
+             for data, raw in [EPISODE_REPOS[stage]]]  # fmt: skip
+    return list(dict.fromkeys(pairs))
+
+
+def check_episode_repos(
+    run: Run, stages: list[str], *, reprivatize: bool, dry_run: bool, toml: str = "RUN.toml"
+) -> list[str]:
+    """Before anything is staged or launched (the dry run too): every episode stage's dataset must be private,
+    because its jobs refuse to upload unscanned episodes into a public one (`stages.eval.private_dataset`).
+
+    A dataset that `publish` already made public is refused with a pointer to `--reprivatize`, which makes it private
+    again (nothing is deleted; it stays in the collection) so the jobs can write into it; `--stages publish` then
+    scans and republishes it. A public raw-log repo is never fixed silently: it is a leak. Returns the datasets made
+    (or, in the dry run, to be made) private.
+    """
+    from huggingface_hub import HfApi
+    from huggingface_hub.utils import RepositoryNotFoundError
+
+    episode_stages = [s for s in stages if s in EPISODE_REPOS]
+    if "publish" in stages and episode_stages and stages.index("publish") < stages.index(episode_stages[-1]):
+        raise SystemExit(
+            f"`publish` comes before {episode_stages[-1]!r} in --stages; put it last so the episodes are uploaded "
+            "into a private dataset and scanned before they are published"
+        )
+    api = HfApi()
+
+    def public(repo: str) -> bool:
+        try:
+            return not api.repo_info(repo, repo_type="dataset").private
+        except RepositoryNotFoundError:
+            return False  # created private by the stage
+
+    reprivatized: list[str] = []
+    for data, raw in episode_datasets(run, episode_stages):
+        if public(raw):
+            raise SystemExit(f"{raw} holds raw harness logs and must stay private; make it private and revoke any "
+                             "token it may hold")  # fmt: skip
+        if not public(data):
+            continue
+        if not reprivatize:
+            raise SystemExit(
+                f"{data} is public (already published), and the {'/'.join(episode_stages)} jobs refuse to upload "
+                "unscanned episodes into it. Pass --reprivatize to make it private before launch, then run "
+                f"`distill run {toml} --stages publish` once the jobs have finished to scan and republish it."
+            )
+        if dry_run:
+            print(f"[dry-run] would make {data} private (--reprivatize)")
+        else:
+            api.update_repo_settings(data, repo_type="dataset", private=True)
+            print(f"made {data} private (--reprivatize) so its episode jobs can upload into it", flush=True)
+        reprivatized.append(data)
+    return reprivatized
+
+
 # --------------------------------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------------------------------
@@ -755,6 +832,12 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--wait", action="store_true", help="Wait for a single stage's jobs")
     parser.add_argument("--over-budget", action="store_true", help="Launch even if the worst case exceeds [budget]")
+    parser.add_argument(
+        "--reprivatize",
+        action="store_true",
+        help="Make an already-published episode dataset (traces/eval) private again so traces, probe or eval jobs "
+        "can upload into it; run `--stages publish` afterwards to scan and republish it",
+    )
     parser.add_argument("--splits", help="Override [eval] splits (comma-separated)")
     parser.add_argument("--limit", type=int, help="Override [eval] limit")
     parser.add_argument(
@@ -882,6 +965,8 @@ def main(argv: list[str] | None = None) -> int:
         f"jobs billed to {namespace or 'your account'}"
     )
     job_stages = [s for s in stages if s != "publish"]
+    reprivatized = check_episode_repos(run, stages, reprivatize=args.reprivatize, dry_run=args.dry_run,
+                                       toml=str(args.run))  # fmt: skip
     rev = ""
     hook_files: dict[str, Path] = {}
     if any(s != "traces" for s in job_stages):  # student stages: hook modules staged and resolvable, or refuse
@@ -924,4 +1009,8 @@ def main(argv: list[str] | None = None) -> int:
             ids = jobs.launch(wave, namespace)
             if len(stages) > 1 or args.wait or index < len(waves) - 1:
                 jobs.wait(ids, namespace)
+    if reprivatized and "publish" not in stages:
+        print(f"{'[dry-run] ' if args.dry_run else ''}reminder: {', '.join(reprivatized)} "
+              f"{'would be' if args.dry_run else 'is'} private until you run `distill run {args.run} --stages publish` "
+              "after the jobs finish (it scans and republishes)", flush=True)  # fmt: skip
     return 0
