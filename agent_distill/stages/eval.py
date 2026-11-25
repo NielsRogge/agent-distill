@@ -225,11 +225,31 @@ def private_dataset(api: Any, repo: str) -> bool:
     else:
         created = False
     if not info.private:
-        raise PublishRefused(
-            f"{repo} is public: refusing to upload unscanned episodes into it. Use a new repo name, or make it "
-            "private and run `distill run ... --stages publish` after the upload to scan and publish it again."
-        )
+        raise PublishRefused(public_message(repo))
     return created
+
+
+def public_message(repo: str) -> str:
+    return (
+        f"{repo} is public: refusing to upload unscanned episodes into it. Use a new repo name, or make it "
+        "private and run `distill run ... --stages publish` after the upload to scan and publish it again."
+    )
+
+
+def refuse_public(*repos: str) -> None:
+    """Refuse at startup, before any episode runs (or costs anything), when a dataset the stage uploads to exists and
+    is public. Read-only: `private_dataset` creates the repos at the first upload, and checks again then."""
+    from huggingface_hub import HfApi
+    from huggingface_hub.utils import RepositoryNotFoundError
+
+    api = HfApi()
+    for repo in dict.fromkeys(filter(None, repos)):
+        try:
+            info = api.repo_info(repo, repo_type="dataset")
+        except RepositoryNotFoundError:
+            continue
+        if not info.private:
+            raise PublishRefused(public_message(repo))
 
 
 def publish(
@@ -352,6 +372,8 @@ def main(argv: list[str] | None = None) -> None:
     raw_dir = args.raw_output_dir or raw_root_for(args.output_dir)
     raw_repo = args.raw_repo or (f"{args.output_repo}-raw" if args.output_repo else "")
     limits = Limits(timeout=args.timeout, max_tool_calls=args.max_tool_calls)
+    if args.output_repo:
+        refuse_public(args.output_repo, raw_repo)
     rows = select_rows(
         task,
         args.split,

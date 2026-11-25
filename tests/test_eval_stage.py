@@ -219,6 +219,7 @@ def test_eval_main_publishes_what_finished_when_a_label_fails(tmp_path, monkeypa
     monkeypatch.setattr(eval_stage, "select_rows", lambda task, split, **kwargs: [{"arxiv_id": "1"}])
     monkeypatch.setattr(eval_stage, "run_episodes", failing_run_label)
     monkeypatch.setattr(eval_stage, "publish", lambda *args, **kwargs: published.append((args, kwargs)))
+    monkeypatch.setattr(eval_stage, "refuse_public", lambda *repos: None)
     argv = ["--task", "examples/paper-urls", "--harness", "opencode@2.3.2", "--student", "qwen3.5-9b", "--model",
             "Qwen/Qwen3.5-9B", "--split", "test", "--no-serve", "--output-dir", str(tmp_path / "eval"),
             "--output-repo", "org/run-eval", "--answer-retry", "--cache", str(tmp_path / "cache")]  # fmt: skip
@@ -312,6 +313,7 @@ def test_eval_main_exits_with_an_error_when_a_checkpoint_upload_is_refused(tmp_p
     monkeypatch.setattr(eval_stage, "load_task", lambda path: task)
     monkeypatch.setattr(eval_stage, "load_harness", lambda profile, **kwargs: harness)
     monkeypatch.setattr(eval_stage, "select_rows", lambda task, split, **kwargs: ROWS)
+    monkeypatch.setattr(eval_stage, "refuse_public", lambda *repos: None)  # made public after the startup check
     argv = ["--task", "examples/paper-urls", "--harness", "opencode@2.3.2", "--student", "qwen3.5-9b", "--model",
             "Qwen/Qwen3.5-9B", "--split", "test", "--no-serve", "--output-dir", str(tmp_path / "eval"),
             "--output-repo", "org/run-eval", "--upload-every", "1e-9", "--concurrency", "4",
@@ -322,6 +324,40 @@ def test_eval_main_exits_with_an_error_when_a_checkpoint_upload_is_refused(tmp_p
     assert isinstance(raised, common.PublishRefused) and "is public" in str(raised)  # a non-zero exit, not a hang
     assert harness.started and sorted(harness.stopped) == sorted(harness.started)
     assert not any(call[0] == "upload_folder" and call[1] == "org/run-eval" for call in hub.calls)
+
+
+@pytest.mark.parametrize("stage", ["eval", "traces"])
+@pytest.mark.parametrize("public", ["org/run-eval", "org/run-eval-raw"])
+def test_episode_stages_refuse_a_public_dataset_before_any_episode(tmp_path, monkeypatch, hub, stage, public) -> None:
+    from agent_distill.stages import traces as traces_stage
+
+    hub.repos[public] = {"private": False, "files": []}
+    hub.repos.setdefault("org/run-eval", {"private": True, "files": []})
+    module = eval_stage if stage == "eval" else traces_stage
+    harness = BlockingHarness()
+    task = SimpleNamespace(**vars(TASK), dataset=SimpleNamespace(repo="org/data"), judge="", limits=Limits())
+    monkeypatch.setattr(module, "load_task", lambda path: task)
+    monkeypatch.setattr(module, "load_harness", lambda profile, **kwargs: harness)
+    rows = []
+    monkeypatch.setattr(eval_stage, "select_rows", lambda *args, **kwargs: rows.append(1) or ROWS)
+    if stage == "traces":
+        monkeypatch.setattr(traces_stage, "trace_rows", lambda *args, **kwargs: rows.append(1) or ROWS)
+    common_args = ["--task", "examples/paper-urls", "--harness", "opencode@2.3.2", "--split", "test",
+                   "--output-dir", str(tmp_path / "out"), "--output-repo", "org/run-eval",
+                   "--cache", str(tmp_path / "cache")]  # fmt: skip
+    argv = (["--student", "qwen3.5-9b", "--model", "Qwen/Qwen3.5-9B", "--no-serve"] if stage == "eval"
+            else ["--teacher", "kimi-k3.1-pro"]) + common_args  # fmt: skip
+
+    with pytest.raises(common.PublishRefused, match=f"{public} is public"):
+        module.main(argv)
+    assert not rows and harness.sessions == 0  # no rows loaded, no harness started, nothing spent
+    assert not any(call[0] in ("upload_folder", "create_repo") for call in hub.calls)
+
+
+def test_refuse_public_allows_missing_and_private_repos(hub) -> None:
+    hub.repos["org/private"] = {"private": True, "files": []}
+    eval_stage.refuse_public("org/private", "org/missing", "")
+    assert hub.calls == []  # read-only
 
 
 RUN_TOML = Path("examples/paper-urls/run.toml")
