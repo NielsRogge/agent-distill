@@ -10,7 +10,7 @@ task = "."
 teacher = "glm-5.3"
 student = "qwen3.5-4b"
 harness = "pi@1.6.0"
-name = "qwen35-4b-hf-hub-qa-mcp-glm-53-pi-160"
+name = "qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160"  # v1 runs: qwen35-4b-hf-hub-qa-mcp-glm-53-pi-160
 stages = ["traces", "sft", "merge", "eval"]
 
 [hub]
@@ -20,13 +20,13 @@ collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
 
 [traces]
 split = "train"
-limit = 600  # of 1,070 train questions (shuffled, so every template is represented)
+limit = 600  # of 1,162 v2 train questions (shuffled, so every template is represented)
 attempts = 2
 shards = 3  # anonymous MCP rate limits: few episodes at once per job
 
 [eval]
 splits = ["test"]
-limit = 150  # of 359 test questions
+limit = 150  # of 377 v2 test questions
 concurrency = 4  # anonymous MCP rate limits
 timeout = 300
 max_tool_calls = 15

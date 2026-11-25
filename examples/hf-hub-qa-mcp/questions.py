@@ -166,14 +166,26 @@ def candidates(hub: Any, log: Any = print) -> list[dict[str, Any]]:
     return out
 
 
-def finalize(cands: list[dict[str, Any]], snapshot_date: str, seed: int = 0) -> list[dict[str, Any]]:
-    """Sample at most TEMPLATES_PER_MODEL templates per model; add hedge vocabularies, canaries and splits."""
+def finalize(
+    cands: list[dict[str, Any]],
+    snapshot_date: str,
+    seed: int = 0,
+    *,
+    questions: dict[str, str] | None = None,
+    kinds: dict[str, str] | None = None,
+    hedged: dict[str, str] | None = None,
+    per_model: int = TEMPLATES_PER_MODEL,
+) -> list[dict[str, Any]]:
+    """Sample at most `per_model` templates per model; add hedge vocabularies, canaries and splits. The template
+    tables default to v1's. A candidate's split follows its `split_entity` if set (e.g. a triple of models), else its
+    entity."""
+    questions, kinds, hedged = questions or QUESTIONS, kinds or KINDS, hedged or HEDGED
     rng = random.Random(seed)
     vocab: dict[str, set[str]] = defaultdict(set)
     for c in cands:
-        if c["template"] in HEDGED:
+        if c["template"] in hedged:
             values = c["gold"] if isinstance(c["gold"], list) else [c["gold"]]
-            vocab[HEDGED[c["template"]]].update(str(v) for v in values)
+            vocab[hedged[c["template"]]].update(str(v) for v in values)
     by_entity: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for c in cands:
         by_entity[c["entity"]].append(c)
@@ -182,24 +194,24 @@ def finalize(cands: list[dict[str, Any]], snapshot_date: str, seed: int = 0) -> 
         group = by_entity[entity]
         if entity.startswith("model:"):
             rng.shuffle(group)
-            group = sorted(group[:TEMPLATES_PER_MODEL], key=lambda c: c["template"])
+            group = sorted(group[:per_model], key=lambda c: c["template"])
         chosen.extend(group)
     by_template: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for c in chosen:
         by_template[c["template"]].append(c)
     rows = []
     for c in chosen:
-        kind = KINDS[c["template"]]
+        kind = kinds[c["template"]]
         extra = dict(c["extra"])
-        if c["template"] in HEDGED:
-            extra["hedge"] = sorted(vocab[HEDGED[c["template"]]])
+        if c["template"] in hedged:
+            extra["hedge"] = sorted(vocab[hedged[c["template"]]])
         wrong = [o["gold"] for o in by_template[c["template"]]
                  if not facts.check(kind, c["gold"], facts.render(kind, o["gold"]), **extra)]  # fmt: skip
         canary = rng.choice(wrong) if wrong else None
-        question = QUESTIONS[c["template"]].format(id=c["subject"])
+        question = questions[c["template"]].format(id=c["subject"])
         rows.append({
             "question_id": hashlib.sha256(question.encode()).hexdigest()[:12],
-            "split": split_of(c["entity"]),
+            "split": split_of(c.get("split_entity") or c["entity"]),
             "template": c["template"],
             "entity": c["entity"],
             "question": question,
@@ -265,6 +277,49 @@ Columns: `question`, `kind` (how `gold` is checked: category, repo, number, titl
 """
 
 
+def write_and_push(
+    rows: list[dict[str, Any]],
+    dropped: Counter,
+    out: Path,
+    date: str,
+    *,
+    card: str,
+    push: str | None,
+    collection: str,
+    note: str,
+    hub: Any,
+) -> None:
+    """Write data/<split>.jsonl and README.md; with `push`, create the repo private, scan, upload, then make it public
+    and add it to `collection`."""
+    random.Random(0).shuffle(rows)  # stages take the first N rows: any prefix mixes templates
+    (out / "data").mkdir(parents=True, exist_ok=True)
+    counts = Counter(r["split"] for r in rows)
+    for split in ("train", "validation", "test"):
+        with (out / "data" / f"{split}.jsonl").open("w") as handle:
+            for row in rows:
+                if row["split"] == split:
+                    handle.write(json.dumps(row) + "\n")
+    table = "\n".join(f"| {s} | {counts[s]} |" for s in ("train", "validation", "test"))
+    (out / "README.md").write_text(card.replace("{date}", date).replace("{table}", table))
+    print(f"{len(rows)} rows {dict(counts)}; templates {dict(Counter(r['template'] for r in rows))}; "
+          f"dropped by validation {dict(dropped)}")  # fmt: skip
+    if not push:
+        return
+    from agent_distill.credentials import scan_files
+
+    hits = scan_files(sorted(out.rglob("*")))
+    if hits:
+        raise SystemExit(f"credential scan failed: {hits}")
+    created = not hub.repo_exists(push, repo_type="dataset")
+    hub.create_repo(push, repo_type="dataset", private=True, exist_ok=True)
+    hub.upload_folder(repo_id=push, repo_type="dataset", folder_path=str(out),
+                      commit_message=f"{len(rows)} Hub fact questions, snapshot {date}")  # fmt: skip
+    hub.update_repo_settings(push, repo_type="dataset", private=False)  # scanned above: public
+    if created and collection:
+        hub.add_collection_item(collection, item_id=push, item_type="dataset", exists_ok=True, note=note)
+    print(f"pushed to {push}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", required=True, help="Folder for data/<split>.jsonl and README.md")
@@ -275,34 +330,8 @@ def main() -> None:
     date = time.strftime("%Y-%m-%d", time.gmtime())
     hub = api()
     rows, dropped = validate(finalize(candidates(hub), date, args.seed))
-    out = Path(args.out)
-    (out / "data").mkdir(parents=True, exist_ok=True)
-    random.Random(args.seed).shuffle(rows)  # stages take the first N rows: any prefix mixes templates
-    counts = Counter(r["split"] for r in rows)
-    for split in ("train", "validation", "test"):
-        with (out / "data" / f"{split}.jsonl").open("w") as handle:
-            for row in rows:
-                if row["split"] == split:
-                    handle.write(json.dumps(row) + "\n")
-    table = "\n".join(f"| {s} | {counts[s]} |" for s in ("train", "validation", "test"))
-    (out / "README.md").write_text(CARD.replace("{date}", date).replace("{table}", table))
-    print(f"{len(rows)} rows {dict(counts)}; templates {dict(Counter(r['template'] for r in rows))}; "
-          f"dropped by validation {dict(dropped)}")  # fmt: skip
-    if args.push:
-        from agent_distill.credentials import scan_files
-
-        hits = scan_files(sorted(out.rglob("*")))
-        if hits:
-            raise SystemExit(f"credential scan failed: {hits}")
-        created = not hub.repo_exists(args.push, repo_type="dataset")
-        hub.create_repo(args.push, repo_type="dataset", private=True, exist_ok=True)
-        hub.upload_folder(repo_id=args.push, repo_type="dataset", folder_path=str(out),
-                          commit_message=f"{len(rows)} Hub fact questions, snapshot {date}")  # fmt: skip
-        hub.update_repo_settings(args.push, repo_type="dataset", private=False)  # scanned above: public
-        if created and args.collection:
-            hub.add_collection_item(args.collection, item_id=args.push, item_type="dataset", exists_ok=True,
-                                    note=f"Hub fact questions (hf-hub-qa-mcp, hf-hub-qa), snapshot {date}")  # fmt: skip
-        print(f"pushed to {args.push}")
+    write_and_push(rows, dropped, Path(args.out), date, card=CARD, push=args.push, collection=args.collection,
+                   note=f"Hub fact questions (hf-hub-qa-mcp, hf-hub-qa), snapshot {date}", hub=hub)  # fmt: skip
 
 
 if __name__ == "__main__":

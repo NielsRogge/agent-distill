@@ -7,7 +7,10 @@ A row's `live` spec is `{"type": "model" | "base" | "dataset" | "space" | "paper
 - model fields: `license` (a string, or a sorted list for a dual license), `pipeline`, `library`, `params`
   (safetensors total), `base` (the single base model, or None), `arxiv` (sorted linked arXiv ids);
 - `base`: a field of the model's base model (e.g. its license);
-- dataset: `license`; space: `sdk`; paper: `title` or `first_author`.
+- dataset: `license`; space: `sdk`; paper: `title` or `first_author`;
+- `paper_of`: `title` or `first_author` of the one paper a model links (its single `arxiv:` tag);
+- `files`: how many files of a repo (`repo_type`, default model) end with `field` (e.g. ".gguf"), in every folder;
+- `sum`: the sum of a model field (`params`) over `ids` (a list of model ids).
 """
 
 from __future__ import annotations
@@ -62,7 +65,13 @@ def live_value(spec: dict[str, Any], hub: Any = None, token: bool | str | None =
         from huggingface_hub import HfApi
 
         hub = HfApi()
-    kind, ident, field = spec["type"], spec["id"], spec["field"]
+    kind, ident, field = spec["type"], spec.get("id"), spec["field"]
+    if kind == "sum":
+        values = [model_fields(hub.model_info(i, expand=EXPAND, token=token)).get(field) for i in spec["ids"]]
+        return None if any(v is None for v in values) else sum(values)
+    if kind == "files":
+        files = hub.list_repo_files(ident, repo_type=spec.get("repo_type", "model"), token=token)
+        return sum(1 for name in files if name.lower().endswith(field))
     if kind == "model":
         return model_fields(hub.model_info(ident, expand=EXPAND, token=token)).get(field)
     if kind == "base":
@@ -72,6 +81,11 @@ def live_value(spec: dict[str, Any], hub: Any = None, token: bool | str | None =
         return license_value(card(hub.dataset_info(ident, expand=["cardData"], token=token)).get("license"))
     if kind == "space":
         return text(hub.space_info(ident, expand=["sdk"], token=token).sdk)
+    if kind == "paper_of":
+        papers = model_fields(hub.model_info(ident, expand=EXPAND, token=token))["arxiv"]
+        if len(papers) != 1:
+            return None
+        kind, ident = "paper", papers[0]
     if kind == "paper":
         info = hub.paper_info(ident)
         return text(info.title) if field == "title" else text(info.authors[0].name if info.authors else "")

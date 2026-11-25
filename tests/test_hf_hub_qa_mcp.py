@@ -180,3 +180,25 @@ def test_ungrounded_ids_fail(monkeypatch):
 def test_profiles_exist():
     assert load_profile("teachers", "glm-5.3").model.startswith("zai-org/GLM-5.3")
     assert load_profile("students", "qwen3.5-4b").model == "Qwen/Qwen3.5-4B"
+
+
+def test_v2_templates_and_triples_follow_their_first_model():
+    v2 = module("questions_v2")
+    assert set(v2.QUESTIONS) == set(v2.KINDS) and set(v2.HEDGED) <= set(v2.KINDS)
+    assert (
+        v2.differs(10, 9) and not v2.differs(100, 101) and v2.differs("mit", "apache-2.0") and not v2.differs("", "x")
+    )
+    questions = module("questions")
+    cands = [
+        {"template": "params_sum", "entity": "sum:a/A|b/B|c/C", "subject": "a/A, b/B and c/C", "gold": 600,
+         "live": {"type": "sum", "ids": ["a/A", "b/B", "c/C"], "field": "params"}, "split_entity": "model:a/A",
+         "extra": {}},
+        {"template": "params_sum", "entity": "sum:d/D|e/E|f/F", "subject": "d/D, e/E and f/F", "gold": 900,
+         "live": {"type": "sum", "ids": ["d/D", "e/E", "f/F"], "field": "params"}, "split_entity": "model:d/D",
+         "extra": {}},
+    ]  # fmt: skip
+    rows, dropped = questions.validate(questions.finalize(cands, "2026-11-25", questions=v2.QUESTIONS, kinds=v2.KINDS,
+                                                          hedged=v2.HEDGED))  # fmt: skip
+    assert len(rows) == 2 and not dropped
+    assert rows[0]["split"] == questions.split_of("model:a/A")
+    assert "a/A, b/B and c/C combined" in rows[0]["question"]

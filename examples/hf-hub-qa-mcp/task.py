@@ -25,7 +25,9 @@ def user_prompt(row: dict[str, Any]) -> str:
 
 task = Task(
     name="hf-hub-qa-mcp",
-    dataset=DatasetSpec(repo="nielsr/hf-hub-facts", splits={"train": "train", "eval": ["test", "validation"]}),
+    # v2: multi-hop and count questions (questions_v2.py). v1 (nielsr/hf-hub-facts, single lookups) was too easy:
+    # base Qwen3.5-4B passed 96% of its validation rows (README).
+    dataset=DatasetSpec(repo="nielsr/hf-hub-facts-v2", splits={"train": "train", "eval": ["test", "validation"]}),
     system_prompt=HERE / "system_prompt.txt",
     prompt=user_prompt,
     answer=TextAnswer(),
@@ -35,6 +37,7 @@ task = Task(
     mcp_servers=(HF_MCP,),
     network=True,  # the HF MCP server, anonymously
     limits=Limits(timeout=300, max_tool_calls=15),
+    version="2",
 )
 
 __all__ = ["task", "user_prompt"]
