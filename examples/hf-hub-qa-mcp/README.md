@@ -1,6 +1,7 @@
 # hf-hub-qa-mcp: Hub questions answered through the Hugging Face MCP server
 
-**Status: design approved (SFT first); dataset published; smoke run passed (2026-11-25). Full run awaits the user's go.**
+**Status: smoke run passed; validation baseline shows hf-hub-facts v1 is near the ceiling (base 96%). A harder v2 is
+proposed before the full SFT run (see "Validation baseline").**
 
 A Pi agent answers questions about the Hugging Face Hub using only the tools of the
 [Hugging Face MCP server](https://huggingface.co/docs/hub/en/agents-mcp), through
@@ -195,3 +196,35 @@ Issues found and fixed:
 make up about a third of the dataset. Before buying traces, a baseline of base and teacher on the 127 validation
 rows (≈ $1 teacher, ≈ 0.5 H200-h) should show per-template accuracy. If base is already near the ceiling, the
 traces should weight the harder templates: parameters, base model and its license, papers and first author.
+
+## Validation baseline (2026-11-25)
+
+Base Qwen3.5-4B and GLM-5.3 on all 127 validation rows (`distill run run.toml --stages eval --splits validation`).
+Rescored with the fixed shared checker (#9) and the republished golds (`distill rescore`).
+
+| | Passed | Mean reward | MCP calls / episode |
+|---|---|---|---|
+| Qwen3.5-4B (base) | **122/127 (96.1%)** | 1.061 | 1.7 |
+| GLM-5.3 (teacher) | **125/127 (98.4%)** | 1.083 | 1.3 |
+
+Every template is at or near the ceiling for the base model:
+
+- 100%: library 21/21, license 17/17, SDK 14/14, dataset license 9/9, base model 4/4, linked paper 4/4;
+- the rest: pipeline 19/20, parameters 9/10, paper title 13/14, first author 12/14.
+
+Base failures:
+
+- 2 first-author misreads: the paper text lists "Granite Team", or surnames only;
+- 1 pipeline answer that names both tags;
+- 1 call to a tool outside the allow-list;
+- 1 grounding miss.
+
+**Conclusion: v1 is too easy for SFT to show a gain.** At most about 4 points are possible, and a CLI-vs-MCP
+comparison on it would compare two numbers near 97%. Single-hop lookups need 1–2 calls, and the 4B model already
+does them. Proposal, v2 of hf-hub-facts: same frozen, deterministic design, harder questions, aiming for a base
+pass rate of about 30–60%:
+
+- multi-hop: the license of a model's base model; the first author of the paper a model links;
+- comparison: which of three models has the most parameters or downloads (frozen counts);
+- listing and aggregation: number of files, largest weight file, GGUF quantizations in a repo;
+- organization questions: a model's collections, or an organization's newest model (frozen at snapshot).
