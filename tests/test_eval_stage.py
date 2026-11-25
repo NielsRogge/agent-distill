@@ -34,7 +34,7 @@ class Rubrics:
         return RubricResult(scores={"r": 1.0}, reward=1.0, passed=True, mode=mode)
 
 
-TASK = SimpleNamespace(name="t", row_id=lambda row: row["id"], rubrics=Rubrics())
+TASK = SimpleNamespace(name="t", row_id=lambda row: row["id"], rubrics=Rubrics(), missing_commands=lambda: [])
 ROWS = [{"id": str(i)} for i in range(1, 6)]
 
 
