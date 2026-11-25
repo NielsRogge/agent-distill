@@ -106,14 +106,49 @@ passes when it is fully correct and grounded. No judge is needed for training or
 Run name `qwen35-4b-hf-hub-qa-mcp-glm-53-pi-160`. Every repo joins the agent-distillation collection.
 Episode datasets are created private, credential-scanned, then published by `distill publish`, with Pi
 sessions under `sessions/`. Stages: `traces` (GLM-5.3, up to 2 attempts per train row) → `sft` → `merge` →
-`eval` (base, SFT and teacher on `test`, plus `seed`). GRPO is not planned: the earlier Pi GRPO smoke made no
-step, and I found no fix on any branch (the html-pages run made probe and GRPO opt-in). I'd ask before trying it.
+`probe` → `grpo` → `eval` (base, SFT, GRPO and teacher on `test`, plus `seed`).
+
+### GRPO, following [harness adapters at scale](https://huggingface.co/blog/harness-adapters-at-scale)
+
+That post runs GRPO only (no SFT) on Qwen3.8-27B with TRL `AsyncGRPOTrainer` and an OpenEnv capture proxy,
+which is the same stack as our `grpo` stage. What carries over:
+
+- **Validate every task before training** (their `openenv validate`; the
+  [automation-adapter-envs](https://huggingface.co/datasets/harness-hub/automation-adapter-envs) bar). For each
+  row, as a CPU test over the whole dataset:
+  - the gold answer written as a sentence scores 1 (oracle);
+  - an empty or "I could not find it" answer scores 0 (no-op floor);
+  - a known-wrong answer scores 0 (canary), e.g. a sibling entity's value or a neighbouring parameter count;
+  - rescoring gives the same result (determinism).
+
+  Rows that fail are dropped and the counts are reported.
+- **Train only on rows the model sometimes solves.** The `probe` stage runs the SFT model 4 times per train
+  row and keeps rows that pass on 1–3 of the 4 attempts. Rows that always or never pass give zero-variance
+  groups and no learning signal.
+- **Settings:** LoRA (all-linear), LR **2e-5** (they found 1e-4 collapsed rollouts and 5e-5 unstable over longer
+  runs), thinking off, reward = verifier + 0.1 tool-efficiency bonus (our `bonus_if`, as in paper-urls).
+  Their group size isn't given; the automation set used 8. A batch mixes templates.
+- **Keep gold answers out of training data.** They reach the model only as reward, and test entities never
+  appear in train.
+- **Pi context compaction** is on in Pi and off in other harnesses. Our episodes are short, but I'll record
+  whether compaction ever fires.
+
+Specific to this task:
+
+- **The Pi GRPO path is unproven.** The earlier Pi GRPO smoke made no step, and I found no fix on any branch
+  (the html-pages run made probe and GRPO opt-in). Our `grpo` stage drives Pi through the generic capture
+  session, so the smoke run includes 2 GRPO steps. Any failure there gets diagnosed before the full run.
+- **Rollouts hit the live MCP server.** 8 rollouts × several prompts at once is many anonymous calls. The smoke
+  run measures 429s at GRPO concurrency. Rate-limited calls are retried; an episode that still fails is
+  unscorable (dropped from the group baseline), never a 0.
 
 | | Estimate | Cap (`[budget]`) |
 |---|---|---|
-| Smoke (`…-smoke`): ~10 teacher traces, 2 SFT steps, 5-row eval × 3 variants | ≈ $5 teacher, ≈ 1.5 H200-h | $10, 2 GPU-h |
+| Smoke (`…-smoke`): ~10 teacher traces, 2 SFT steps, 2 GRPO steps, 5-row eval × 4 variants | ≈ $5 teacher, ≈ 2.5 H200-h | $10, 3 GPU-h |
 | Traces: ~600 episodes × ≈ $0.20 (GLM-5.3 at $1.68 / $5.28 per M; MCP outputs are large) | ≈ $120 | $150 |
 | Eval: teacher on 150 test + 51 seed; judge on 3 × 51 seed | ≈ $40 + ≈ $10 judge | $50 + $15 |
 | SFT + merge + student evals | ≈ 4 H200-h | 6 GPU-h |
+| Probe (4 × ~400 train rows, SFT model) | ≈ 2 H200-h | 3 GPU-h |
+| GRPO (2× H200: vLLM + trainer; ~150 steps) | ≈ 16 H200-h | 20 GPU-h |
 
 Each figure is checked with `--dry-run` and the budget pilot before launch.
