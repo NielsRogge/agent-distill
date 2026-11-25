@@ -273,3 +273,15 @@ def test_the_browser_gets_no_credentials(monkeypatch):
     assert "HF_TOKEN" not in env and "GEMINI_API_KEY" not in env and set(env) <= {"PATH", "HOME", "LANG", "LANGUAGE",
                                                                                   "LC_ALL", "TZ", "FONTCONFIG_PATH",
                                                                                   "FONTCONFIG_FILE"}  # fmt: skip
+
+
+def test_model_jobs_join_the_collection_at_once():
+    from pathlib import Path
+
+    from agent_distill import pipeline
+    from agent_distill.config import load_run
+
+    run = pipeline.make_run(load_run(Path("examples/html-pages/run.toml"), {}))
+    collection = "--collection nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+    for job in [*pipeline.sft_jobs(run, "R"), *pipeline.merge_jobs(run, "R"), *pipeline.grpo_jobs(run, "R")]:
+        assert collection in job.command and "--collection-note" in job.command

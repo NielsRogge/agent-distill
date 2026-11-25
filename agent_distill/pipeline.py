@@ -292,6 +292,14 @@ def output_args(run: Run, suffix: str) -> list[str]:
     return args
 
 
+def model_collection_args(run: Run, suffix: str) -> list[str]:
+    """The collection a model job's pushed repo joins at once (models are public from creation)."""
+    if not run.config.hub.collection:
+        return []
+    return ["--collection", jobs.q(run.config.hub.collection), "--collection-note",
+            jobs.q(collection_note(run, suffix))]  # fmt: skip
+
+
 def image_vllm(student: Any) -> list[str]:
     """`--vllm-binary` for students whose image ships its own vLLM (`[serve] vllm = "image"`), else nothing."""
     return ["--vllm-binary", '"$(command -v vllm)"'] if student.serve.vllm == "image" else []
@@ -475,6 +483,7 @@ def sft_jobs(run: Run, rev: str) -> list[jobs.Job]:
         jobs.q(run.repo("traces")),
         "--hub-model-id",
         jobs.q(run.repo("lora")),
+        *model_collection_args(run, "lora"),
         *[jobs.q(a) for a in run.config.sft.args],
     ]
     deps = student.sft.deps or SFT_DEPS
@@ -515,6 +524,7 @@ def merge_jobs(
         jobs.q(run.repo(output_suffix)),
         "--note",
         jobs.q(f"agent-distill run {run.name}: task {run.task.name}, {harness_id(run)}."),
+        *model_collection_args(run, output_suffix),
     ]
     if base:
         args += ["--base-model", jobs.q(base)]
@@ -550,6 +560,7 @@ def grpo_jobs(run: Run, rev: str) -> list[jobs.Job]:
         jobs.q(run.repo("sft-merged")),
         "--hub-model-id",
         jobs.q(run.repo("grpo-lora")),
+        *model_collection_args(run, "grpo-lora"),
         "--trainer",
         grpo.backend,
         "--lora-r",

@@ -40,6 +40,8 @@ from contextlib import nullcontext, suppress
 from pathlib import Path
 from typing import Any
 
+from agent_distill.hub_collection import join_collection
+
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("agent-distill-grpo")
 
@@ -669,7 +671,7 @@ def train_trl(args: argparse.Namespace, student: Any) -> None:
         push_to_hub=bool(args.hub_model_id),
         hub_model_id=args.hub_model_id or None,
         hub_strategy="checkpoint",
-        hub_private_repo=True,
+        hub_private_repo=False,  # models are public from the start (no episode data)
     )
     trainer = HarnessAsyncGRPOTrainer(
         model=args.model,
@@ -686,8 +688,9 @@ def train_trl(args: argparse.Namespace, student: Any) -> None:
     trainer.train()
     trainer.save_model(args.output_dir)
     if args.hub_model_id:
-        trainer.model.push_to_hub(args.hub_model_id, private=True)
-        print(f"[grpo] pushed the adapter to {args.hub_model_id} (private)", flush=True)
+        trainer.model.push_to_hub(args.hub_model_id, private=False)
+        print(f"[grpo] pushed the adapter to {args.hub_model_id}", flush=True)
+        join_collection(args.hub_model_id, "model", args.collection, args.collection_note)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -784,7 +787,7 @@ def train_simple(args: argparse.Namespace, student: Any) -> None:
     output.mkdir(parents=True, exist_ok=True)
     api = HfApi() if args.hub_model_id else None
     if api:
-        api.create_repo(args.hub_model_id, private=True, exist_ok=True)
+        api.create_repo(args.hub_model_id, private=False, exist_ok=True)
     vllm_url = f"http://127.0.0.1:{args.vllm_port}"
     converter = resolve(student.lora.adapter_converter) if student.lora.adapter_converter else None
 
@@ -928,7 +931,8 @@ def train_simple(args: argparse.Namespace, student: Any) -> None:
             folder_path=str(output),
             allow_patterns=["adapter_*", "README.md", "metrics.jsonl"],
         )
-        print(f"[simple] pushed the adapter to {args.hub_model_id} (private)", flush=True)
+        print(f"[simple] pushed the adapter to {args.hub_model_id}", flush=True)
+        join_collection(args.hub_model_id, "model", args.collection, args.collection_note)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -989,6 +993,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--scratch-dir", default=None)
     parser.add_argument("--output-dir", default="/grpo")
     parser.add_argument("--hub-model-id", default="")
+    parser.add_argument("--collection", default="", help="Collection the pushed model joins")
+    parser.add_argument("--collection-note", default="", help="Its one-line note in the collection")
     parser.add_argument("--report-to", default="none")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--seed", type=int, default=0)
