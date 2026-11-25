@@ -38,7 +38,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from agent_distill.hub_facts import EXPAND, card, model_fields, text
+from agent_distill.hub_facts import EXPAND, card, license_value, model_fields, text
 from agent_distill.rubrics import facts
 
 PIPELINE_TAGS = [
@@ -53,6 +53,13 @@ SPACES = 150
 TEMPLATES_PER_MODEL = 2
 SPLITS = (("train", 70), ("validation", 78), ("test", 100))  # cumulative percent by entity hash
 UNKNOWN = {"", "other", "unknown", "none"}
+
+
+def known(value: Any) -> bool:
+    """A gold value worth asking about: set, and not a placeholder (every value, for a dual license)."""
+    values = value if isinstance(value, list) else [value]
+    return bool(values) and all(str(v).strip() and str(v).lower() not in UNKNOWN for v in values)
+
 
 QUESTIONS = {
     "model_license": "What is the license of the model {id} on the Hugging Face Hub?",
@@ -112,7 +119,7 @@ def candidates(hub: Any, log: Any = print) -> list[dict[str, Any]]:
         entity = f"model:{ident}"
         for field, template in (("license", "model_license"), ("pipeline", "model_pipeline"),
                                 ("library", "model_library")):  # fmt: skip
-            if f[field] and f[field].lower() not in UNKNOWN:
+            if known(f[field]):
                 add(template, entity, ident, f[field], {"type": "model", "id": ident, "field": field})
         if f["params"]:
             add("model_params", entity, ident, int(f["params"]), {"type": "model", "id": ident, "field": "params"})
@@ -124,7 +131,7 @@ def candidates(hub: Any, log: Any = print) -> list[dict[str, Any]]:
                 except Exception:
                     base_cache[f["base"]] = None
             base = base_cache[f["base"]]
-            if base and base["license"] and base["license"].lower() not in UNKNOWN and base["license"] != f["license"]:
+            if base and known(base["license"]) and base["license"] != f["license"]:
                 add("base_license", entity, ident, base["license"], {"type": "base", "id": ident, "field": "license"})
         if 1 <= len(f["arxiv"]) <= 3:
             add("model_paper", entity, ident, f["arxiv"], {"type": "model", "id": ident, "field": "arxiv"})
@@ -143,8 +150,8 @@ def candidates(hub: Any, log: Any = print) -> list[dict[str, Any]]:
             add("paper_first_author", f"paper:{paper}", paper, authors[0],
                 {"type": "paper", "id": paper, "field": "first_author"}, authors=authors)  # fmt: skip
     for info in hub.list_datasets(sort="downloads", limit=DATASETS, expand=["cardData"]):
-        license_ = text(card(info).get("license"))
-        if license_ and license_.lower() not in UNKNOWN and not info.private:
+        license_ = license_value(card(info).get("license"))
+        if known(license_) and not info.private:
             add("dataset_license", f"dataset:{info.id}", info.id, license_,
                 {"type": "dataset", "id": info.id, "field": "license"})  # fmt: skip
     for info in hub.list_spaces(sort="likes", limit=SPACES, expand=["sdk"]):
@@ -165,7 +172,8 @@ def finalize(cands: list[dict[str, Any]], snapshot_date: str, seed: int = 0) -> 
     vocab: dict[str, set[str]] = defaultdict(set)
     for c in cands:
         if c["template"] in HEDGED:
-            vocab[HEDGED[c["template"]]].add(str(c["gold"]))
+            values = c["gold"] if isinstance(c["gold"], list) else [c["gold"]]
+            vocab[HEDGED[c["template"]]].update(str(v) for v in values)
     by_entity: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for c in cands:
         by_entity[c["entity"]].append(c)

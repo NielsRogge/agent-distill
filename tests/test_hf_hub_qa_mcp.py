@@ -98,6 +98,12 @@ def test_drift_check_refuses_a_changed_tool_list(monkeypatch):
 LICENSES = ["apache-2.0", "mit", "cc-by-4.0", "llama3.1", "llama3", "openrail++", "other"]
 
 
+def test_builder_skips_placeholder_licenses_and_keeps_dual_ones():
+    questions = module("questions")
+    assert questions.known("mit") and questions.known(["cc-by-sa-3.0", "gfdl"])
+    assert not questions.known("other") and not questions.known(["mit", "unknown"]) and not questions.known([])
+
+
 def test_built_rows_pass_oracle_and_reject_no_op_and_canary():
     questions = module("questions")
     cands = [
