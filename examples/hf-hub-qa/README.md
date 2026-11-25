@@ -78,4 +78,18 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
     Python) in 35 episodes. The `hf_errors` and `read_skill` metrics now record this in every evaluation.
   - The pinned skill itself says `--format table` is the default, which CLI 2.4.0 rejects (it accepts `agent`,
     `auto`, `human`, `json`, `quiet`); `hf skills preview` generates that line.
-- **Facts v2 baseline and full run:** in progress.
+- **Facts v2 validation baseline** (149 questions; MCP twin in brackets):
+
+  | | Base Qwen3.5-4B | GLM-5.3 |
+  | --- | --- | --- |
+  | Passed | 111/149 (74.5%) [MCP 111/149] | 149/149 (100%) [MCP 97.4%] |
+  | `hf` calls per episode | 5.9 | 3.1 |
+  | `hf` calls the CLI rejected | 27% | 5% |
+  | Read the skill | 9/149 | 130/149 |
+  | Hit the 15-call limit | 21 | 0 |
+
+  - Per template, base vs teacher: `gguf_count` 9/20 vs 20/20, `safetensors_count` 2/7 vs 7/7, `base_params` 20/29 vs
+    29/29, `paper_first_author` 18/25 vs 25/25; everything else at least 84% for base.
+  - The base model's commonest rejected calls are invented commands (`hf models show` 53, `hf search` 34, `hf papers
+    view` 17) and `--limit` on a file listing (20). The teacher's are mostly `--tree` with `--format json` (9).
+- **Full v2 run:** not started yet.
