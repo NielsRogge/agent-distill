@@ -1,0 +1,44 @@
+# hf-hub-qa (CLI), recommended route: a thinking student trained with the cross-format recipe of the CoT-proxy paper
+# (arXiv 2611.33148, variant (a): empty think block in every SFT target, the teacher's prose around tool calls
+# stripped, KL replay on the initial student's own out-of-domain generations; thinking on at inference). The
+# `qwen3.5-4b-think` profile carries the recipe, so nothing here names it. Results: the MCP twin reached 98.1%; the CLI run is pending.
+#
+# The SFT reads run.toml's accepted GLM-5.3 traces (read only) and the shared Qwen3.5-4B replay pool; neither is
+# regenerated. For new traces, add "traces" to `stages` and drop `[repos] traces`; for a new pool, add "replay"
+# (before "sft") and drop `[repos] replay`.
+#
+#   distill run examples/hf-hub-qa/run-think.toml --dry-run
+task = "."
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+# The published results are run qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160 (experiments/cot-proxy/cli-cfx-a.toml
+# on branch claude/cot-proxy-experiments); this name keeps a re-run out of its repos.
+name = "qwen35-4b-think-sft-hf-hub-qa-v2-glm-53-pi-160"
+stages = ["sft", "eval"]
+
+[repos]
+traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's accepted traces
+replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false  # nielsr's private storage is full: raw harness logs stay in the jobs
+
+[sft]
+timeout = "10h"  # 8 passes of the KL-replay loop took 1 h 27 min on one H200
+
+[eval]
+splits = ["test"]
+limit = 150  # of 377 v2 test questions, the rows of run.toml's evaluations
+concurrency = 4  # anonymous Hub API rate limits
+timeout = 300
+max_tool_calls = 15
+variants = ["sft"]  # base-think: models = { "base-think" = "Qwen/Qwen3.5-4B" }
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 60  # per stage: SFT <= 10 h on one H200

@@ -1,8 +1,9 @@
 # hf-hub-qa-mcp: Hub questions answered through the Hugging Face MCP server
 
-**Status: phase 1 (SFT) done on v2. On all 377 test questions, SFT on 599 GLM-5.3 traces takes non-thinking
-Qwen3.5-4B from 72.1% to 81.4% (McNemar p = 0.001; teacher 98.7%), and cuts its failed MCP calls from 45% to 12%. Pi
-GRPO works (2-step smoke); full GRPO awaits a budget decision.**
+**Status: done. On all 377 v2 test questions, non-thinking Qwen3.5-4B goes from 72.1% (base) to 81.4% (SFT on 599
+GLM-5.3 traces) to 96.0% (GRPO, 100 steps), close to the teacher's 98.7%, with fewer MCP calls than the teacher (1.75
+against 3.15 per episode). See "Results: GRPO (phase 2)". With thinking on and the cross-format SFT recipe
+(`run-think.toml`, no GRPO) the same student reaches 98.1%; see "Thinking student (CoT-proxy recipe)".**
 
 A Pi agent answers questions about the Hugging Face Hub using only the tools of the
 [Hugging Face MCP server](https://huggingface.co/docs/hub/en/agents-mcp), through
@@ -366,3 +367,162 @@ from the hf-hub-qa run (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160`).
 - **Teacher:** GLM-5.3 is equally strong through both interfaces (98.7%).
 - **What remains in both:** counting a repo's files (`gguf_count`: CLI 6/15 and MCP 5/15 after SFT, teacher 15/15)
   and the base model's parameter count.
+
+### Caveat: SFT trained with the wrong tool list
+
+Found after the run (PR #19). The SFT stage renders the tool definitions from `agent_distill.harnesses.tools.
+harness_tools`, which for this task returned only an argument-free `submit` tool. That function knows Pi's built-in tools,
+not `Task.mcp_servers`, and it gave `TextAnswer` tasks a phantom `submit`. So the 599 training conversations were
+rendered with `tools = [submit]`. At inference, Pi declares the three MCP tools and no `submit`. The student learned to
+call `mcp__hf__*` from the trajectories alone, without their schemas in the prompt.
+
+- The published results stand: base, SFT and teacher were all evaluated in the real harness, with the real tool
+  definitions. The 81.4% is what this SFT model does in Pi.
+- The SFT gain is probably a lower bound: training with the right schemas should only help.
+- GRPO is unaffected. Its rollouts run in Pi, so its token capture contains the real MCP tool definitions.
+- A future SFT rerun should use main after #19, which renders the MCP tools from `Task.mcp_servers` (once #13 lands)
+  and drops `submit` for `TextAnswer` tasks.
+
+## Results: GRPO (phase 2, 2026-11-26)
+
+The user approved phase 2 with a $150 GPU cap; it used **$74.57**.
+
+1. **Difficulty probe** ($15.27): the SFT model (served non-thinking, temperature 0.8) answered all 1,162 v2 train
+   questions 4 times each. Passes out of 4 → rows: 0 → 36, 1 → 59, 2 → 89, 3 → 202, 4 → 776. The 350 rows solved 1-3
+   times form the GRPO pool. None of them shares an entity with the test split.
+2. **GRPO** ($56.39, 5 h 38 min on 2× H200): TRL async GRPO in Pi with the real MCP tools, from the SFT checkpoint.
+   - 100 steps, 2 prompts per step (200 draws from 350 rows, no repeats), 8 generations per prompt;
+   - 16 concurrent rollouts against the anonymous HF MCP server;
+   - LoRA, reward = the task's rubric reward (the fact check, gated, plus the 0.1 tool-efficiency bonus).
+
+   Adapter: [`…-grpo-lora`](https://huggingface.co/nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-lora); merged
+   model: [`…-grpo-merged`](https://huggingface.co/nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-merged).
+3. **Evaluation** ($2.82): all 377 test questions, served non-thinking, scored by the task's rubrics.
+
+| | Passed | MCP calls / episode | Failed MCP calls |
+|---|---|---|---|
+| Qwen3.5-4B (base) | 272/377 (72.1%) | 6.13 | 45.0% |
+| + SFT | 307/377 (81.4%) | 3.38 | 11.9% |
+| **+ SFT + GRPO** | **362/377 (96.0%)** | **1.75** | **1.2%** |
+| GLM-5.3 (teacher) | 372/377 (98.7%) | 3.15 | 6.6% |
+
+Paired on the same 377 questions (exact McNemar):
+
+- SFT → GRPO: fixed 64, broke 9, **p = 2.4e-11**;
+- base → GRPO: fixed 96, broke 6, p = 5.7e-22;
+- base → SFT: fixed 72, broke 37, p = 0.001.
+
+| Template | n | Base | SFT | GRPO | Teacher |
+|---|---|---|---|---|---|
+| gguf_count | 37 | 15 | 17 | **34** | 37 |
+| safetensors_count | 20 | 13 | 12 | **20** | 20 |
+| base_params | 81 | 57 | 63 | **79** | 80 |
+| paper_title | 69 | 47 | 61 | **67** | 69 |
+| params_sum | 52 | 45 | 40 | **49** | 50 |
+| paper_first_author | 67 | 56 | 66 | 66 | 67 |
+| base_pipeline | 36 | 25 | 34 | 33 | 36 |
+| base_license | 15 | 14 | 14 | 14 | 13 |
+
+**What GRPO learned.** The templates SFT could not fix are where GRPO gained most. For file counts the GRPO student
+makes one precise call, `hf_fs find hf://models/<repo> --recursive --name "*.gguf"`, then states the count. The SFT
+student listed folders one by one and lost count. Across all episodes it makes 1.75 MCP calls per question, fewer than
+the teacher, and only 1.2% of them fail: the tool-efficiency bonus rewards one well-formed call over several
+exploratory ones. Spot checks show legitimate answers: the count is stated first and checked against the listing, and
+a miscount (32 against a gold of 34) still fails.
+
+Caveats:
+
+- The SFT stage trained with the wrong tool list (see above); GRPO's rollouts used the real MCP tools.
+- One GRPO answer still showed `</think>` despite thinking off, as did one base answer.
+
+### Counting rule for the teacher
+
+The teacher's evaluation runs through the traces stage, which reruns an episode cut short by a timeout or provider error
+(`--rerun-cut-short`). The student evaluations never rerun: each has exactly one record per question, and a timeout
+counts against the student. On the 377 test questions, 11 teacher episodes were cut short and rerun, and 9 of those
+reruns passed:
+
+| Counting rule | Teacher |
+|---|---|
+| Final record per question (the rerun replaces a cut-short episode); used in the tables above | 372/377 (98.7%) |
+| First record per question, the students' rule | **363/377 (96.3%)** |
+| Every record (`summarize_records`) | 372/394 (94.4%) |
+
+Under the students' rule the teacher is at 96.3%, tied with GRPO's 96.0%.
+
+## Thinking student (CoT-proxy recipe, 2026-11-26)
+
+`run-think.toml`, the recommended route: the same Qwen3.5-4B served **with thinking** (`qwen3.5-4b-think`: vLLM's
+`qwen3` reasoning parser, temperature 0.6 / top-p 0.95 / top-k 20, 8,192 tokens per turn), trained on the same 599
+accepted GLM-5.3 traces with the cross-format recipe of
+[CoT-Proxy](https://arxiv.org/abs/2611.33148) (Kopiczko, Blankevoort, Asano), which the thinking profile now applies by
+default (`docs/DESIGN.md`, "Cross-format SFT"):
+
+- every SFT target starts after an empty, unsupervised think block, so the student learns the teacher's actions
+  without being taught to stop thinking;
+- the teacher's prose around tool calls is stripped (the final answer keeps its text);
+- KL replay keeps the student close to its initial self: each update mixes 17 teacher trajectories with 3 of the
+  initial student's own generations on out-of-domain prompts (OpenR1-Math, OpenAssistant;
+  [`nielsr/qwen35-4b-think-replay-openr1-oasst`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-replay-openr1-oasst));
+- LoRA r16 / alpha 32, lr 3e-5, 8 passes (283 updates, 1 h 27 min on one H200).
+
+Pi keeps the student's own reasoning in its history, as the recipe expects: Pi sends the parsed reasoning back on
+later turns and the Qwen3.5 template renders it (prompt tokens grow by the previous turn's reasoning in 179 of 180
+checked turn pairs).
+
+Variant (b) adds CoT-proxies: a two-sentence summary of the teacher's reasoning per turn (by Qwen3-4B-Instruct-2507,
+2,138 of 2,231 turns accepted;
+[`…-cfx-b-…-summaries`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-summaries)),
+supervised between the empty think block and the action.
+
+All 377 test questions; the teacher counted by its first record per question, the students' rule (98.7% by its
+final record, see above):
+
+| | Thinking | Passed | MCP calls / episode |
+|---|---|---|---|
+| Qwen3.5-4B (base) | off | 272/377 (72.1%) | 6.16 |
+| + SFT (run.toml) | off | 307/377 (81.4%) | 3.38 |
+| + SFT + GRPO (run.toml, phase 2) | off | 362/377 (96.0%) | 1.75 |
+| Qwen3.5-4B (base) | on | 336/377 (89.1%) | 6.47 |
+| **+ SFT, recipe (a)** | on | **370/377 (98.1%)** | 2.23 |
+| + SFT, recipe (b): (a) + CoT-proxies | on | 365/377 (96.8%) | 3.32 |
+| GLM-5.3 (teacher), first record | on | 363/377 (96.3%) | 3.24 |
+
+Calls per episode here count every tool call in the episode records (6.16 for the base, against 6.13 in the tables
+above).
+
+Paired on the same 377 questions (exact McNemar):
+
+- recipe (a) against the non-thinking SFT: fixed 66, broke 3, **p = 1.9e-16**;
+- recipe (a) against the thinking base: fixed 39, broke 5, p = 1.4e-7;
+- recipe (a) against SFT + GRPO: fixed 15, broke 7, p = 0.13 (a tie at this size, without the probe and GRPO);
+- recipe (a) against the teacher (first record): fixed 13, broke 6, p = 0.17;
+- the thinking base against the non-thinking SFT: fixed 57, broke 28, p = 0.002;
+- recipe (b) against (a): fixed 5, broke 10, p = 0.30. CoT-proxies do not help on these short tasks (2-4 calls).
+
+| Template | n | SFT (off) | SFT + GRPO (off) | Base (on) | Recipe (a) (on) | Teacher (first record) |
+|---|---|---|---|---|---|---|
+| base_params | 81 | 63 | 79 | 58 | **81** | 80 |
+| paper_title | 69 | 61 | 67 | 66 | **69** | 69 |
+| paper_first_author | 67 | 66 | 66 | 63 | 66 | 67 |
+| params_sum | 52 | 40 | 49 | 52 | **52** | 41 |
+| gguf_count | 37 | 17 | 34 | 30 | 33 | 37 |
+| base_pipeline | 36 | 34 | 33 | 35 | **36** | 36 |
+| safetensors_count | 20 | 12 | 20 | 18 | 19 | 20 |
+| base_license | 15 | 14 | 14 | 14 | 14 | 13 |
+
+Thinking fixes the sums of three parameter counts (52/52 already for the thinking base) and, with the recipe, the
+base model's parameter count. File counts stay the one template where GRPO's single precise call does better.
+
+Cost: about $8 for SFT (one H200) and $5 for the evaluation; the replay pool (about $1) is shared by every
+Qwen3.5-4B run. Phase 2 of `run.toml` (probe and GRPO) cost $74.57.
+
+Artifacts: adapters
+[`…-think-cfx-a-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora) and
+[`…-think-cfx-b-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-lora);
+evaluations
+[`…-think-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) (thinking
+base),
+[`…-think-cfx-a-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-eval)
+and
+[`…-think-cfx-b-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval).

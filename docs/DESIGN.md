@@ -420,10 +420,30 @@ repos.
 
 ### Cross-format SFT (CoT-proxy recipe)
 
-An optional SFT recipe from Kopiczko, Blankevoort and Asano, "CoT-Proxy: Cross-Format Transfer for Distilling
+The SFT recipe from Kopiczko, Blankevoort and Asano, "CoT-Proxy: Cross-Format Transfer for Distilling
 Long-Horizon Policies" (arXiv 2611.33148), for students that are reasoning models: train on the teacher's actions
-with an empty think block, then let the student think at inference. Every piece is opt-in; the default SFT is
-unchanged.
+with an empty think block, then let the student think at inference. Its variant without CoT-proxies (empty-think
+targets, stripped visible text, KL replay) is the default of the thinking student `qwen3.5-4b-think`; other students
+keep the action-only SFT (`--think-target native`, no replay). CoT-proxies stay optional.
+
+Results (Qwen3.5-4B from GLM-5.3 traces in Pi 1.6.0, the same 599/600 accepted traces per task; paired exact
+McNemar on the same test rows; the teacher counted by its first record per row, as students are):
+
+| Model | hf-hub-qa-mcp (377) | hf-hub-qa CLI (150) |
+|---|---|---|
+| Base, thinking off | 72.1% | 47.3% |
+| Action-only SFT, thinking off (phase 1) | 81.4% | 78.0% |
+| Action-only SFT + GRPO, thinking off (phase 2) | 96.0% | — |
+| Base, thinking on | 89.1% | 86.7% |
+| **Recipe (a): empty think + stripped text + KL replay, thinking on** | **98.1%** | *running* |
+| Recipe (a) + CoT-proxies | 96.8% | — |
+| Teacher GLM-5.3 | 96.3% | 98.7% |
+
+On MCP, recipe (a) against action-only SFT fixes 66 questions and breaks 3 (p = 2e-16), and against base-thinking
+fixes 39 and breaks 5 (p = 1e-7); against SFT + GRPO it is a tie (15 fixed, 7 broken, p = 0.13) at a fraction of
+the cost (no difficulty probe or GRPO). CoT-proxies do not help on these short tasks: (b) against (a) fixes 5 and breaks 10
+(p = 0.30). The adapters' held-out drift after 8 passes is 1.6e-3 (a) and 2.0e-3 (b) nats per token, close to the
+paper's 1.3e-3 and 2.2e-3. Per-task tables are in the examples' READMEs.
 
 | Piece | Where | What it does |
 |---|---|---|
@@ -446,8 +466,7 @@ unchanged.
 - **Replay truncation.** Replay completions are capped at `--max-tokens` (4,096 by default), so many OpenR1-Math
   generations are cut mid-reasoning. That is harmless for a KL target (no end-of-sequence is needed), but the pool
   covers the start of long reasoning more than its end; the paper's 32k training context fits longer samples.
-- **MCP tools.** SFT renders a task's MCP tools from `Task.mcp_servers` (read with `getattr`, so it is inert until
-  the MCP support of #13 is on main).
+- **MCP tools.** SFT renders a task's MCP tools from `Task.mcp_servers`, exactly the tools Pi offers at inference.
 
 **History at inference.** The paper keeps the student's own reasoning in its history. Pi 1.6.0 does: it stores
 the parsed reasoning as a thinking block and, for the same model, sends it back on later turns in the reasoning
@@ -456,9 +475,11 @@ assistant turn after the user's question, which in a one-question agent episode 
 field into the template; the thinking baselines check it from the records (per-call prompt tokens grow by the
 previous turn's reasoning).
 
-A run turns the recipe on with `[sft] replay = true`, `summaries = true` and `args = ["--think-target", "empty",
-"--strip-visible-text"]` (the paper's hyperparameters are then the defaults) and serves the student with
-`qwen3.5-4b-think`.
+With `student = "qwen3.5-4b-think"` a run gets recipe (a): the profile's `[sft]` passes `--think-target empty
+--strip-visible-text` and sets `replay = true` (the paper's hyperparameters are then the defaults). Replay needs a
+pool: list the `replay` stage, or point `[repos] replay` to a shared one (for Qwen3.5-4B,
+`nielsr/qwen35-4b-think-replay-openr1-oasst`). CoT-proxies are added with the `annotate` stage and `[sft] summaries =
+true`. A run opts out with `[sft] replay = false` and `args = ["--think-target", "native", "--no-strip-visible-text"]`.
 
 **Code staging.** Before jobs are launched:
 
