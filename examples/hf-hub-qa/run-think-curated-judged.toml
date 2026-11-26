@@ -1,17 +1,18 @@
-# Secondary out-of-distribution generalization evaluation: 51 open-ended Hugging Face Hub questions (`judged.py`),
-# evaluating both thinking base (`Qwen/Qwen3.5-4B`, `qwen3.5-4b-think`) and curated recipe-(a) SFT.
+# The 51 open-ended judged questions (`judged.py`) for run-think-curated.toml's adapter: recipe (a) on #21's 1,025
+# curated traces. Same settings as run-think-fullcot-judged.toml, so it pairs with #21 (26/51) and recipe (a)-600
+# (33/51) question by question.
 #
 #   distill run examples/hf-hub-qa/run-think-curated-judged.toml --dry-run
 task = "judged.py"
 teacher = "glm-5.3"
 student = "qwen3.5-4b-think"
 harness = "pi@1.6.0"
-name = "cursor-qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160"
+name = "qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160"
 stages = ["eval"]
 
 [hub]
 namespace = "nielsr"
-bill_to = "huggingface"  # pragma: allowlist secret
+bill_to = "huggingface"
 collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
 raw_logs = false
 
@@ -24,9 +25,9 @@ max_tool_calls = 20
 
 [eval.models]
 base = "Qwen/Qwen3.5-4B"
-sft = "Qwen/Qwen3.5-4B+nielsr/cursor-qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora"
+sft = "Qwen/Qwen3.5-4B+nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora"
 
 [budget]
 traces_usd = 0
 judge_usd = 5
-gpu_usd = 45
+gpu_usd = 45  # worst case: two 4 h H200 jobs; expected ~$1.20 base + ~$3 sft

@@ -1,40 +1,42 @@
-# Best-of-both-worlds SFT: CoT-Proxy cross-format recipe (a) + KL replay (`qwen3.5-4b-think`) trained on the
-# 1,025 zero-error curated GLM-5.3 CLI traces (rows 0..1161 filtered to `hf_errors=0` and `tool_calls<=12`).
+# hf-hub-qa (CLI) ablation: data vs recipe. Recipe (a) of the CoT-proxy paper (the `qwen3.5-4b-think` profile's
+# defaults: empty think target, stripped visible text, KL replay; thinking on at inference) trained on exactly the
+# curated traces of run-think-fullcot.toml (#21): run.toml's 600 traces plus #21's 562 new ones, filtered to zero
+# CLI errors and <= 12 tool calls (1,025 traces). Epochs, learning rate and LoRA settings stay at the profile's
+# defaults. Evaluated on all 377 test questions; see the README.
 #
-# Isolates both axes cleanly:
-# - vs `run-think.toml` (recipe (a) on 600 raw traces): isolates the data volume + zero-error curation effect;
-# - vs `run-think-fullcot.toml` (full-CoT without KL on the same 1,025 traces): isolates recipe (a) + KL replay.
+# Neither the traces nor the replay pool is regenerated (both repos are read only).
 #
 #   distill run examples/hf-hub-qa/run-think-curated.toml --dry-run
 task = "."
 teacher = "glm-5.3"
 student = "qwen3.5-4b-think"
 harness = "pi@1.6.0"
-name = "cursor-qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160"
+name = "qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160"
 stages = ["sft", "eval"]
 
 [repos]
-traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # rows 0..599
-replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared Qwen3.5-4B KL replay pool
+traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's accepted traces (rows 0..599)
+replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
 
 [hub]
 namespace = "nielsr"
-bill_to = "huggingface"  # pragma: allowlist secret
+bill_to = "huggingface"
 collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
-raw_logs = false
+raw_logs = false  # nielsr's private storage is full: raw harness logs stay in the jobs
 
 [sft]
-timeout = "10h"
+# #21's curation: its traces (rows 600..1161) added, then zero `hf` errors and <= 12 tool calls.
 args = [
-  "--traces-repo", "nielsr/cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160-traces",  # rows 600..1161
+  "--traces-repo", "nielsr/cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160-traces",
   "--max-metric", "hf_errors=0",
   "--max-tool-calls", "12",
 ]
+timeout = "210m"  # 8 passes over 1,025 traces: ~2.5 h on one H200 (600 traces took 1 h 27 min)
 
 [eval]
 splits = ["test"]
-limit = 377
-concurrency = 4
+limit = 377  # all v2 test questions: paired with #21 on 377 rows and with recipe (a)-600 on test[:150]
+concurrency = 4  # anonymous Hub API rate limits
 timeout = 300
 max_tool_calls = 15
 variants = ["sft"]
@@ -42,4 +44,4 @@ variants = ["sft"]
 [budget]
 traces_usd = 0
 judge_usd = 0
-gpu_usd = 60
+gpu_usd = 20  # per stage, worst case: SFT 3.5 h, eval 4 h (the serve timeout) on one H200; expected ~$13 SFT + ~$6 eval

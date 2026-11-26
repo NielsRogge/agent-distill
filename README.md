@@ -152,4 +152,5 @@ uv run pytest -q
 
 - [docs/DESIGN.md](docs/DESIGN.md) — full architecture, rubric API, harness adapters, and cross-format SFT (CoT-proxy) details.
 - [examples/README.md](examples/README.md) — overview and results across all examples.
+- [spaces/race/README.md](spaces/race/README.md) — the race Space: a teacher and its distilled student on the same question in the same harness, configured by run configs.
 - [AGENTS.md](AGENTS.md) — repository rules for coding agents.
