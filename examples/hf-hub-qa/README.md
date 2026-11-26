@@ -26,7 +26,7 @@ Full-CoT SFT on the remaining splits: **369/377 (97.9%)** on full `test` (`98.9%
   - Costs ~$13 in GPU spend (~$7 SFT, ~$6 eval) when reusing traces and the shared replay pool.
 - **Full-CoT SFT (`run-think-fullcot.toml`) and its generalization trade-off:** trained on 1,025 traces (all 1,162 train rows filtered to `hf_errors=0` and `tool_calls<=12`) with full reasoning supervision (`keep_reasoning=true`, 3 epochs, cosine `lr=1e-4`, LoRA `r=32`, no KL replay).
   - Scores 148/150 on `test[:150]` (3 ahead / 0 behind recipe (a), `p = 0.25`, not significant; both get 148/150 on `fact_correct`, with the 3 differences being grounding misses on recipe (a)). Because it changes data volume, zero-error curation, target format, and schedule at once, the difference cannot be attributed to full-CoT targets alone.
-  - On the 51 open-ended judged questions (`run-think-fullcot-judged.toml`), it drops to **26/51 (51.0%)** vs. GLM-5.3's **43/51 (84.3%)**: 3 epochs on terse factoid lookups without KL replay over-specializes the 4B model, causing 11/25 failures to hit the 20-call limit on broad prompts and 13/25 to miss the quality bar. Recipe (a), with KL replay, scores **33/51 (64.7%)** there (12 ahead / 5 behind full-CoT, `p = 0.14`): the direction #21 predicted, but not significant at 51 questions, and the thinking base has not been run on them.
+  - On the 51 open-ended judged questions (`run-think-fullcot-judged.toml`), it drops to **26/51 (51.0%)** vs. GLM-5.3's **43/51 (84.3%)**: 3 epochs on terse factoid lookups without KL replay over-specializes the 4B model, causing 11/25 failures to hit the 20-call limit on broad prompts and 13/25 to miss the quality bar. Recipe (a), with KL replay, scores **33/51 (64.7%)** there (12 ahead / 5 behind full-CoT, `p = 0.14`), while **base Qwen3.5-4B (`think`)** scores **31/51 (60.8%)**—so none of the factoid-trained students significantly beat the thinking base on open-ended questions (`p >= 0.36` for all).
 - **Why non-thinking base struggles with a shell:** with thinking off, base Qwen3.5-4B ignores the `hf-cli` skill (2% of episodes), writes `curl`/Python scrapers (130/150 episodes), and runs out of calls (40/150). Action-only SFT lifts it by +30.7 points (62 fixed / 16 broken, `p = 1.5e-7`) to match the MCP SFT student (78.0% vs. 80.0%), though recursive file counts (`gguf_count` 6/15, `safetensors_count` 5/15) remain hard without thinking or GRPO.
 
 ### Per-template breakdown (`test[:150]`)
@@ -77,6 +77,8 @@ What this suggests:
 
 Spend: about $22.6 of GPU (SFT $12.2, eval of 377 rows $7.9, judged eval $2.4) and under $1 of judge. No new teacher traces. Adapter: [`…-cfx-a-curated-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora). Evaluations: [`…-cfx-a-curated-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-eval) and [`…-cfx-a-curated-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
+- **Independent replication** (`cursor-qwen35-4b-think-cfx-a-curated-…`, same settings, 2 h 27 min H200, held-out drift `2.14e-3` nats/token): **144/150 (96.0%)** on `test[:150]`, **363/377 (96.3%)** on full `test` (`369/377` `fact_correct`, `0.12` `hf` errors/ep, `99.7%` `read_skill`; `+6 / -12` vs. #21, `p = 0.24`; `+44 / -12` vs. non-thinking GRPO, `p = 2.1e-5`), and **29/51 (56.9%)** on judged (`6` limit hits, `100%` live reference; `+11 / -8` vs. #21, `p = 0.65`). Adapter: [`cursor-…-cfx-a-curated-…-lora`](https://huggingface.co/nielsr/cursor-qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora); evaluations: [`cursor-…-cfx-a-curated-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-eval), [`cursor-…-cfx-a-curated-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+
 ### Non-thinking SFT → GRPO on full `test` (`run-grpo.toml`)
 
 Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactly `bash` and `read`). A difficulty probe then ran the SFT model 4 times on 700 sampled train rows, and GRPO trained from the SFT merge on the 157 rows it solved on 1–3 of the 4 attempts. That is 78 steps, about 38 minutes on 2× H200. The evaluation covers all 377 `test` rows, first record per row, with the MCP twin's numbers in brackets (its teacher counted on first records as well):
@@ -118,14 +120,17 @@ Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactl
 
 ### Open-ended judged evaluation (51 questions)
 
-| Model | Passed | Median tool calls | Spend |
-| --- | ---: | ---: | ---: |
-| Kimi-K3.1-Pro (teacher pilot) | 49/51 (96.1%) | 10 | $12.31 |
-| GLM-5.3 (teacher pilot) | 43/51 (84.3%) | 5 | $2.72 |
-| Recipe (a) (`run-think.toml` adapter, same settings) | 33/51 (64.7%) | 8 | ~$3 GPU + <$1 judge |
-| Full-CoT SFT (`run-think-fullcot-judged.toml`) | 26/51 (51.0%) | 8 | <$1 judge |
+| Model | Passed | Median tool calls | Limit hits (20) | Live reference | Spend |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Kimi-K3.1-Pro (teacher pilot) | 49/51 (96.1%) | 10 | — | — | $12.31 |
+| GLM-5.3 (teacher pilot; 41/51 published) | 43/51 (84.3%) | 5 | 1 | 100.0% | $2.72 |
+| Recipe (a) (`run-think.toml`, 600 traces + KL) | 33/51 (64.7%) | 8 | 9 | 90.7% | ~$3 GPU + <$1 judge |
+| Qwen3.5-4B base (`think`, `run-think-curated-judged.toml`) | 31/51 (60.8%) | 4 | 5 | 76.5% | ~$1.20 GPU + <$1 judge |
+| Curated recipe (a) (replication, 1,025 + KL) | 29/51 (56.9%) | 8 | 6 | 100.0% | ~$2.60 GPU + <$1 judge |
+| Curated recipe (a) (#28, 1,025 + KL) | 26/51 (51.0%) | 8 | 7 | — | ~$2.40 GPU + <$1 judge |
+| Full-CoT SFT (`run-think-fullcot-judged.toml`, 1,025, no KL) | 26/51 (51.0%) | 8 | 11 | 94.7% | <$1 judge |
 
-The teacher pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`, one record per question) score 41/51, not the 43/51 reported for the pilot; paired against them, recipe (a) is 4 ahead / 12 behind (`p = 0.08`). Recipe (a) hit the 20-call limit 9 times, full-CoT 11 times. Evaluation: [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+The teacher pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`, one record per question) score 41/51, not the 43/51 reported for the pilot; paired against them, recipe (a) is 4 ahead / 12 behind (`p = 0.08`) and base `think` is 5 ahead / 15 behind (`p = 0.041`). Paired against base `think` (`31/51`, `0%` `read_skill`, `1.08` `hf` errors/ep), none of the factoid-trained students differ significantly on pass rate: recipe (a)-600 `+10 / -8` (`p = 0.81`), curated recipe (a) `#28` `+7 / -12` (`p = 0.36`) and replication `+12 / -14` (`p = 0.85`), full-CoT `+8 / -13` (`p = 0.38`). Factoid SFT raises CLI fluency (`read_skill` `0% -> 98%`, `hf` errors `1.08 -> 0.43–0.57`, live references `76.5% -> 90.7–100.0%`), but lengthens tool loops (`6.86 -> 9.8–10.4` mean calls) and cannot close the gap to GLM-5.3 without open-ended training traces. Evaluations: [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval), [`cursor-…-think-cfx-a-curated-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
 ## Running it
 

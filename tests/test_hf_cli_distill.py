@@ -165,3 +165,25 @@ def test_fullcot_run_configs_build_expected_jobs():
     (grpo,) = pipeline.grpo_jobs(run_grpo, "R")
     assert "--max-concurrent-rollouts 16" in grpo.command
     assert "difficulty/probe/train-0of4-qualified-ids.txt" in grpo.command
+
+
+def test_curated_cfx_a_run_configs_build_expected_jobs():
+    run = pipeline.make_run(load_run("examples/hf-hub-qa/run-think-curated.toml"))
+    (sft,) = pipeline.sft_jobs(run, "R")
+    assert "--student qwen3.5-4b-think" in sft.command
+    assert "--traces-repo nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces" in sft.command
+    assert "--traces-repo nielsr/cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160-traces" in sft.command
+    assert "--replay-repo nielsr/qwen35-4b-think-replay-openr1-oasst" in sft.command
+    assert "--max-metric hf_errors=0" in sft.command
+    assert "--max-tool-calls 12" in sft.command
+    (ev,) = pipeline.eval_jobs(run, "R")
+    assert "--split test" in ev.command
+    assert "--limit 377" in ev.command
+
+    run_judged = pipeline.make_run(load_run("examples/hf-hub-qa/run-think-curated-judged.toml"))
+    evals = pipeline.eval_jobs(run_judged, "R")
+    assert len(evals) == 2
+    assert any("--label base" in j.command and "--split seed" in j.command for j in evals)
+    assert any(
+        "--adapter nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora" in j.command for j in evals
+    )

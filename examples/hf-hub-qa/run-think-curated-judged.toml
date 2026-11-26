@@ -24,9 +24,10 @@ timeout = 600
 max_tool_calls = 20
 
 [eval.models]
+base = "Qwen/Qwen3.5-4B"
 sft = "Qwen/Qwen3.5-4B+nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora"
 
 [budget]
 traces_usd = 0
 judge_usd = 5
-gpu_usd = 20  # worst case: the serve profile's 4 h timeout on one H200; expected ~$3
+gpu_usd = 45  # worst case: two 4 h H200 jobs; expected ~$1.20 base + ~$3 sft
