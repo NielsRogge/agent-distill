@@ -44,7 +44,8 @@ shards = 4
 timeout = "90m"  # 4 x 1.5 h x $5: at most $30 (expected ~$12)
 
 [grpo]
-args = ["--max-concurrent-rollouts", "16", "--save-steps", "10"]  # anonymous Hub API rate limits; checkpoints survive a timeout
+args = ["--max-concurrent-rollouts", "16", "--save-steps", "10", "--max-steps", "78"]  # anonymous Hub API rate limits;
+# checkpoints survive a timeout; 78 steps of 2 prompts = the 157 rows the probe qualified (of 700 sampled)
 timeout = "270m"  # 2x H200 at $10/h: at most $45 (the MCP twin's 100 steps took 5 h 38 m; a timeout keeps the last checkpoint)
 use_probe = true
 
