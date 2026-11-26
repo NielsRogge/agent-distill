@@ -185,6 +185,5 @@ def test_curated_cfx_a_run_configs_build_expected_jobs():
     assert len(evals) == 2
     assert any("--label base" in j.command and "--split seed" in j.command for j in evals)
     assert any(
-        "--adapter nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora" in j.command
-        for j in evals
+        "--adapter nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora" in j.command for j in evals
     )
