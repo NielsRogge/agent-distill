@@ -1,0 +1,32 @@
+# CoT-proxy experiments, step 3b: the CLI recipe (a) adapter (145/150 on test[:150]) on the 51 open-ended judged
+# questions, with the settings of #21's run-think-fullcot-judged.toml (full-CoT SFT 26/51, GLM-5.3 teacher pilot
+# 43/51). Checks whether KL replay keeps open-ended ability that 3 epochs of factoid-only SFT lost.
+#
+#   distill run experiments/cot-proxy/cli-cfx-a-judged.toml --dry-run
+task = "../../examples/hf-hub-qa/judged.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+sft = "Qwen/Qwen3.5-4B+nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160-lora"
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 25
