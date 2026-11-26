@@ -433,3 +433,31 @@ Caveats:
 
 - The SFT stage trained with the wrong tool list (see above); GRPO's rollouts used the real MCP tools.
 - One GRPO answer still showed `</think>` despite thinking off, as did one base answer.
+
+### Counting rule for the teacher
+
+The teacher's evaluation runs through the traces stage, which reruns an episode cut short by a timeout or provider error
+(`--rerun-cut-short`). The student evaluations never rerun: each has exactly one record per question, and a timeout
+counts against the student. On the 377 test questions, 11 teacher episodes were cut short and rerun, and 9 of those
+reruns passed:
+
+| Counting rule | Teacher |
+|---|---|
+| Final record per question (the rerun replaces a cut-short episode); used in the tables above | 372/377 (98.7%) |
+| First record per question, the students' rule | **363/377 (96.3%)** |
+| Every record (`summarize_records`) | 372/394 (94.4%) |
+
+Under the students' rule the teacher is at 96.3%, tied with GRPO's 96.0%.
+
+### Related: thinking students (#19)
+
+The CoT-proxy session (#19) trained the same student with thinking on (recipe (a), on the same traces and the same 377
+test questions):
+
+| Run | Passed |
+|---|---|
+| Qwen3.5-4B thinking base (`qwen35-4b-think-…-eval`, `base-think`) | 336/377 (89.1%) |
+| Recipe (a) SFT (`qwen35-4b-think-cfx-a-…-eval`, `sft`) | 370/377 (98.1%) |
+
+The thinking base is stronger than the non-thinking base (72.1%), and thinking SFT beats non-thinking SFT (81.4%).
+Non-thinking SFT + GRPO reaches 96.0% with 1.75 MCP calls per question.
