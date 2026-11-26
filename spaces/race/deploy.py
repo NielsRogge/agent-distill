@@ -184,9 +184,10 @@ RUN python spaces/race/setup.py > /tmp/setup.sh && bash -euo pipefail /tmp/setup
  && touch /opt/cache/agent-distill/.pi-install.lock && chmod 666 /opt/cache/agent-distill/.pi-install.lock \\
  && chmod -R a+rX /opt /app
 
-# Runtime state (episodes, caches) lives under /tmp.
-ENV HOME=/tmp/home \\
-    HF_HOME=/tmp/hf
+# Runtime state (episodes, caches) lives under /tmp. No HF_HOME: agents inherit the app's environment, and one
+# pointing into the app's private home makes their `hf` CLI fail on its token file. Each agent gets its own HOME (and
+# so its own, empty Hugging Face cache) from the Pi adapter.
+ENV HOME=/tmp/home
 EXPOSE 7860
 WORKDIR /app/spaces/race
 CMD ["bash", "start.sh"]
