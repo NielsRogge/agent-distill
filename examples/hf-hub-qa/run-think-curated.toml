@@ -1,0 +1,45 @@
+# Best-of-both-worlds SFT: CoT-Proxy cross-format recipe (a) + KL replay (`qwen3.5-4b-think`) trained on the
+# 1,025 zero-error curated GLM-5.3 CLI traces (rows 0..1161 filtered to `hf_errors=0` and `tool_calls<=12`).
+#
+# Isolates both axes cleanly:
+# - vs `run-think.toml` (recipe (a) on 600 raw traces): isolates the data volume + zero-error curation effect;
+# - vs `run-think-fullcot.toml` (full-CoT without KL on the same 1,025 traces): isolates recipe (a) + KL replay.
+#
+#   distill run examples/hf-hub-qa/run-think-curated.toml --dry-run
+task = "."
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160"
+stages = ["sft", "eval"]
+
+[repos]
+traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # rows 0..599
+replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared Qwen3.5-4B KL replay pool
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[sft]
+timeout = "10h"
+args = [
+  "--traces-repo", "nielsr/cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160-traces",  # rows 600..1161
+  "--max-metric", "hf_errors=0",
+  "--max-tool-calls", "12",
+]
+
+[eval]
+splits = ["test"]
+limit = 377
+concurrency = 4
+timeout = 300
+max_tool_calls = 15
+variants = ["sft"]
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 60

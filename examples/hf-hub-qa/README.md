@@ -14,19 +14,21 @@ Evaluated on `test[:150]` of `nielsr/hf-hub-facts-v2` (first record per row; the
 | + Phase 1 SFT (`run.toml`, 600 traces) | off | 117/150 (78.0%) | 7.19 | 0.95 | 93.3% | 19 |
 | Qwen3.5-4B (base) | on | 130/150 (86.7%) | 6.09 | 1.53 | 0.0% | 12 |
 | **+ Cross-format SFT, recipe (a) (`run-think.toml`)** | **on** | **145/150 (96.7%)** | **4.45** | **0.23** | **92.0%** | **0** |
+| + Curated recipe (a) (`run-think-curated.toml`, 1,025 traces) | on | 144/150 (96.0%) | 4.43 | 0.15 | 100.0% | 1 |
 | + Curated Full-CoT SFT (`run-think-fullcot.toml`, 1,025 traces) | on | 148/150 (98.7%) | 4.10 | 0.04 | 93.3% | 0 |
 | GLM-5.3 (teacher) | on | 148/150 (98.7%) | 4.58 | 0.08 | 93.3% | 0 |
 
-Full-CoT SFT on the remaining splits: **369/377 (97.9%)** on full `test` (`98.9%` `fact_correct`) and **145/149 (97.3%)** on `validation`.
+Full `test` (377 rows): **Full-CoT SFT 369/377 (97.9%)** (`98.9%` `fact_correct`; `145/149 = 97.3%` on `validation`), **Curated recipe (a) 363/377 (96.3%)** (`97.9%` `fact_correct`, `0.12` `hf` errors/ep, `99.7%` `read_skill`), vs. **GLM-5.3 375/377 (99.5%)**.
 
 ### Key takeaways
 
 - **Recommended route — cross-format SFT (`run-think.toml`):** trains `qwen3.5-4b-think` on the 600 Phase 1 traces using CoT-Proxy recipe (a) (empty unsupervised think block, stripped prose around tool calls, out-of-domain KL replay; 8 passes at `lr=3e-5`, LoRA `r=16`; held-out drift `2.1e-3` nats/token).
   - Beats Phase 1 non-thinking SFT (31 fixed / 3 broken, exact McNemar `p = 7.7e-7`) and thinking base (18 / 3, `p = 0.0015`), and is statistically level with the GLM-5.3 teacher (1 ahead / 4 behind, `p = 0.38`).
   - Costs ~$13 in GPU spend (~$7 SFT, ~$6 eval) when reusing traces and the shared replay pool.
-- **Full-CoT SFT (`run-think-fullcot.toml`) and its generalization trade-off:** trained on 1,025 traces (all 1,162 train rows filtered to `hf_errors=0` and `tool_calls<=12`) with full reasoning supervision (`keep_reasoning=true`, 3 epochs, cosine `lr=1e-4`, LoRA `r=32`, no KL replay).
-  - Scores 148/150 on `test[:150]` (3 ahead / 0 behind recipe (a), `p = 0.25`, not significant; both get 148/150 on `fact_correct`, with the 3 differences being grounding misses on recipe (a)). Because it changes data volume, zero-error curation, target format, and schedule at once, the difference cannot be attributed to full-CoT targets alone.
-  - On the 51 open-ended judged questions (`run-think-fullcot-judged.toml`), it drops to **26/51 (51.0%)** vs. GLM-5.3's **43/51 (84.3%)**: 3 epochs on terse factoid lookups without KL replay over-specializes the 4B model, causing 11/25 failures to hit the 20-call limit on broad prompts and 13/25 to miss the quality bar. Recipe (a), with KL replay, scores **33/51 (64.7%)** there (12 ahead / 5 behind full-CoT, `p = 0.14`): the direction #21 predicted, but not significant at 51 questions, and the thinking base has not been run on them.
+- **2×2 ablation — curated recipe (a) (`run-think-curated.toml`) vs. full-CoT (`run-think-fullcot.toml`):**
+  - Training recipe (a) on the **1,025 zero-error curated traces** (exact same hyperparameters, 483 updates, held-out drift `2.14e-3` nats/token) isolates data volume + curation from the SFT recipe. On `test[:150]`, it scores **144/150 (96.0%)** vs. 600-trace recipe (a)'s **145/150 (96.7%)** (4 ahead / 5 behind, `p = 1.00`)—600 traces already saturate recipe (a)'s pass rate—while cutting `hf` errors (`0.23 -> 0.15`), raising `read_skill` to `100%`, and reaching **363/377 (96.3%)** on full `test` (+44 / -12 vs. non-thinking GRPO, `p = 2.1e-5`).
+  - On the same 1,025 curated traces, full-CoT SFT (`keep_reasoning=true`, 3 epochs, cosine `lr=1e-4`, LoRA `r=32`, no KL replay) scores slightly higher on facts (**148/150** on `test[:150]`, **369/377** on full `test`; +12 / -6 vs. curated recipe (a) on 377 rows, `p = 0.24`, not significant) with lower CLI errors (`0.06` vs. `0.12`), but drops further on the 51 open-ended judged questions (**26/51** vs. curated recipe (a)'s **29/51** and 600-trace recipe (a)'s **33/51**).
+  - Evaluating **base Qwen3.5-4B (`think`)** on the 51 judged questions establishes the baseline at **31/51 (60.8%)** with only 5 call-limit hits and median 4 tool calls. None of the factoid-trained students significantly beat base `think` on judged pass rate (`p >= 0.38` for all three): factoid SFT teaches CLI syntax (`read_skill` `0% -> 98%`, `hf` errors `1.08 -> 0.43–0.57`, live-reference accuracy `0.765 -> 0.907–1.000`), but increases tool calls (`6.86 -> 9.8–10.4`) and cannot close the gap to GLM-5.3 (`41/51`, `p = 0.0075`) without open-ended training traces.
 - **Why non-thinking base struggles with a shell:** with thinking off, base Qwen3.5-4B ignores the `hf-cli` skill (2% of episodes), writes `curl`/Python scrapers (130/150 episodes), and runs out of calls (40/150). Action-only SFT lifts it by +30.7 points (62 fixed / 16 broken, `p = 1.5e-7`) to match the MCP SFT student (78.0% vs. 80.0%), though recursive file counts (`gguf_count` 6/15, `safetensors_count` 5/15) remain hard without thinking or GRPO.
 
 ### Per-template breakdown (`test[:150]`)
@@ -83,14 +85,16 @@ Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactl
 
 ### Open-ended judged evaluation (51 questions)
 
-| Model | Passed | Median tool calls | Spend |
-| --- | ---: | ---: | ---: |
-| Kimi-K3.1-Pro (teacher pilot) | 49/51 (96.1%) | 10 | $12.31 |
-| GLM-5.3 (teacher pilot) | 43/51 (84.3%) | 5 | $2.72 |
-| Recipe (a) (`run-think.toml` adapter, same settings) | 33/51 (64.7%) | 8 | ~$3 GPU + <$1 judge |
-| Full-CoT SFT (`run-think-fullcot-judged.toml`) | 26/51 (51.0%) | 8 | <$1 judge |
+| Model | Passed | Median tool calls | Limit hits (20) | Live reference | Spend |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Kimi-K3.1-Pro (teacher pilot) | 49/51 (96.1%) | 10 | — | — | $12.31 |
+| GLM-5.3 (teacher pilot; 41/51 published) | 43/51 (84.3%) | 5 | 1 | 100.0% | $2.72 |
+| Recipe (a) (`run-think.toml`, 600 traces + KL) | 33/51 (64.7%) | 8 | 9 | 90.7% | ~$3 GPU + <$1 judge |
+| Qwen3.5-4B base (`think`, `run-think-curated-judged.toml`) | 31/51 (60.8%) | 4 | 5 | 76.5% | ~$1.20 GPU + <$1 judge |
+| Curated recipe (a) (`run-think-curated-judged.toml`, 1,025 + KL) | 29/51 (56.9%) | 8 | 6 | 100.0% | ~$2.60 GPU + <$1 judge |
+| Full-CoT SFT (`run-think-fullcot-judged.toml`, 1,025, no KL) | 26/51 (51.0%) | 8 | 11 | 94.7% | <$1 judge |
 
-The teacher pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`, one record per question) score 41/51, not the 43/51 reported for the pilot; paired against them, recipe (a) is 4 ahead / 12 behind (`p = 0.08`). Recipe (a) hit the 20-call limit 9 times, full-CoT 11 times. Evaluation: [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+The teacher pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`, one record per question) score 41/51, not the 43/51 reported for the pilot; paired against them, recipe (a) is 4 ahead / 12 behind (`p = 0.08`) and curated recipe (a) is 3 ahead / 15 behind (`p = 0.0075`). Paired against base `think` (`31/51`), none of the factoid-trained students differ significantly: recipe (a) +10 / -8 (`p = 0.81`), curated recipe (a) +12 / -14 (`p = 0.85`), full-CoT +8 / -13 (`p = 0.38`). Evaluations: [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval), [`…-think-cfx-a-curated-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
 ## Running it
 
@@ -104,11 +108,15 @@ uv run distill run examples/hf-hub-qa/run.toml --dry-run
 # Non-thinking SFT rerun -> probe -> GRPO -> eval on all 377 test rows
 uv run distill run examples/hf-hub-qa/run-grpo.toml --dry-run
 
+# Curated recipe-(a) SFT ablation (1,025 zero-error traces + KL replay)
+uv run distill run examples/hf-hub-qa/run-think-curated.toml --dry-run
+
 # Curated full-CoT SFT experiment (1,025 zero-error traces)
 uv run distill run examples/hf-hub-qa/run-think-fullcot.toml --dry-run
 
-# Secondary judged evaluation (teacher pilot / student eval)
+# Secondary judged evaluation (teacher pilot / thinking base + student evals)
 uv run distill run examples/hf-hub-qa/run-judged-pilot.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-think-curated-judged.toml --dry-run
 uv run distill run examples/hf-hub-qa/run-think-fullcot-judged.toml --dry-run
 
 # Export the 51 judged questions as JSON
@@ -121,5 +129,5 @@ uv run --extra hub python examples/hf-hub-qa/questions.py
 
 - **Phase 1 SFT tool-list mismatch:** Phase 1 non-thinking SFT (`run.toml`) ran before PR #19 and included a phantom `submit` tool in its SFT prompt (evaluation offered only `bash` and `read`, matching traces). Both `run-think.toml` and `run-think-fullcot.toml` use the fixed `[bash, read]` tool list.
 - **Shell tool parity across job images:** Student TRL images initially lacked `curl`, `jq`, and `wget` (causing 139 `curl: command not found` errors and depressing non-thinking validation from 61% to 43%). `Task.commands` and `JOB_SETUP` now install and verify them before every job.
-- **Published runs:** Phase 1 (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160`), Phase 2 GRPO (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-grpo`), recommended recipe (a) (`qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160`), and curated full-CoT (`cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160`) are published in the [agent-distillation collection](https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31). <!-- pragma: allowlist secret -->
-- **Approximate spend:** Phase 1 traces ~$21 + teacher eval $4.49 + GPU ~$12; recipe (a) SFT + eval ~$13 (reusing traces and replay pool); full-CoT additional 562 traces $17.02 + GPU ~$16; Phase 2 GRPO (`run-grpo.toml`): GPU ~$43 (SFT $6.75, probe $11, GRPO pilot $1.90, GRPO $6.30, merges ~$0.60, evaluations ~$16) + teacher eval $11.80.
+- **Published runs:** Phase 1 (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160`), Phase 2 GRPO (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-grpo`), recommended recipe (a) (`qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160`), curated recipe (a) (`cursor-qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160`), and curated full-CoT (`cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160`) are published in the [agent-distillation collection](https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31). <!-- pragma: allowlist secret -->
+- **Approximate spend:** Phase 1 traces ~$21 + teacher eval $4.49 + GPU ~$12; recipe (a) SFT + eval ~$13 (reusing traces and replay pool); curated recipe (a) + base-think judged eval GPU ~$23.40 (H200: SFT $12.24, 377-row test eval $7.34, judged base $1.20 + sft $2.59) + ~$1 judge; full-CoT additional 562 traces $17.02 + GPU ~$16; Phase 2 GRPO (`run-grpo.toml`): GPU ~$43 (SFT $6.75, probe $11, GRPO pilot $1.90, GRPO $6.30, merges ~$0.60, evaluations ~$16) + teacher eval $11.80.
