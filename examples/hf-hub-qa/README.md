@@ -42,6 +42,41 @@ Full-CoT SFT on the remaining splits: **369/377 (97.9%)** on full `test` (`98.9%
 | `base_pipeline` | 12 | 7 | 8 | 11 | **12** | 11 |
 | `base_license` | 5 | 2 | 5 | 4 | **4** | 4 |
 
+### Data or recipe? Recipe (a) on #21's curated traces (`run-think-curated.toml`)
+
+Full-CoT SFT (#21) changed both the data (1,025 curated traces instead of 600) and the recipe (full-CoT targets, 3 epochs at `lr=1e-4`, LoRA `r=32`, no replay). This ablation keeps recipe (a) at its profile defaults (8 passes, `lr=3e-5`, LoRA `r=16`, KL replay) and trains it on exactly #21's curated set: both trace repos, `hf_errors=0`, `tool_calls<=12`, 1,161 accepted → 1,025 kept. SFT took 2 h 27 min on one H200, with held-out drift `2.2e-3` nats/token. Full `test`, first record per row:
+
+| Model | Traces | `test[:150]` | Full `test` (377) | `fact_correct` (377) | Tool calls / ep | `hf` errors / ep | Hit call limit | Judged (51) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Recipe (a) (`run-think.toml`) | 600 | 145/150 | not run | | 4.45 ¹ | 0.23 ¹ | 0 ¹ | 33/51 |
+| **Recipe (a), curated (`run-think-curated.toml`)** | 1,025 | 144/150 | 364/377 (96.6%) | 371 | 4.69 | 0.19 | 3 | 26/51 |
+| Full-CoT SFT (`run-think-fullcot.toml`) | 1,025 | 148/150 | 369/377 (97.9%) | 373 | 4.29 | 0.06 | 2 | 26/51 |
+| GLM-5.3 (teacher) | | 148/150 | 375/377 (99.5%) | | 4.27 | 0.10 | 0 | 41/51 ² |
+
+¹ On `test[:150]`. ² The pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`).
+
+Paired comparisons, exact McNemar (curated recipe (a) only / other only):
+
+- **vs recipe (a) on 600 traces, `test[:150]`:** 4 / 5, `p = 1.0`. The 425 extra curated traces changed nothing.
+- **vs full-CoT (#21), 377 rows:** 4 / 9, `p = 0.27`. Same traces, different recipe: 5 rows behind, not significant.
+- **vs the teacher, 377 rows:** 2 / 13, `p = 0.0074`. Significantly behind. #21 was not significantly behind the teacher (2 / 8, `p = 0.11`).
+- **Judged (51):**
+  - vs #21: 11 / 11, `p = 1.0`.
+  - vs recipe (a)-600: 5 / 12, `p = 0.14`.
+  - vs the teacher's published records: 4 / 19, `p = 0.0026`.
+
+What this suggests:
+
+- **The data alone does not explain #21's score.** Recipe (a) on #21's curated traces scores the same as on 600 traces. It trails #21 by 5 rows of 377, a gap that is not significant.
+- **#21's edge, if real, comes from its recipe.** The clearest difference is that #21 makes fewer `hf` errors per episode (0.06 against 0.19). Both students trained on the same zero-error traces, so the recipe's full-CoT targets or its longer schedule are the likely cause, not the data.
+- **The curated student's 13 failures on `test`:**
+  - 7 answered correctly but named a Hub id the agent never looked up;
+  - 3 were wrong;
+  - 3 hit the 15-call limit.
+- **On the judged questions, more curated data did not help recipe (a).** It falls from 33/51 to 26/51, which is #21's score (`p = 0.14`, so not significant). It hits the 20-call limit less often: 7 times, against 11 for recipe (a)-600 and 12 for #21. Its failures are answers that miss the quality bar. On these open-ended questions, the curated set's short, zero-error factoid traces may matter more than the recipe.
+
+Spend: about $22.6 of GPU (SFT $12.2, eval of 377 rows $7.9, judged eval $2.4) and under $1 of judge. No new teacher traces. Adapter: [`…-cfx-a-curated-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora). Evaluations: [`…-cfx-a-curated-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-eval) and [`…-cfx-a-curated-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+
 ### Non-thinking SFT → GRPO on full `test` (`run-grpo.toml`)
 
 Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactly `bash` and `read`). A difficulty probe then ran the SFT model 4 times on 700 sampled train rows, and GRPO trained from the SFT merge on the 157 rows it solved on 1–3 of the 4 attempts. That is 78 steps, about 38 minutes on 2× H200. The evaluation covers all 377 `test` rows, first record per row, with the MCP twin's numbers in brackets (its teacher counted on first records as well):
@@ -106,6 +141,10 @@ uv run distill run examples/hf-hub-qa/run-grpo.toml --dry-run
 
 # Curated full-CoT SFT experiment (1,025 zero-error traces)
 uv run distill run examples/hf-hub-qa/run-think-fullcot.toml --dry-run
+
+# Data-vs-recipe ablation: recipe (a) on the same 1,025 curated traces, then its judged evaluation
+uv run distill run examples/hf-hub-qa/run-think-curated.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-think-curated-judged.toml --dry-run
 
 # Secondary judged evaluation (teacher pilot / student eval)
 uv run distill run examples/hf-hub-qa/run-judged-pilot.toml --dry-run
