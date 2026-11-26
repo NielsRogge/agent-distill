@@ -16,6 +16,9 @@ training patch and whether the teacher's reasoning is distilled come from the st
   (`<think>\n\n</think>\n\n`) that is in the context but not supervised; the loss starts after it. A trajectory longer
   than `--max-length` is cut to its longest prefix of complete turns. The student is then served with thinking on
   (e.g. the `qwen3.5-4b-think` profile) and reasons in its own words before acting.
+- `--keep-reasoning` (with the default `--think-target native`): the paper's full-CoT target. Every think block holds
+  the teacher's reasoning; only `<think>` is prompt, and the thought, `</think>` and the action are supervised. Long
+  trajectories are cut to complete turns, as with the empty target.
 - `--strip-visible-text`: a turn that calls tools keeps only its calls (the teacher's prose around them is dropped).
   A turn without tool calls is the final natural-language answer of a `TextAnswer` task and keeps its text.
 - `--summaries-repo`: CoT-proxies from the `annotate` stage. Each turn becomes `<think></think><summary>S</summary>`
@@ -396,8 +399,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     recipe.add_argument(
         "--strip-visible-text",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=False,
         help="Drop the prose of turns that call tools (the final answer turn keeps its text)",
+    )
+    recipe.add_argument(
+        "--keep-reasoning",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Render the teacher's reasoning in each think block and supervise it (the paper's full-CoT target, with "
+        "--think-target native); default: the student profile's [sft] keep_reasoning",
     )
     recipe.add_argument("--summaries-repo", default="", help="CoT-proxy summaries (the annotate stage's dataset)")
     recipe.add_argument("--summaries-file", default="summaries/summaries.jsonl")
@@ -426,7 +437,8 @@ PAPER_DEFAULTS = {"learning_rate": 3e-5, "epochs": 8.0, "lora_dropout": 0.0, "wa
 
 
 def cross_format(args: argparse.Namespace) -> bool:
-    return args.think_target == "empty" or bool(args.replay_repo) or bool(args.summaries_repo)
+    return (args.think_target == "empty" or bool(args.replay_repo) or bool(args.summaries_repo)
+            or bool(args.keep_reasoning))  # fmt: skip
 
 
 def resolve_defaults(args: argparse.Namespace) -> argparse.Namespace:
@@ -435,6 +447,8 @@ def resolve_defaults(args: argparse.Namespace) -> argparse.Namespace:
     for key, value in defaults.items():
         if getattr(args, key) is None:
             setattr(args, key, value)
+    if args.keep_reasoning and args.think_target == "empty":
+        raise SystemExit("--think-target empty supervises no reasoning: --keep-reasoning needs --think-target native")
     if args.traces_files and len(dict.fromkeys(args.traces_repo or [])) > 1:
         raise SystemExit("--traces-files cannot be combined with multiple --traces-repo values")
     if args.summaries_repo and args.think_target != "empty":
@@ -473,9 +487,10 @@ def main(argv: list[str] | None = None) -> None:
         max_metrics=parse_metric_caps(args.max_metric),
         max_tool_calls=args.max_tool_calls,
     )
-    keep_reasoning = student.sft.keep_reasoning
+    keep_reasoning = student.sft.keep_reasoning if args.keep_reasoning is None else args.keep_reasoning
     if args.think_target == "empty" and keep_reasoning:
-        raise SystemExit("--think-target empty supervises no reasoning; the student profile sets keep_reasoning")
+        raise SystemExit("--think-target empty supervises no reasoning; drop --keep-reasoning (or the student "
+                         "profile's keep_reasoning)")  # fmt: skip
     summaries = None
     if args.summaries_repo:
         summaries = load_summaries(args.summaries_repo, args.summaries_file, records, args.min_summary_coverage)
@@ -501,7 +516,7 @@ def main(argv: list[str] | None = None) -> None:
     tokenizer.pad_token = tokenizer.pad_token or tokenizer.eos_token
     render = render_trajectory_examples if args.full_trajectory else render_examples
     examples = render(trajectories, tokenizer, tools, args.think_target)
-    rows = tokenize_examples(examples, tokenizer, args.max_length, whole_turns=args.think_target == "empty")
+    rows = tokenize_examples(examples, tokenizer, args.max_length, whole_turns=cross_format(args))
     supervised = sum(sum(row["completion_mask"]) for row in rows)
     print(f"{len(rows)} tokenized examples, {supervised} supervised tokens", flush=True)
     replay = heldout = None

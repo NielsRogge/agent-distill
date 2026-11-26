@@ -481,10 +481,16 @@ def trace_jobs(run: Run, rev: str) -> list[jobs.Job]:
     return built
 
 
+def sft_replay(run: Run) -> bool:
+    """Whether SFT uses KL replay: the run's `[sft] replay`, else the student profile's."""
+    replay = run.config.sft.replay
+    return student_profile(run).sft.replay if replay is None else replay
+
+
 def recipe_args(run: Run) -> list[str]:
     """The SFT stage's inputs from the cross-format recipe's stages (`[sft] replay` / `summaries`)."""
     args = []
-    if run.config.sft.replay:
+    if sft_replay(run):
         args += ["--replay-repo", jobs.q(run.repo("replay"))]
     if run.config.sft.summaries:
         args += ["--summaries-repo", jobs.q(run.repo("summaries"))]

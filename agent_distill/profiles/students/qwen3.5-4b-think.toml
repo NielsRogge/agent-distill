@@ -4,9 +4,14 @@
 # model), and Qwen3.5's chat template renders it in every assistant turn after the user's question: the student's own
 # reasoning stays in its history, as in the CoT-proxy paper's inference setting (arXiv 2611.33148, Table 11).
 #
-# Use it for the base model with thinking on and for students trained with the cross-format recipe
-# (`--think-target empty`: an empty think block in every training target, thinking on at inference). Not for the
-# action-only students of `qwen3.5-4b-nothink`, whose training targets supervise the empty think block itself.
+# The default student for agentic tasks: its `[sft]` trains with the cross-format recipe (CoT-proxy paper, variant
+# without CoT-proxies): an empty, unsupervised think block before every training target, the teacher's prose around
+# tool calls stripped, and KL replay on the initial student's own out-of-domain generations; thinking stays on at
+# inference. On hf-hub-qa-mcp it reached 98.1% (370/377) against 81.4% for action-only SFT served without thinking
+# (examples/hf-hub-qa-mcp/README.md). Replay needs a pool: the run's `replay` stage, or a shared one in `[repos] replay`
+# (nielsr/qwen35-4b-think-replay-openr1-oasst for Qwen3.5-4B). A run opts out with `[sft] replay = false` and
+# `args = ["--think-target", "native", "--no-strip-visible-text"]`. Not for the action-only students of
+# `qwen3.5-4b-nothink`, whose training targets supervise the empty think block itself.
 #
 # 8,192 output tokens per turn (the paper's cap; the 1,024 default would cut most reasoning off). Qwen3.5-4B ships no
 # generation_config.json, so vLLM would sample at temperature 1.0 with no top-k; evaluations use the paper's decoding
@@ -26,6 +31,8 @@ generation_config = { temperature = 0.6, top_p = 0.95, top_k = 20 }
 # The convolution stays on its torch fallback (causal-conv1d needs a CUDA build).
 deps = ["accelerate==1.14.0", "bitsandbytes>=0.49.0", "datasets>=4.0.0", "peft==0.20.0", "torch>=2.7.0",
         "transformers==5.14.1", "trl==1.9.2", "flash-linear-attention==0.6.0"]
-# No --epochs here: with the cross-format recipe the SFT stage defaults to the paper's 8 passes, lr 3e-5, LoRA r16,
+# No --epochs here: the cross-format recipe makes the SFT stage default to the paper's 8 passes, lr 3e-5, LoRA r16,
 # no dropout and 2 warmup updates (stages.sft PAPER_DEFAULTS); without it, to the usual 2 passes at 2e-4.
-args = ["--no-4bit", "--max-length", "32768", "--full-trajectory", "--save-steps", "50"]
+args = ["--no-4bit", "--max-length", "32768", "--full-trajectory", "--save-steps", "50", "--think-target", "empty",
+        "--strip-visible-text"]
+replay = true

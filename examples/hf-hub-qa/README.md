@@ -47,6 +47,7 @@ Qwen3.5-4B), dataset and checker, so only the tool surface differs.
 ```bash
 distill run examples/hf-hub-qa/run.toml --dry-run              # traces -> SFT -> merge -> eval (base, SFT, teacher)
 distill run examples/hf-hub-qa/run-judged-pilot.toml --dry-run # the judged questions (teacher pilot)
+distill run examples/hf-hub-qa/run-think.toml --dry-run        # recommended: thinking student, recipe (a)
 uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged questions as JSON
 ```
 
@@ -182,3 +183,38 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
     reached `97.9%` on full `test` (`98.9%` `fact_correct`), leaving little reward headroom on `nielsr/hf-hub-facts-v2`.
   - Spend: additional 562 teacher traces $17.02; GPU ~$16 (H200 SFT 57 min, A100 merge 2 min, H200 validation +
     377-row test + 51-row judged evals); Gemini judge <$1.
+
+## Thinking student (CoT-proxy recipe, 2026-11-26)
+
+`run-think.toml` is the recommended route; `run.toml` stays as the record of the thinking-off phase 1. It trains the
+`qwen3.5-4b-think` student with variant (a) of the CoT-proxy paper (arXiv 2611.33148), the profile's default: every
+SFT target opens with an empty think block (context, no loss), the teacher's prose around tool calls is stripped, and
+each update mixes 17 teacher trajectories with 3 samples of KL replay on the initial student's own out-of-domain
+generations (LoRA r16, lr 3e-5, 8 passes). The student thinks at inference. The recipe and its MCP ablation are in
+[docs/DESIGN.md](../../docs/DESIGN.md#cross-format-sft-cot-proxy-recipe) and the MCP twin's README.
+
+Same 600 GLM-5.3 traces as phase 1, `test[:150]`, first record per row (the teacher had no reruns, so first and final
+record agree). Published as run `qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160`; held-out drift 2.1e-3 nats/token.
+
+| Model | Passed | Tool calls/ep |
+| --- | ---: | ---: |
+| Base, thinking off | 71/150 (47.3%) | 8.62 |
+| Phase 1 SFT, thinking off | 117/150 (78.0%) | 7.19 |
+| Base, thinking on | 130/150 (86.7%) | 6.09 |
+| **Recipe (a), thinking on** | **145/150 (96.7%)** | 4.45 |
+| Full-CoT SFT, thinking on (#21, `run-think-fullcot.toml`) | 148/150 (98.7%) | 4.10 |
+| GLM-5.3 teacher | 148/150 (98.7%) | 4.58 |
+
+- Paired exact McNemar for recipe (a): vs phase 1 SFT 31 fixed / 3 broken (p = 7.7e-7); vs base thinking 18 / 3
+  (p = 0.0015); vs the teacher 1 ahead / 4 behind (p = 0.38).
+- Against #21's full-CoT run recipe (a) is 3 behind and none ahead (p = 0.25); all three are grounding misses with
+  the right fact. The full-CoT run changes several things at once (1,025 traces curated to zero `hf` errors instead
+  of 600, reasoning supervised instead of an empty think block, no stripping, no replay, 3 epochs at cosine 1e-4
+  instead of 8 at 3e-5), so the gap is not attributable to the target alone. On the 51 judged open-ended questions
+  it scores 26/51 against the teacher's 43/51; recipe (a) has not been run there.
+- Per template (base thinking / recipe (a) / teacher): `base_params` 18 / 30 / 30 of 30, `params_sum` 26 / 26 / 26,
+  `paper_first_author` 23 / 25 / 26, `paper_title` 24 / 23 / 24, `gguf_count` 12 / 13 / 15, `safetensors_count`
+  12 / 12 / 12, `base_pipeline` 11 / 12 / 11, `base_license` 4 / 4 / 4.
+- Row count: this comparison uses `test[:150]` like phase 1. Runs reported on the full `test` (377 rows), such as a CLI
+  GRPO, are not comparable with it row for row.
+- Spend: SFT about $7 (1.5 h), evaluation about $6; traces and the replay pool were reused.
