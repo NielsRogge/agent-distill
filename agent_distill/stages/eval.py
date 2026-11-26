@@ -266,11 +266,15 @@ def publish(
     collection: str = "",
     note: str = "",
 ) -> None:
-    """Upload the episodes, sessions and summaries to the private `repo` (public only after `distill publish`) and
-    the raw logs to the always-private `raw_repo`. A newly created `repo` is added to `collection` at once."""
+    """Upload the episodes, sessions and summaries to the private `repo` (public only after `distill publish`), then
+    the raw logs to the always-private `raw_repo` (without `raw_dir`, raw logs stay local). A newly created `repo` is
+    added to `collection` at once."""
     from huggingface_hub import HfApi
 
     api = HfApi()
+    has_raw = raw_dir is not None and raw_dir.exists() and any(raw_dir.rglob("*.jsonl"))
+    if has_raw and not raw_repo:
+        raise PublishRefused("raw harness logs need a private --raw-repo; they never go into the episode dataset")
     created = private_dataset(api, repo)
     if created and collection:
         api.add_collection_item(collection, item_id=repo, item_type="dataset", note=note or f"{task}, {harness_id}",
@@ -281,9 +285,7 @@ def publish(
     api.upload_folder(folder_path=str(output_dir), repo_id=repo, repo_type="dataset", ignore_patterns=["raw/**"],
                       commit_message=f"agent-distill evaluation ({harness_id})")  # fmt: skip
     print(f"published {output_dir} to {repo} (private)", flush=True)
-    if raw_dir is not None and raw_dir.exists() and any(raw_dir.rglob("*.jsonl")):
-        if not raw_repo:
-            raise PublishRefused("raw harness logs need a private --raw-repo; they never go into the episode dataset")
+    if has_raw:  # after the episodes, so a failed raw upload (e.g. a full private quota) never loses them
         private_dataset(api, raw_repo)
         api.upload_folder(folder_path=str(raw_dir), repo_id=raw_repo, repo_type="dataset",
                           commit_message=f"agent-distill raw harness logs ({harness_id})")  # fmt: skip
@@ -355,7 +357,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Minutes between checkpoint uploads to --output-repo (0: only at the end)")  # fmt: skip
     parser.add_argument("--raw-output-dir", type=Path, help="Raw harness logs (default: <output-dir>-raw)")
     parser.add_argument("--raw-repo", default="", help="Always-private raw-log dataset (default: <output-repo>-raw)")
-    parser.add_argument("--no-raw-upload", action="store_true", help="Keep raw harness logs local (do not upload)")
+    parser.add_argument(
+        "--no-raw-upload",
+        action="store_true",
+        help="Keep raw harness logs in the job only (e.g. when the account's private storage is full)",
+    )
     parser.add_argument("--collection", default="", help="Collection to add a newly created --output-repo to")
     parser.add_argument("--collection-note", default="")
     parser.add_argument("--answer-retry", action="store_true",
@@ -379,8 +385,8 @@ def main(argv: list[str] | None = None) -> None:
     harness = load_harness(profile, **options)
     cache = args.cache or default_cache()
     raw_dir = args.raw_output_dir or raw_root_for(args.output_dir)
-    raw_repo = "" if args.no_raw_upload else (args.raw_repo or (f"{args.output_repo}-raw" if args.output_repo else ""))
-    upload_raw = None if args.no_raw_upload else raw_dir
+    raw_repo = "" if args.no_raw_upload else args.raw_repo or (f"{args.output_repo}-raw" if args.output_repo else "")
+    upload_raw = None if args.no_raw_upload else raw_dir  # raw logs are still written in the job, never uploaded
     limits = Limits(timeout=args.timeout, max_tool_calls=args.max_tool_calls)
     if args.output_repo:
         refuse_public(args.output_repo, raw_repo)

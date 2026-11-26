@@ -285,7 +285,9 @@ class HubSettings:
     namespace: str = ""
     bill_to: str = ""  # X-HF-Bill-To for Inference Providers and --namespace for Jobs ("" = your account)
     collection: str = ""
-    raw_logs: bool = True  # upload raw harness logs to the private -raw repo (false: keep local to the job)
+    # Upload raw harness logs to the always-private `-raw` datasets. False keeps them in the jobs only (e.g. when the
+    # account's private storage is full); the episodes and sessions, which rescoring reads, are uploaded either way.
+    raw_logs: bool = True
 
 
 @dataclass
