@@ -145,12 +145,14 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
 
   | | Base Qwen3.5-4B | SFT | SFT + GRPO | GLM-5.3 |
   | --- | --- | --- | --- | --- |
-  | Passed | 206/377 (54.6%) [72.1%] | 321/377 (85.1%) [81.4%] | **331/377 (87.8%)** [96.0%] | 375/377 (99.5%) [98.7%] |
+  | Passed | 206/377 (54.6%) [72.1%] | 321/377 (85.1%) [81.4%] | **331/377 (87.8%)** [96.0%] | 375/377 (99.5%) [96.3%] |
   | Hit the 15-call limit | 91 | 30 | 18 | 0 |
   | Tool calls per episode | 8.9 | 7.0 | 4.9 | 4.3 |
   | `hf` calls / rejected per episode | 4.3 / 0.50 | 5.5 / 0.93 | 3.7 / 0.22 | 3.1 / 0.10 |
   | Read the skill | 2% | 93% | 70% | 92% |
 
+  - Both teachers are counted on the first record per question, the same rule the students get. The MCP twin's
+    98.7% counts records rerun by its traces stage (see its README). Here the teacher ran once per question.
   - Paired comparisons:
     - SFT against base: 141 questions fixed, 26 broken (sign test p ≈ 2.6e-20).
     - GRPO against SFT: 46 fixed, 36 broken (p ≈ 0.32).
