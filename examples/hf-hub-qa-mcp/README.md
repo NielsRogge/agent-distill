@@ -1,8 +1,8 @@
 # hf-hub-qa-mcp: Hub questions answered through the Hugging Face MCP server
 
-**Status: phase 1 (SFT) done on v2. On all 377 test questions, SFT on 599 GLM-5.3 traces takes non-thinking
-Qwen3.5-4B from 72.1% to 81.4% (McNemar p = 0.001; teacher 98.7%), and cuts its failed MCP calls from 45% to 12%. Pi
-GRPO works (2-step smoke); full GRPO awaits a budget decision.**
+**Status: done. On all 377 v2 test questions, non-thinking Qwen3.5-4B goes from 72.1% (base) to 81.4% (SFT on 599
+GLM-5.3 traces) to 96.0% (GRPO, 100 steps), close to the teacher's 98.7%, with fewer MCP calls than the teacher (1.75
+against 3.15 per episode). See "Results: GRPO (phase 2)".**
 
 A Pi agent answers questions about the Hugging Face Hub using only the tools of the
 [Hugging Face MCP server](https://huggingface.co/docs/hub/en/agents-mcp), through
@@ -381,3 +381,55 @@ call `mcp__hf__*` from the trajectories alone, without their schemas in the prom
 - GRPO is unaffected. Its rollouts run in Pi, so its token capture contains the real MCP tool definitions.
 - A future SFT rerun should use main after #19, which renders the MCP tools from `Task.mcp_servers` (once #13 lands)
   and drops `submit` for `TextAnswer` tasks.
+
+## Results: GRPO (phase 2, 2026-11-26)
+
+The user approved phase 2 with a $150 GPU cap; it used **$74.57**.
+
+1. **Difficulty probe** ($15.27): the SFT model (served non-thinking, temperature 0.8) answered all 1,162 v2 train
+   questions 4 times each. Passes out of 4 → rows: 0 → 36, 1 → 59, 2 → 89, 3 → 202, 4 → 776. The 350 rows solved 1-3
+   times form the GRPO pool. None of them shares an entity with the test split.
+2. **GRPO** ($56.39, 5 h 38 min on 2× H200): TRL async GRPO in Pi with the real MCP tools, from the SFT checkpoint.
+   - 100 steps, 2 prompts per step (200 draws from 350 rows, no repeats), 8 generations per prompt;
+   - 16 concurrent rollouts against the anonymous HF MCP server;
+   - LoRA, reward = the task's rubric reward (the fact check, gated, plus the 0.1 tool-efficiency bonus).
+
+   Adapter: [`…-grpo-lora`](https://huggingface.co/nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-lora); merged
+   model: [`…-grpo-merged`](https://huggingface.co/nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-merged).
+3. **Evaluation** ($2.82): all 377 test questions, served non-thinking, scored by the task's rubrics.
+
+| | Passed | MCP calls / episode | Failed MCP calls |
+|---|---|---|---|
+| Qwen3.5-4B (base) | 272/377 (72.1%) | 6.13 | 45.0% |
+| + SFT | 307/377 (81.4%) | 3.38 | 11.9% |
+| **+ SFT + GRPO** | **362/377 (96.0%)** | **1.75** | **1.2%** |
+| GLM-5.3 (teacher) | 372/377 (98.7%) | 3.15 | 6.6% |
+
+Paired on the same 377 questions (exact McNemar):
+
+- SFT → GRPO: fixed 64, broke 9, **p = 2.4e-11**;
+- base → GRPO: fixed 96, broke 6, p = 5.7e-22;
+- base → SFT: fixed 72, broke 37, p = 0.001.
+
+| Template | n | Base | SFT | GRPO | Teacher |
+|---|---|---|---|---|---|
+| gguf_count | 37 | 15 | 17 | **34** | 37 |
+| safetensors_count | 20 | 13 | 12 | **20** | 20 |
+| base_params | 81 | 57 | 63 | **79** | 80 |
+| paper_title | 69 | 47 | 61 | **67** | 69 |
+| params_sum | 52 | 45 | 40 | **49** | 50 |
+| paper_first_author | 67 | 56 | 66 | 66 | 67 |
+| base_pipeline | 36 | 25 | 34 | 33 | 36 |
+| base_license | 15 | 14 | 14 | 14 | 13 |
+
+**What GRPO learned.** The templates SFT could not fix are where GRPO gained most. For file counts the GRPO student
+makes one precise call, `hf_fs find hf://models/<repo> --recursive --name "*.gguf"`, then states the count. The SFT
+student listed folders one by one and lost count. Across all episodes it makes 1.75 MCP calls per question, fewer than
+the teacher, and only 1.2% of them fail: the tool-efficiency bonus rewards one well-formed call over several
+exploratory ones. Spot checks show legitimate answers: the count is stated first and checked against the listing, and
+a miscount (32 against a gold of 34) still fails.
+
+Caveats:
+
+- The SFT stage trained with the wrong tool list (see above); GRPO's rollouts used the real MCP tools.
+- One GRPO answer still showed `</think>` despite thinking off, as did one base answer.
