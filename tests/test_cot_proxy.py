@@ -405,3 +405,41 @@ def test_the_thinking_profiles_sampling_is_for_evaluation_only():
     assert "--override-generation-config" not in student.serve.vllm_extra_args  # GRPO's vLLM never sees it
     args = sft.parse_args([*BASE_ARGS, *student.sft.args, "--think-target", "empty"])
     assert args.epochs == 8.0  # the profile's SFT args leave the recipe's defaults alone
+
+
+# --------------------------------------------------------------------------------------------------
+# Recipe (a) is the thinking student's default (98.1% vs 81.4% on hf-hub-qa-mcp)
+# --------------------------------------------------------------------------------------------------
+
+
+def sft_job_args(run: pipeline.Run) -> list[str]:
+    (job,) = pipeline.sft_jobs(run, "R")
+    return shlex.split(next(line for line in job.command.splitlines() if "agent_distill.stages.sft" in line))
+
+
+def test_the_thinking_student_trains_with_the_cross_format_recipe_by_default():
+    student = load_profile("students", "qwen3.5-4b-think")
+    assert student.sft.replay
+    args = sft.parse_args([*BASE_ARGS, *student.sft.args, "--replay-repo", "o/r"])
+    assert (args.think_target, args.strip_visible_text, args.epochs, args.learning_rate, args.lora_rank) == (
+        "empty", True, 8.0, 3e-5, 16)  # fmt: skip
+    run = pipeline.make_run(load_run(SMOKE, {"student": "qwen3.5-4b-think",
+                                              "repos": {"replay": "nielsr/qwen35-4b-replay"}}))  # fmt: skip
+    assert pipeline.sft_replay(run)
+    command = sft_job_args(run)
+    assert command[command.index("--replay-repo") + 1] == "nielsr/qwen35-4b-replay"
+
+
+def test_a_run_can_opt_out_of_the_recipe():
+    student = load_profile("students", "qwen3.5-4b-think")
+    opt_out = ["--think-target", "native", "--no-strip-visible-text"]
+    run = pipeline.make_run(load_run(SMOKE, {"student": "qwen3.5-4b-think", "sft.replay": False, "sft.args": opt_out}))
+    assert not pipeline.sft_replay(run) and "--replay-repo" not in sft_job_args(run)
+    args = sft.parse_args([*BASE_ARGS, *student.sft.args, *run.config.sft.args])
+    assert (args.think_target, args.strip_visible_text, args.epochs) == ("native", False, 2.0)
+
+
+def test_other_students_keep_the_legacy_recipe():
+    run = pipeline.make_run(load_run(SMOKE))
+    assert run.config.sft.replay is None and not pipeline.sft_replay(run)
+    assert "--replay-repo" not in sft_job_args(run)

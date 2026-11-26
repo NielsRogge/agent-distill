@@ -332,7 +332,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     recipe.add_argument(
         "--strip-visible-text",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=False,
         help="Drop the prose of turns that call tools (the final answer turn keeps its text)",
     )
     recipe.add_argument("--summaries-repo", default="", help="CoT-proxy summaries (the annotate stage's dataset)")
