@@ -41,7 +41,7 @@ import tarfile
 import tempfile
 import threading
 import time
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -528,8 +528,19 @@ class Pi:
             raise RuntimeError(f"{runner.cli} vanished")
 
     async def run_episode(
-        self, runner: Runner, task: Task, row: dict[str, Any], endpoint: Endpoint, limits: Limits, *, title: str = ""
+        self,
+        runner: Runner,
+        task: Task,
+        row: dict[str, Any],
+        endpoint: Endpoint,
+        limits: Limits,
+        *,
+        title: str = "",
+        on_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> Episode:
+        """One episode. `on_event`, if given, receives each record of Pi's JSON event stream as it arrives (tool calls
+        starting and ending, thinking and text deltas, finished messages: Pi's `docs/json.md`), e.g. for a live view.
+        The episode itself is still read from the session file once Pi has exited."""
         row_id = task.row_id(row)
         # Each episode gets its own private directory (0700), removed once the episode is read. As root, the agent runs
         # as its own UID that owns only that directory (agent_distill.harnesses.isolation); otherwise it runs as the
@@ -539,7 +550,7 @@ class Pi:
         try:
             with isolation.agent_user() as uid, key_proxies([endpoint]) as (routed,):  # the real key stays here
                 return await self._run_in(episode_dir, runner, task, row, row_id, routed, limits, uid=uid,
-                                          root_fd=root_fd)  # fmt: skip
+                                          root_fd=root_fd, on_event=on_event)  # fmt: skip
         finally:
             os.close(root_fd)
             await asyncio.to_thread(shutil.rmtree, episode_dir, True)
@@ -556,6 +567,7 @@ class Pi:
         *,
         uid: int | None = None,
         root_fd: int | None = None,
+        on_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> Episode:
         workspace, agent_dir, sessions = episode_dir / "workspace", episode_dir / "agent", episode_dir / "sessions"
         home = episode_dir / "home"
@@ -589,7 +601,8 @@ class Pi:
 
         async def drain() -> None:  # stdout must be read continuously or Pi stalls; the session file is the record
             assert process.stdout is not None and process.stderr is not None
-            await asyncio.gather(_discard(process.stdout), _collect(process.stderr, stderr))
+            stdout = _discard(process.stdout) if on_event is None else _events(process.stdout, on_event)
+            await asyncio.gather(stdout, _collect(process.stderr, stderr))
 
         try:
             async with asyncio.timeout(limits.timeout):
@@ -624,6 +637,25 @@ class Pi:
 async def _discard(stream: asyncio.StreamReader) -> None:
     while await stream.read(1 << 16):
         pass
+
+
+async def _events(stream: asyncio.StreamReader, on_event: Callable[[dict[str, Any]], None]) -> None:
+    """Pi's JSONL event stream: records split on LF only (U+2028 and U+2029 are valid inside JSON strings), each parsed
+    and handed to `on_event`. A record that does not parse, or a callback that raises, never stops the episode."""
+    pending = b""
+    while chunk := await stream.read(1 << 16):
+        pending += chunk
+        *records, pending = pending.split(b"\n")
+        for record in records:
+            if not record.strip():
+                continue
+            with suppress(ValueError):
+                event = json.loads(record)
+                if isinstance(event, dict):
+                    try:
+                        on_event(event)
+                    except Exception:  # a broken observer must not cost the episode
+                        pass
 
 
 async def _collect(stream: asyncio.StreamReader, sink: bytearray) -> None:
