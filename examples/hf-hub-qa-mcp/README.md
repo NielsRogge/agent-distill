@@ -63,16 +63,51 @@ Evaluated on all **377 test questions** of `nielsr/hf-hub-facts-v2` in `pi@1.6.0
 native mode) on all 377 test questions with `run-think.toml`'s settings (300 s, 15 tool calls, 4 concurrent episodes).
 The `inkling-2-mini` profile serves only on RTX PRO 6000 with the `vllm/vllm-openai:inkling-2-mini` image (inkling tool
 and reasoning parsers); its hook modules are copied from url-extraction into [`../inkling-2-mini`](../inkling-2-mini).
-Estimated cost: one RTX PRO 6000 job per task (~$2.75/h), 2-3 h each, so ~$6-8 per task.
 
-Results: pending (the evaluation jobs have not run yet). [`analyze_inkling.py`](analyze_inkling.py) produces the
-comparison once they have: first record per row, exact paired McNemar tests against the thinking base, recipe (a) and
-the GLM-5.3 teacher, plus per-template pass rates, failure modes, tool calls, wall time and thinking length.
+Results (Nov 2026; first record per row, exact McNemar tests on the paired rows; eval datasets
+[MCP](https://huggingface.co/datasets/nielsr/inkling-2-mini-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
+[CLI](https://huggingface.co/datasets/nielsr/inkling-2-mini-hf-hub-qa-v2-glm-53-pi-160-eval)). Each job took 76 min
+(~$3.50); with the 5-question smoke runs, Phase 1 cost ~$8 of GPU.
+
+| Inkling-2-Mini base vs. | MCP: Inkling / other (only Inkling, only other, p) | CLI: Inkling / other (only Inkling, only other, p) |
+|---|---|---|
+| Qwen3.5-4B base, thinking | **360** / 336 of 377 (37, 13, p = 0.00094) | **145** / 130 of 150 (19, 4, p = 0.0026) |
+| Qwen3.5-4B recipe (a) | 360 / 370 of 377 (6, 16, p = 0.052) | 145 / 145 of 150 (4, 4, p = 1.0) |
+| Qwen3.5-4B full-CoT SFT | - | 367 / 369 of 377 (5, 7, p = 0.77) |
+| GLM-5.3 teacher | 360 / 363 of 377 (9, 12, p = 0.66) | 367 / **375** of 377 (2, 10, p = 0.039) |
+
+- **Pass rate:** 95.5% on MCP and 97.3% on the CLI (367/377 after the `read_only` fix below; the published records
+  say 365). Out of the box it beats the thinking Qwen base on both tasks. It is level with recipe (a), the full-CoT SFT
+  and the MCP teacher, and below the CLI teacher.
+- **Failures:**
+  - Budget exhaustion is most of them: on MCP, 8 replies hit the 4096-token output limit, 5 hit the 15-call limit and
+    1 timed out. On the CLI, 5 hit the call limit and 2 timed out.
+  - Only 3 answers are wrong facts (2 MCP, 1 CLI), plus 1 CLI wrong fact where the skill was never read.
+  - One row per task is unscorable: `AtomicChat/Inkling-2-Mini-Uncensored-GGUF` grew from 7 to 14 `.gguf` files after
+    the snapshot, and Inkling answered 14.
+  - There are no reasoning leaks or think tags in answers, and no tool-call or reasoning-parser errors. The truncated
+    replies are long deliberation, not loops (distinct 8-grams ≈ 1.0).
+- **Templates:** the misses sit in the parameter questions. On MCP that is `base_params` 72/81 and `params_sum` 46/52;
+  on the CLI, `params_sum` 47/52. Every other template is at 36/37 or better.
+- **Cost per episode:**
+  - MCP: 4.6 tool calls (teacher 3.2, recipe (a) 2.2); 44 s mean and 18 s median wall time; 2,110 output tokens.
+  - CLI: 5.9 calls; 44 s mean and 27 s median wall time.
+  - Reasoning: a median of 60 words per turn (MCP) and 39 (CLI), similar to the Qwen thinking runs. Inkling often
+    calls a tool with no reasoning at all (186 of its CLI turns).
+  - The CLI skill was read in 290/377 episodes (77%).
+- **Rubric fix:** the CLI's `read_only` gate counted `hf repos branch list` as a write. That command doesn't exist
+  (the `branch` group only has `create` and `delete`) and wrote nothing. The gate now matches only
+  `branch create|delete`. A scan of every public hf-hub-qa CLI record found only one other affected record, a GRPO
+  probe attempt (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-grpo-eval`, `episodes/probe/train-0of4.jsonl`). `distill rescore`
+  leaves that file at 648/700 passed. Inkling moves from 365 to 367. No published Qwen or teacher number moves.
+- **Caveat:** the profile caps Inkling at 4,096 output tokens per reply, while `qwen3.5-4b-think` gets 8,192. The 8 MCP
+  truncations are therefore partly a setting.
 
 ```bash
 uv run distill run examples/hf-hub-qa-mcp/run-inkling.toml --dry-run
 uv run distill run examples/hf-hub-qa/run-inkling.toml --dry-run
-uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task mcp   # or --task cli
+uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task mcp
+uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task cli --passed d2303c64450f 330b2ba29472  # rescored rows
 ```
 
 ## CLI vs. MCP comparison

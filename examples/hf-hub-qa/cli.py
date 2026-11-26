@@ -20,7 +20,7 @@ from agent_distill.rubrics import metric, process, programmatic
 
 WRITE_COMMANDS = re.compile(
     r"\bhf\s+(?:upload|sync|cp|auth\s+(?:login|logout|switch)"
-    r"|repos?\s+(?:create|delete|settings|move|branch|tag\s+(?:create|delete)|duplicate)"
+    r"|repos?\s+(?:create|delete|settings|move|(?:branch|tag)\s+(?:create|delete)|duplicate)"
     r"|(?:jobs|endpoints|webhooks|buckets|collections|discussions|sandbox)\s+"
     r"(?:run|uv|create|deploy|delete|pause|resume|update|scale-to-zero|add-item|update-item|delete-item|comment|close"
     r"|reopen|merge|rename|cancel|scheduled)"
