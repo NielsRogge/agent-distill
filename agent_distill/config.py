@@ -102,6 +102,9 @@ class ServeSettings:
     max_output_tokens: int = 1024
     gpu_memory_utilization: float = 0.85
     vllm_extra_args: str = ""
+    # Sampling for evaluation serving (vLLM --override-generation-config), e.g. a thinking student's decoding. The probe
+    # and GRPO never use it: they sample at their own temperature (untruncated, for GRPO's logprobs).
+    generation_config: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -299,6 +302,9 @@ class EvalSettings:
     # ... or explicit models, label -> "model[+adapter]" (replaces `variants`)
     models: dict[str, str] = field(default_factory=dict)
     answer_retry: bool = False  # OpenCode 2.x: ask once for the JSON answer when an episode ends without one
+    # OpenCode: a bash call naming a missing `workdir` fails with an error the model sees (instead of hanging until
+    # the episode times out). Off only for parity runs that must match the reference harness exactly.
+    workdir_guard: bool = True
 
 
 @dataclass
@@ -313,6 +319,25 @@ class TracesRun:
 class SFTRun:
     args: list[str] = field(default_factory=list)  # appended after the student profile's [sft] args
     timeout: str = ""  # default: the student profile's
+    # Cross-format recipe (stages.sft): KL replay on the `replay` dataset, CoT-proxies from the `summaries` dataset
+    # (repos default to the run's own `<run>-replay` / `<run>-summaries`; `[repos]` can point to shared ones).
+    replay: bool = False
+    summaries: bool = False
+
+
+@dataclass
+class AnnotateRun:
+    model: str = "Qwen/Qwen3-4B-Instruct-2507"  # the CoT-proxy annotator (stages.annotate)
+    flavor: str = ""  # default: the student's serving flavor
+    timeout: str = "1h"
+
+
+@dataclass
+class ReplayRun:
+    size: int = 1000  # the initial student's out-of-domain generations (stages.replay)
+    heldout: int = 100  # more, held out for the drift probe
+    max_tokens: int = 4096
+    timeout: str = "2h"
 
 
 @dataclass
@@ -351,6 +376,8 @@ class RunConfig:
     eval: EvalSettings = field(default_factory=EvalSettings)
     traces: TracesRun = field(default_factory=TracesRun)
     sft: SFTRun = field(default_factory=SFTRun)
+    annotate: AnnotateRun = field(default_factory=AnnotateRun)
+    replay: ReplayRun = field(default_factory=ReplayRun)
     probe: ProbeRun = field(default_factory=ProbeRun)
     grpo: GRPORun = field(default_factory=GRPORun)
     budget: Budget = field(default_factory=Budget)

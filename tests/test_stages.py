@@ -141,8 +141,8 @@ def test_eval_models_variants():
 def test_artifacts_cover_every_stage():
     artifacts = pipeline.artifacts(smoke_run())
     suffixes = [repo.removeprefix("nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-") for repo, _, _ in artifacts]
-    assert suffixes == ["traces", "lora", "sft-merged", "grpo-lora", "grpo-merged", "eval"]
-    assert all("opencode@2.3.2" in note for _, _, note in artifacts)
+    assert suffixes == ["traces", "lora", "sft-merged", "grpo-lora", "grpo-merged", "eval", "summaries", "replay"]
+    assert all("opencode@2.3.2" in note for _, _, note in artifacts[:-1])  # the replay pool depends on the student only
 
 
 class ScriptedHarness:
