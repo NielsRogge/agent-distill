@@ -313,6 +313,7 @@ class EvalSettings:
 @dataclass
 class TracesRun:
     split: str = "train"
+    start: int = 0  # first row index after the task's train filter
     limit: int | None = None  # first N train rows after the task's train filter, in total over the shards (None: all)
     shards: int | None = None  # default: the teacher profile's
     attempts: int | None = None  # default: the teacher profile's

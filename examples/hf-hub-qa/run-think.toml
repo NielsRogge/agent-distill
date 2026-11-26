@@ -1,7 +1,8 @@
 # hf-hub-qa (CLI), recommended route: a thinking student trained with the cross-format recipe of the CoT-proxy paper
 # (arXiv 2611.33148, variant (a): empty think block in every SFT target, the teacher's prose around tool calls
 # stripped, KL replay on the initial student's own out-of-domain generations; thinking on at inference). The
-# `qwen3.5-4b-think` profile carries the recipe, so nothing here names it. Results: the MCP twin reached 98.1%; the CLI run is pending.
+# `qwen3.5-4b-think` profile carries the recipe, so nothing here names it. Results: 145/150 (96.7%) on the CLI
+# (published as run cfx-a), 98.1% on the MCP twin; see the README.
 #
 # The SFT reads run.toml's accepted GLM-5.3 traces (read only) and the shared Qwen3.5-4B replay pool; neither is
 # regenerated. For new traces, add "traces" to `stages` and drop `[repos] traces`; for a new pool, add "replay"
