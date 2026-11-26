@@ -1,0 +1,2 @@
+# Recorded races (agent trajectories) live in the private Space only, not in git (AGENTS.md).
+*.json

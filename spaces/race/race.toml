@@ -1,0 +1,49 @@
+# The races this Space offers. Each race names a run config, which gives the task (prompt, tools, skills, MCP servers,
+# rubrics), the teacher and student profiles, the pinned harness, the episode limits ([eval] timeout and
+# max_tool_calls) and billing ([hub] bill_to). A new teacher/student pair is a new [[races]] entry (and, for a new
+# student, a new [endpoint]); nothing in the code names a task, model or harness.
+#
+#   uv run spaces/race/deploy.py endpoint --dry-run    # the endpoint's vLLM args, from the student profile
+#   uv run spaces/race/deploy.py space --dry-run       # the Space bundle
+
+title = "Same question, two agents"
+lede = """A 4B student distilled from GLM-5.3's Pi traces (cross-format SFT, recipe (a): thinking on at inference) races \
+its teacher on a Hugging Face Hub question. Both run in the same pinned Pi harness, with the same prompt, tools and \
+limits; when both finish, the task's deterministic rubrics grade them."""
+space = "nielsr/agent-distill-race"  # private (AGENTS.md: Spaces stay private)
+
+# The student's managed Inference Endpoint: the student profile's base model, served by vLLM with the profile's
+# [serve] settings and every race's adapter as a named LoRA (the race id). Scales to zero.
+[endpoint]
+name = "qwen35-4b-think-hub-qa-race"
+namespace = "huggingface"
+vendor = "aws"
+region = "us-east-1"
+instance_type = "nvidia-l4"  # the smallest GPU with bf16 that fits a 4B model at 64k context (T4 has no bf16)
+instance_size = "x1"
+price_per_hour = 0.80  # USD, for the cost readout
+scale_to_zero_minutes = 15
+max_num_seqs = 4
+# Serve with CUDA graphs (the profile's --enforce-eager off): about 2-3x faster decoding on the L4, same sampling.
+# The only difference from the `eval` stage's serving; remove this table to serve exactly as it does.
+serve = { enforce_eager = false }
+
+[[races]]
+id = "cli"  # also the adapter's served name on the endpoint
+name = "hf CLI + skill"
+run = "../../examples/hf-hub-qa/run-think.toml"
+adapter = "nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160-lora"
+student_label = "Qwen3.5-4B · recipe (a)"
+split = "test"
+limit = 150  # the test rows the published 96.7% was measured on ([eval] limit)
+tools_note = "bash + the pinned hf CLI and its hf-cli skill"
+
+[[races]]
+id = "mcp"
+name = "HF MCP tools"
+run = "../../examples/hf-hub-qa-mcp/run-think.toml"
+adapter = "nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora"
+student_label = "Qwen3.5-4B · recipe (a)"
+split = "test"
+limit = 377
+tools_note = "three anonymous HF MCP tools (hub_repo_search, hub_repo_details, hf_fs)"

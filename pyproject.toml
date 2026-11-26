@@ -13,6 +13,7 @@ dependencies = [
 [project.optional-dependencies]
 hub = ["datasets>=4.0.0"]  # label datasets for rescoring
 browser = ["playwright==1.65.2", "pillow>=11"]  # the `preview` tool and page gates (examples/html-pages)
+space = ["starlette>=0.40", "uvicorn>=0.30", "tokenizers>=0.21"]  # spaces/race: the race page (with `hub`)
 
 [project.scripts]
 distill = "agent_distill.cli:main"

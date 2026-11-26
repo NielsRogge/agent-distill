@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teacher vs Student</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --page:#f7f7f6; --card:#fcfcfb; --card-2:#f3f3f1; --ink:#1d1d1b; --ink-2:#55544f; --muted:#8a8984;
+  --line:#e2e1dc; --panel:#f3f4f6; --panel-line:#e1e3e8;
+  --head-teacher:#e8e8ea; --head-student:#f9dcd5;
+  --verb:#2a62c4; --verb-quiet:#6d6c67; --verb-answer:#0b7a3b;
+  --ok-bg:#e7f4ea; --ok-line:#7cc493; --ok-ink:#1f6b35;
+  --bad-bg:#fbe3df; --bad-line:#e79c91; --bad-ink:#a32d22;
+  --warn-bg:#fdf2d8; --warn-line:#e7c269; --warn-ink:#7a5600;
+  --run-bg:#eef0f4; --run-line:#cfd4de; --run-ink:#4a5263;
+  --tab-on:#1d1d1b; --tab-on-ink:#f7f7f6;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#141413; --card:#1b1b1a; --card-2:#232321; --ink:#ecebe6; --ink-2:#b4b3ad; --muted:#8a8984;
+    --line:#2f2f2c; --panel:#202124; --panel-line:#30323a;
+    --head-teacher:#2c2d31; --head-student:#4a2a24;
+    --verb:#7fb0ff; --verb-quiet:#a3a29c; --verb-answer:#58c983;
+    --ok-bg:#16301f; --ok-line:#2f7a48; --ok-ink:#7fdc9e;
+    --bad-bg:#3a1c18; --bad-line:#8a3a30; --bad-ink:#ff9b8e;
+    --warn-bg:#352a10; --warn-line:#8a6a1f; --warn-ink:#f2c869;
+    --run-bg:#24262c; --run-line:#3a3e48; --run-ink:#b9c0cf;
+    --tab-on:#ecebe6; --tab-on-ink:#141413;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--ink);font-family:"Source Sans 3",system-ui,sans-serif;font-size:16px;line-height:1.45}
+main{max-width:1120px;margin:0 auto;padding:32px 16px 48px}
+h1{font-size:1.6rem;font-weight:700;margin:0 0 6px;letter-spacing:-.01em}
+.lede{color:var(--ink-2);margin:0 0 18px;max-width:820px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.tabs button{font-size:.92rem;padding:6px 12px}
+.tabs button[aria-pressed="true"]{background:var(--tab-on);color:var(--tab-on-ink);border-color:var(--tab-on)}
+.tabs .sub{display:block;font-weight:400;font-size:.76rem;opacity:.75}
+.pick{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}
+.pick-left{display:flex;flex-direction:column;gap:8px;min-width:0}
+select,input[type=text]{width:100%;font:inherit;font-size:.95rem;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);min-width:0}
+input[type=text]:focus,select:focus{outline:2px solid var(--verb);outline-offset:-1px}
+.pick-row{display:flex;gap:8px;min-width:0}
+.pick-row select{flex:1 1 auto}
+.or{color:var(--muted);font-size:.85rem}
+button{font:inherit;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 16px}
+button.primary{background:var(--ink);color:var(--page);border-color:var(--ink);height:100%;min-height:44px}
+button:disabled{opacity:.45;cursor:default}
+.hint{color:var(--muted);font-size:.85rem;margin:6px 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.card-top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.eyebrow{font-size:.74rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.card-top button{font-size:.88rem;padding:6px 14px}
+.card-body{padding:18px;background:var(--card-2)}
+.task{font-weight:700;font-size:1.02rem;margin:0 0 12px}
+.task .src{display:block;font-weight:400;font-size:.85rem;color:var(--muted)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.side{min-width:0;display:flex;flex-direction:column}
+.panel{border:1px solid var(--panel-line);border-radius:8px;background:var(--panel);overflow:hidden;display:flex;flex-direction:column}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;font-weight:600;font-size:.95rem}
+.panel.teacher .panel-head{background:var(--head-teacher)}
+.panel.student .panel-head{background:var(--head-student)}
+.panel-head .name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.panel-head .count{font-family:var(--mono);font-weight:600;font-size:.84rem;white-space:nowrap}
+.rows{height:420px;overflow-y:auto;padding:10px 12px;font-family:var(--mono);font-size:.8rem}
+.row{display:flex;gap:10px;line-height:1.75;min-width:0}
+.row.new{animation:enter .25s ease-out}
+.row .verb{flex:0 0 7.2em;font-weight:600;color:var(--verb);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .verb.quiet{color:var(--verb-quiet)}
+.row .arg{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);min-width:0}
+.row.error .verb,.row.error .arg{color:var(--bad-ink)}
+.row .arg.writing{color:var(--muted);font-style:italic}
+.row.live .arg::after{content:" ▍";animation:blink 1s steps(1) infinite;color:var(--muted)}
+details.think{margin:2px 0 4px;font-family:"Source Sans 3",sans-serif;font-size:.88rem;color:var(--muted)}
+details.think summary{cursor:pointer;font-style:italic;list-style:none}
+details.think summary::-webkit-details-marker{display:none}
+details.think summary::before{content:"▸ ";font-style:normal}
+details.think[open] summary::before{content:"▾ "}
+details.tool{margin:0}
+details.tool > summary{list-style:none;cursor:pointer}
+details.tool > summary::-webkit-details-marker{display:none}
+details.tool > summary .verb::before{content:"▸ ";color:var(--muted);font-weight:400}
+details.tool[open] > summary .verb::before{content:"▾ "}
+details.tool > summary:hover .arg{text-decoration:underline dotted var(--muted)}
+.io{margin:2px 0 8px 1.2em;padding-left:8px;border-left:2px solid var(--panel-line);font-size:.76rem}
+.io .lbl{font-family:"Source Sans 3",sans-serif;font-size:.74rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:4px 0 2px}
+.io pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px;color:var(--ink)}
+.io pre.err{color:var(--bad-ink);border-color:var(--bad-line)}
+.io .cut{font-family:"Source Sans 3",sans-serif;font-style:italic;color:var(--muted);font-size:.76rem;margin-top:2px}
+details.think .body{margin:4px 0 6px 1em;padding-left:8px;border-left:2px solid var(--panel-line);max-height:220px;overflow-y:auto;color:var(--ink-2)}
+.say{font-family:"Source Sans 3",sans-serif;font-style:italic;color:var(--muted);font-size:.88rem;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty-rows{color:var(--muted);font-family:"Source Sans 3",sans-serif;font-size:.9rem;padding-top:4px}
+@keyframes enter{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@keyframes blink{50%{opacity:0}}
+.outcome{margin-top:12px;min-width:0}
+.pill{border:1px solid var(--run-line);background:var(--run-bg);color:var(--run-ink);border-radius:6px;padding:6px 10px;text-align:center;font-weight:600;font-size:.88rem}
+.pill.ok{border-color:var(--ok-line);background:var(--ok-bg);color:var(--ok-ink)}
+.pill.bad{border-color:var(--bad-line);background:var(--bad-bg);color:var(--bad-ink)}
+.pill.warn{border-color:var(--warn-line);background:var(--warn-bg);color:var(--warn-ink)}
+.answer{margin-top:8px;font-size:.9rem;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;max-height:340px;overflow-y:auto;overflow-wrap:anywhere}
+/* Rendered Markdown (answers and thoughts) */
+.md > :first-child{margin-top:0}.md > :last-child{margin-bottom:0}
+.md p{margin:0 0 6px}
+.md ul,.md ol{margin:0 0 6px;padding-left:1.4em}
+.md li{margin:1px 0}
+.md h1,.md h2,.md h3,.md h4{font-size:.95rem;font-weight:700;margin:8px 0 4px}
+.md code{font-family:var(--mono);font-size:.8rem;background:var(--card-2);padding:0 3px;border-radius:3px}
+.md pre{background:var(--card-2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;overflow-x:auto;margin:0 0 6px}
+.md pre code{background:none;padding:0;font-size:.76rem}
+.md table{border-collapse:collapse;margin:0 0 6px;font-size:.82rem;display:block;overflow-x:auto}
+.md th,.md td{border:1px solid var(--line);padding:2px 6px;text-align:left}
+.md blockquote{margin:0 0 6px;padding-left:8px;border-left:3px solid var(--line);color:var(--ink-2)}
+.md a{color:var(--verb)}
+.md hr{border:0;border-top:1px solid var(--line)}
+.scores{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;font-size:.78rem;font-family:var(--mono)}
+.scores span{border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--ink-2)}
+.scores span.one{border-color:var(--ok-line);color:var(--ok-ink)}
+.scores span.zero{border-color:var(--bad-line);color:var(--bad-ink)}
+.meta{margin-top:6px;font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.note{margin-top:4px;font-size:.8rem;color:var(--bad-ink);font-family:var(--mono);overflow-wrap:anywhere}
+.caption{padding:12px 18px;border-top:1px solid var(--line);font-style:italic;color:var(--ink-2);font-size:.92rem;min-height:2.9em}
+.notice{margin:0 0 12px;padding:8px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn-ink);font-size:.9rem;display:none}
+.notice.show{display:block}
+footer{margin-top:18px;font-size:.85rem;color:var(--muted)}
+footer code{font-family:var(--mono);font-size:.78rem}
+@media (max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}.rows{height:240px}.pick{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Same question, two agents</h1>
+  <p class="lede" id="lede"></p>
+  <div class="tabs" id="tabs" role="group" aria-label="Task"></div>
+  <form id="form" autocomplete="off" class="pick">
+    <div class="pick-left">
+      <div class="pick-row">
+        <select id="question" aria-label="A test-split question"><option value="">Loading questions…</option></select>
+        <button type="button" id="shuffle" title="A random test question">🎲</button>
+      </div>
+      <input id="typed" type="text" maxlength="600" placeholder="…or type your own question (shown side by side, not graded)" aria-label="Your own question">
+    </div>
+    <button class="primary" id="go" type="submit">Race</button>
+  </form>
+  <p class="hint" id="hint"></p>
+  <p class="notice" id="notice"></p>
+
+  <section class="card" aria-live="polite">
+    <div class="card-top">
+      <span class="eyebrow" id="eyebrow">Same question, same harness</span>
+      <button id="replay" type="button" disabled>replay</button>
+    </div>
+    <div class="card-body">
+      <p class="task" id="task">Pick a question to start a race.</p>
+      <div class="grid">
+        <div class="side">
+          <div class="panel teacher">
+            <div class="panel-head"><div class="name" id="n-teacher">teacher</div><div class="count" id="c-teacher">tool calls: 0</div></div>
+            <div class="rows" id="r-teacher"><div class="empty-rows">Waiting for a question…</div></div>
+          </div>
+          <div class="outcome"><div class="pill" id="o-teacher">idle</div><div id="a-teacher"></div><div class="meta" id="m-teacher"></div></div>
+        </div>
+        <div class="side">
+          <div class="panel student">
+            <div class="panel-head"><div class="name" id="n-student">student</div><div class="count" id="c-student">tool calls: 0</div></div>
+            <div class="rows" id="r-student"><div class="empty-rows">Waiting for a question…</div></div>
+          </div>
+          <div class="outcome"><div class="pill" id="o-student">idle</div><div id="a-student"></div><div class="meta" id="m-student"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="caption" id="caption">Same harness, same tools, same limits: watch how each model works the question.</div>
+  </section>
+  <footer id="footer"></footer>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const QUIET = new Set(["read", "ls", "find", "grep"]);
+let CFG = null, RACE = null, QUESTIONS = [];
+let frames = [], recorded = {}, source = null, replayTimer = null, running = false;
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Markdown (GitHub-flavoured) for answers and thoughts: marked, then DOMPurify, since the text comes from the agents
+// (and so from whatever the Hub content they read told them). Links open in a new tab. Without the libraries, a
+// small escaping subset.
+if (window.DOMPurify) DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "A") { node.setAttribute("target", "_blank"); node.setAttribute("rel", "noopener nofollow"); }
+  if (node.tagName === "IMG") node.remove();   // no remote images from agent output
+});
+function md(text) {
+  if (window.marked && window.DOMPurify) {
+    return DOMPurify.sanitize(marked.parse(String(text || "").trim(), { gfm: true, breaks: true }), { FORBID_TAGS: ["style", "img", "form", "input"] });
+  }
+  return mdLite(text);
+}
+function mdLite(text) {
+  return String(text || "").trim().split(/\n{2,}/).map((para) => {
+    let h = esc(para).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+    // [text](https://...) links: the URL was escaped with the rest, and only http(s) URLs are linked.
+    h = h.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)"<>]+)\)/g, '<a href="$2" target="_blank" rel="noopener nofollow">$1</a>');
+    h = h.replace(/^\s*[-*]\s+/gm, "• ").replace(/\n/g, "<br>");
+    return `<p>${h}</p>`;
+  }).join("");
+}
+
+function renderRows(side, run) {
+  const box = $("r-" + side);
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  if (!run.rows.length) {
+    const msg = { waking: "Waking the student's GPU (scale-to-zero endpoint)…", waiting: "Waiting for the race to start…", running: "Thinking…" }[run.status] || (run.error ? "No tool calls." : "No tool calls.");
+    box.innerHTML = `<div class="empty-rows">${msg}</div>`;
+    box.dataset.h = "";
+    return;
+  }
+  const open = new Set([...box.querySelectorAll("details[open]")].map((d) => d.dataset.i));
+  const before = Number(box.dataset.n || 0);
+  const html = run.rows.map((r, i) => {
+    const isNew = i >= before ? " new" : "";
+    if (r.kind === "think") {
+      const label = r.tokens != null ? `thought · ${r.tokens.toLocaleString()} tokens` : `thought · ${(r.chars ?? r.text.length).toLocaleString()} chars`;
+      const live = r.status === "live" ? " (thinking…)" : "";
+      return `<details class="think${isNew}" data-i="${i}"${open.has(String(i)) ? " open" : ""}><summary>${esc(label + live)}</summary><div class="body md">${md(r.text)}</div></details>`;
+    }
+    if (r.kind === "text") return `<div class="say${isNew}" title="${esc(r.text)}">“${esc(r.text)}”</div>`;
+    const live = run.status === "running" && ["writing", "calling", "running"].includes(r.status);
+    const cls = ["row", isNew, r.status === "error" ? "error" : "", live ? "live" : ""].join(" ");
+    const vcls = QUIET.has(r.tool) ? "quiet" : "";
+    const arg = r.arg || (r.status === "writing" ? "writing…" : "");
+    const head = `<span class="verb ${vcls}" title="${esc(r.tool)}">${esc(r.tool)}</span><span class="arg${arg === "writing…" ? " writing" : ""}">${esc(arg)}</span>`;
+    // Click a call to see its full input and the result the model got back (what it saw).
+    let result;
+    if (r.out != null) {
+      const cut = r.out_len > r.out.length ? `<div class="cut">showing the first ${r.out.length.toLocaleString()} of ${r.out_len.toLocaleString()} characters</div>` : "";
+      result = `<div class="lbl">${r.status === "error" ? "error" : "result"}</div><pre${r.status === "error" ? ' class="err"' : ""}>${esc(r.out || "(empty)")}</pre>${cut}`;
+    } else {
+      result = `<div class="lbl">result</div><div class="cut">${r.status === "writing" ? "the call is still being written…" : r.status === "calling" || r.status === "running" ? "running…" : "no result (the episode ended first)"}</div>`;
+    }
+    const io = `<div class="io"><div class="lbl">input</div><pre>${esc(pretty(r.arg))}</pre>${result}</div>`;
+    return `<details class="tool" data-i="${i}"${open.has(String(i)) ? " open" : ""}><summary class="${cls}">${head}</summary>${io}</details>`;
+  }).join("");
+  if (box.dataset.h !== html) {
+    box.dataset.h = html;
+    box.innerHTML = html;
+    box.dataset.n = String(run.rows.length);
+    if (atBottom || run.status === "running") box.scrollTop = box.scrollHeight;
+  }
+}
+
+const calls = (n) => `${n} tool call${n === 1 ? "" : "s"}`;
+function pretty(arg) {
+  try { const v = JSON.parse(arg); if (v && typeof v === "object") return JSON.stringify(v, null, 2); } catch (e) {}
+  return arg || "";
+}
+function score(v) { return v == null ? "–" : Number.isInteger(v) ? String(v) : v.toFixed(2); }
+
+function renderOutcome(side, run, p) {
+  const pill = $("o-" + side);
+  let cls = "pill", text;
+  const g = run.grade;
+  if (run.status === "waking") text = "waking the GPU…";
+  else if (run.status === "waiting") text = "starting…";
+  else if (run.status === "running") text = `running · ${run.elapsed.toFixed(1)} s`;
+  else if (!run.answer) { cls += " bad"; text = `✕ no answer after ${calls(run.tool_calls)}`; }
+  else if (!p.race.graded) { cls += " ok"; text = `answered in ${calls(run.tool_calls)} · not graded (typed question)`; }
+  else if (!g) { text = "answered · grading…"; }
+  else if (g.passed === true) { cls += " ok"; text = `✓ correct in ${calls(run.tool_calls)}`; }
+  else if (g.passed === false) { cls += " bad"; text = `✕ not passed in ${calls(run.tool_calls)}`; }
+  else { cls += " warn"; text = `? unscorable (${g.error || "the Hub changed since the snapshot"})`; }
+  if (run.status === "done" && p.first === run.side && run.answer) text += " · first";
+  pill.className = cls;
+  pill.textContent = text;
+
+  let html = "";
+  if (run.answer) html += `<div class="answer md">${md(run.answer)}</div>`;
+  if (g && g.scores && Object.keys(g.scores).length) {
+    html += `<div class="scores">` + Object.entries(g.scores).map(([k, v]) => `<span class="${v === 1 ? "one" : v === 0 ? "zero" : ""}">${esc(k)} ${score(v)}</span>`).join("") + `</div>`;
+  }
+  $("a-" + side).innerHTML = html;
+  const bits = [];
+  if (run.status !== "waking" && run.status !== "waiting") {
+    bits.push(`${run.elapsed.toFixed(1)} s wall`, calls(run.tool_calls));
+    if (run.thinking_tokens != null) bits.push(`${run.thinking_tokens.toLocaleString()} thinking tokens`);
+    bits.push(`${(run.output_tokens / 1000).toFixed(1)}K output tokens`);
+    bits.push(side === "teacher" ? `$${run.cost.toFixed(4)}` : `$${run.cost.toFixed(4)} of GPU time`);
+  }
+  $("m-" + side).innerHTML = esc(bits.join(" · ")) + (run.error ? `<div class="note">${esc(run.error)}</div>` : "");
+}
+
+function caption(p) {
+  const name = (s) => (s.side === "student" ? "the student" : s.label);
+  const one = (s) => {
+    if (s.status === "waking") return `${name(s)} is waiting for its GPU to wake up`;
+    if (s.status !== "done") return s.status === "running" ? `${name(s)} is working (${calls(s.tool_calls)} so far)` : `${name(s)} is starting`;
+    if (!s.answer) return `${name(s)} gave no answer`;
+    const verdict = !p.race.graded ? "answered" : !s.grade ? "answered" : s.grade.passed === true ? "answered correctly" : s.grade.passed === false ? "got it wrong" : "answered (unscorable)";
+    return `${name(s)} ${verdict} in ${s.elapsed.toFixed(1)} s with ${calls(s.tool_calls)}`;
+  };
+  const text = `${one(p.teacher)}; ${one(p.student)}.`;
+  return text[0].toUpperCase() + text.slice(1);
+}
+
+function render(p) {
+  const lim = p.race.limits;
+  $("task").innerHTML = `${esc(p.race.question)}<span class="src">${esc(p.race.name)} · ${esc(p.race.harness)} · ${lim.max_tool_calls} tool calls and ${lim.timeout} s per agent · ${p.race.graded ? `test question ${esc(p.race.row_id)}, graded by the task's rubrics` : "typed question, not graded"}</span>`;
+  for (const side of ["teacher", "student"]) {
+    const run = p[side];
+    $("n-" + side).textContent = side === "student" ? `student · ${run.label}` : `teacher · ${run.label}`;
+    $("c-" + side).textContent = `tool calls: ${run.tool_calls}`;
+    renderRows(side, run);
+    renderOutcome(side, run, p);
+  }
+  $("caption").textContent = caption(p);
+}
+
+function notice(text) { const n = $("notice"); n.textContent = text || ""; n.classList.toggle("show", !!text); }
+function busy(on) { running = on; $("go").disabled = on; $("shuffle").disabled = on; document.querySelectorAll("#tabs button").forEach((b) => (b.disabled = on)); $("replay").disabled = on || !frames.length; }
+function resetRows() { for (const s of ["teacher", "student"]) { const b = $("r-" + s); b.dataset.n = ""; b.dataset.h = ""; } }
+
+function start() {
+  const typed = $("typed").value.trim(), row = $("question").value;
+  if (!typed && !row) return;
+  if (source) source.close();
+  clearTimeout(replayTimer);
+  notice("");
+  frames = [];
+  resetRows();
+  busy(true);
+  const q = typed ? `q=${encodeURIComponent(typed)}` : `row=${encodeURIComponent(row)}`;
+  source = new EventSource(`/api/race?race=${encodeURIComponent(RACE.id)}&${q}`);
+  source.addEventListener("frame", (e) => { const p = JSON.parse(e.data); frames.push(p); render(p); });
+  source.addEventListener("queued", (e) => notice(JSON.parse(e.data).message));
+  source.addEventListener("failed", (e) => notice(JSON.parse(e.data).message));
+  source.addEventListener("done", () => { source.close(); if (!$("notice").textContent.startsWith("The race failed")) notice(""); recorded[RACE.id] = frames; busy(false); });
+  source.onerror = () => {
+    if (source.readyState === EventSource.CLOSED) return;
+    source.close(); busy(false);
+    if (!frames.length) notice("Could not start the race. Try again in a moment.");
+  };
+}
+
+function replay() {
+  if (!frames.length) return;
+  clearTimeout(replayTimer);
+  resetRows();
+  const total = frames[frames.length - 1].t || 1;
+  const speed = Math.max(1, total / 20);   // compress long races into ~20 s
+  let i = 0;
+  const step = () => {
+    render(frames[i]);
+    i += 1;
+    if (i < frames.length) replayTimer = setTimeout(step, Math.max(50, ((frames[i].t - frames[i - 1].t) * 1000) / speed));
+  };
+  step();
+}
+
+function loadRecorded(race) {
+  if (recorded[race.id]) { frames = recorded[race.id]; render(frames[frames.length - 1]); $("replay").disabled = false; return; }
+  frames = [];
+  $("replay").disabled = true;
+  if (!race.replay) return;
+  fetch(`/static/replays/${race.id}.json`).then((r) => (r.ok ? r.json() : null)).then((rec) => {
+    if (!rec || !rec.length || RACE.id !== race.id || running) return;
+    recorded[race.id] = frames = rec;
+    resetRows();
+    render(frames[frames.length - 1]);
+    $("replay").disabled = false;
+  }).catch(() => {});
+}
+
+function selectRace(race) {
+  RACE = race;
+  document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === race.id)));
+  $("hint").innerHTML = `${esc(race.teacher)} (teacher) vs ${esc(race.student)} (<code>${esc(race.adapter)}</code>) in <code>${esc(race.harness)}</code> with ${esc(race.tools)}. Test questions come from <code>${esc(race.dataset)}</code> (${esc(race.split)} split).`;
+  $("eyebrow").textContent = `${race.name} · ${race.harness}`;
+  const sel = $("question");
+  sel.innerHTML = `<option value="">Loading questions…</option>`;
+  resetRows();
+  ["teacher", "student"].forEach((s) => { $("r-" + s).innerHTML = `<div class="empty-rows">Waiting for a question…</div>`; $("a-" + s).innerHTML = ""; $("m-" + s).innerHTML = ""; $("o-" + s).className = "pill"; $("o-" + s).textContent = "idle"; });
+  $("task").textContent = "Pick a question to start a race.";
+  fetch(`/api/questions?race=${encodeURIComponent(race.id)}`).then((r) => r.json()).then((qs) => {
+    if (RACE.id !== race.id) return;
+    QUESTIONS = qs;
+    sel.innerHTML = `<option value="">Pick a ${esc(race.split)} question (${qs.length})…</option>` + qs.map((q) => `<option value="${esc(q.id)}">${esc(q.question)}</option>`).join("");
+  }).catch(() => { sel.innerHTML = `<option value="">Questions unavailable: type one below</option>`; });
+  loadRecorded(race);
+}
+
+$("form").addEventListener("submit", (e) => { e.preventDefault(); start(); });
+$("question").addEventListener("change", () => { if ($("question").value) $("typed").value = ""; });
+$("typed").addEventListener("input", () => { if ($("typed").value.trim()) $("question").value = ""; });
+$("shuffle").addEventListener("click", () => { if (!QUESTIONS.length) return; $("question").value = QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)].id; $("typed").value = ""; });
+$("replay").addEventListener("click", replay);
+
+fetch("/api/config").then((r) => r.json()).then((cfg) => {
+  CFG = cfg;
+  document.title = cfg.title;
+  $("title").textContent = cfg.title;
+  $("lede").textContent = cfg.lede;
+  $("tabs").innerHTML = cfg.races.map((r) => `<button type="button" data-id="${esc(r.id)}" aria-pressed="false">${esc(r.name)}<span class="sub">${esc(r.harness)}</span></button>`).join("");
+  document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => { if (!running) selectRace(cfg.races.find((r) => r.id === b.dataset.id)); }));
+  const e = cfg.endpoint;
+  $("footer").innerHTML = `The student runs on the Inference Endpoint <code>${esc(e.name)}</code> (one ${esc(e.gpu)}, $${e.price_per_hour.toFixed(2)}/h, scales to zero after ${e.idle_minutes} idle minutes: the first race after that waits a few minutes for a cold start). The teacher runs on Hugging Face Inference Providers. Teacher cost uses the profile's provider prices; student cost is GPU time for the race. Thinking tokens are counted with the student's tokenizer.`;
+  selectRace(cfg.races[0]);
+});
+
+fetch("/api/status").then((r) => r.json()).then((s) => {
+  if (s.missing_commands && s.missing_commands.length) notice(`Warning: commands the tasks need are missing in this container: ${s.missing_commands.join(", ")}.`);
+  else if (typeof s.student_ready === "string") notice(`Live races are unavailable: ${s.student_ready}. The replays still work.`);
+  else if (s.isolation && s.isolation.ok === false) notice(`Agent isolation failed its preflight: ${s.isolation.error}`);
+}).catch(() => {});
+</script>
+</body>
+</html>
