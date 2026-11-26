@@ -435,13 +435,14 @@ McNemar on the same test rows; the teacher counted by its first record per row, 
 | Action-only SFT, thinking off (phase 1) | 81.4% | 78.0% |
 | Action-only SFT + GRPO, thinking off (phase 2) | 96.0% | — |
 | Base, thinking on | 89.1% | 86.7% |
-| **Recipe (a): empty think + stripped text + KL replay, thinking on** | **98.1%** | *running* |
+| **Recipe (a): empty think + stripped text + KL replay, thinking on** | **98.1%** | **96.7%** |
 | Recipe (a) + CoT-proxies | 96.8% | — |
+| Full-CoT SFT, thinking on (#21: 1,025 curated traces, 3 epochs at 1e-4, no replay) | — | 98.7% |
 | Teacher GLM-5.3 | 96.3% | 98.7% |
 
 On MCP, recipe (a) against action-only SFT fixes 66 questions and breaks 3 (p = 2e-16), and against base-thinking
 fixes 39 and breaks 5 (p = 1e-7); against SFT + GRPO it is a tie (15 fixed, 7 broken, p = 0.13) at a fraction of
-the cost (no difficulty probe or GRPO). CoT-proxies do not help on these short tasks: (b) against (a) fixes 5 and breaks 10
+the cost (no difficulty probe or GRPO). On the CLI, recipe (a) against action-only SFT fixes 31 and breaks 3 (p = 8e-7), against base-thinking fixes 18 and breaks 3 (p = 0.001), and is level with the teacher (4 behind, 1 ahead, p = 0.38). #21's full-CoT run is 3 ahead of it (p = 0.25) but changes data, curation, target and schedule at once, and on 51 open-ended judged questions it scores 26/51 against the teacher's 43/51. CoT-proxies do not help on these short tasks: (b) against (a) fixes 5 and breaks 10
 (p = 0.30). The adapters' held-out drift after 8 passes is 1.6e-3 (a) and 2.0e-3 (b) nats per token, close to the
 paper's 1.3e-3 and 2.2e-3. Per-task tables are in the examples' READMEs.
 

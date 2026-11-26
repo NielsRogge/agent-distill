@@ -464,3 +464,15 @@ def test_keep_reasoning_flag_overrides_the_profile_and_takes_the_papers_defaults
     student = load_profile("students", "qwen3.5-4b-think")  # recipe (c): the profile's args, then the run's
     args = sft.parse_args([*BASE_ARGS, *student.sft.args, "--think-target", "native", "--keep-reasoning"])
     assert (args.think_target, args.keep_reasoning, args.strip_visible_text) == ("native", True, True)
+
+
+def test_the_fullcot_example_still_resolves_as_it_trained():
+    # #21's run: keep_reasoning comes from its profile (no flag), so the legacy defaults it overrides still apply.
+    run = pipeline.make_run(load_run("examples/hf-hub-qa/run-think-fullcot.toml"))
+    assert not pipeline.sft_replay(run)
+    command = sft_job_args(run)
+    assert "--replay-repo" not in command and "--keep-reasoning" not in command
+    args = sft.resolve_defaults(sft.parse_args(command[command.index("--task") :]))
+    assert not sft.cross_format(args)
+    assert (args.think_target, args.strip_visible_text, args.epochs, args.learning_rate, args.lr_scheduler_type) == (
+        "native", False, 3.0, 1e-4, "cosine")  # fmt: skip

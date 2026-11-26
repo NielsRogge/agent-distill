@@ -1,0 +1,18 @@
+# Qwen3.5-4B served with thinking ON (same serving setup as `qwen3.5-4b-think`: vLLM `qwen3` reasoning parser,
+# 8,192 output tokens, evaluation-only sampling via `[serve] generation_config` so probe and GRPO keep their own
+# sampling) and trained with FULL-CoT reasoning supervision (`keep_reasoning = true`): teacher `<think>` blocks stay in
+# the SFT targets instead of using `--think-target empty`.
+name = "qwen3.5-4b-think-fullcot"
+model = "Qwen/Qwen3.5-4B"
+
+[serve]
+reasoning_parser = "qwen3"
+max_output_tokens = 8192
+generation_config = { temperature = 0.6, top_p = 0.95, top_k = 20 }
+
+[sft]
+keep_reasoning = true
+# Same SFT stack as `qwen3.5-4b-think` (adds flash-linear-attention for Qwen3.5's gated delta rule).
+deps = ["accelerate==1.14.0", "bitsandbytes>=0.49.0", "datasets>=4.0.0", "peft==0.20.0", "torch>=2.7.0",
+        "transformers==5.14.1", "trl==1.9.2", "flash-linear-attention==0.6.0"]
+args = ["--no-4bit", "--max-length", "32768", "--full-trajectory", "--save-steps", "50"]

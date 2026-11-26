@@ -47,6 +47,7 @@ Qwen3.5-4B), dataset and checker, so only the tool surface differs.
 ```bash
 distill run examples/hf-hub-qa/run.toml --dry-run              # traces -> SFT -> merge -> eval (base, SFT, teacher)
 distill run examples/hf-hub-qa/run-judged-pilot.toml --dry-run # the judged questions (teacher pilot)
+distill run examples/hf-hub-qa/run-think.toml --dry-run        # recommended: thinking student, recipe (a)
 uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged questions as JSON
 ```
 
@@ -136,3 +137,84 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
     A GRPO stage on the efficiency-shaped reward is the obvious next step for these.
   - Spend: teacher traces about $21 (one shard's upload hit the account's private storage limit and was resumed),
     teacher evaluation $4.49, GPU about $12 (SFT 82 min, two evaluations and the merge on H200).
+- **Full-CoT thinking SFT** (`run-think-fullcot.toml`, `cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160`):
+  collected the remaining 562 train rows (`600..1161`, 561/562 accepted), combined with rows `0..599` (`1,161/1,162`
+  accepted), curated to `hf_errors=0` and `tool_calls<=12` (1,025 traces), and trained `qwen3.5-4b-think-fullcot`
+  (`keep_reasoning = true`, post-#19 tool list `[bash, read]`, 3 epochs, cosine LR `1e-4`, `warmup_ratio=0.05`,
+  `weight_decay=0.01`, LoRA `r=32`, `alpha=64`):
+
+  | Run | Split | Passed | `fact_correct` | `grounded` | Tool calls | `hf` errors | `read_skill` | Limit/timeout |
+  | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | Base Qwen3.5-4B (`nothink`) | `test[:150]` | 71/150 (47.3%) | — | — | 8.62 | 0.36 | 2.0% | 40 |
+  | Phase 1 SFT (`nothink`, 600 traces) | `test[:150]` | 117/150 (78.0%) | — | 98.1% (8 unseen) | 7.19 | 0.95 | 93.3% | 19 |
+  | Base Qwen3.5-4B (`think`) | `test[:150]` | 130/150 (86.7%) | — | 100.0% (0 unseen) | 6.09 | 1.53 | 0.0% | 12 |
+  | Main recipe (a) CLI SFT (`think`, 600 traces + KL replay) | `test[:150]` | 145/150 (96.7%) | 148/150 (98.7%) | 99.0% (309/312) | 4.45 | 0.233 | 92.0% | 0 |
+  | GLM-5.3 teacher (first = final record) | `test[:150]` | 148/150 (98.7%) | — | 99.8% (1 unseen) | 4.58 | 0.08 | 93.3% | 0 |
+  | Full-CoT thinking SFT | `test[:150]` | **148/150 (98.7%)** | 148/150 (98.7%) | 100.0% (303/303) | 4.10 | 0.040 | 93.3% | 0 |
+  | Full-CoT thinking SFT | Full `test` (377) | **369/377 (97.9%)** | 373/377 (98.9%) | 99.5% (765/769) | 4.29 | 0.058 | 92.6% | 1 |
+  | Full-CoT thinking SFT | `validation` (149) | **145/149 (97.3%)** | 147/149 (98.7%) | 99.4% (299/301) | 4.32 | 0.067 | 90.6% | 2 |
+
+  - Like-for-like teacher counting: all 150 CLI teacher test episodes finished on `attempt=1` with `cut_short=None`
+    (no reruns), so first-record and final-record teacher scores are both `148/150 (98.7%)`.
+  - Paired exact McNemar on `test[:150]`:
+    - vs Phase 1 SFT (`117/150`): 32 gained / 1 lost (`p = 7.9e-9`);
+    - vs Base `think` (`130/150`): 18 gained / 0 lost (`p = 7.6e-6`);
+    - vs Main recipe (a) CLI SFT (`145/150`, `nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160-eval`): 3 gained /
+      0 lost (`p = 0.25`, not statistically significant). Both score `148/150 (98.7%)` on `fact_correct`; all 3
+      discordant rows were grounding misses on recipe (a) (`fact_correct = 1`, `grounded < 1`), while our curated
+      full-CoT run also had fewer `hf` CLI errors (`0.040` vs `0.233`/episode) and tool calls (`4.10` vs `4.45`);
+    - vs GLM-5.3 teacher (`148/150`): 1 gained / 1 lost (`p = 1.00`).
+  - Per template on full `test` (377 rows): `base_pipeline` 36/36 (100%), `gguf_count` 37/37 (100%), `params_sum`
+    52/52 (100%), `safetensors_count` 20/20 (100%), `paper_title` 68/69 (98.6%), `paper_first_author` 65/67 (97.0%),
+    `base_params` 77/81 (95.1%), `base_license` 14/15 (93.3%).
+  - Multi-variable comparison caveat: relative to Phase 1 SFT and main's recipe (a) CLI SFT, this run changes several
+    things at once (nearly 2x traces + zero-error curation, full-CoT reasoning supervision vs empty think blocks +
+    strip visible text + KL replay, 3 epochs at cosine LR `1e-4` vs 8 epochs at `3e-5`). A single-variable ablation
+    (full-CoT on the original 600 traces only, or recipe (a) on the 1,025 curated traces) is needed to isolate data
+    volume/curation from the SFT recipe.
+  - Open-ended judged eval (`run-think-fullcot-judged.toml`, 51 questions in `judged.py`): **26/51 (51.0%)**, far
+    below the GLM-5.3 teacher pilot (`43/51 = 84.3%`). Although the student still uses the skill (`read_skill = 98.0%`),
+    queries the Hub (`used_hub = 100%`), and stays grounded (`98.3%`, 433/436 IDs; `reference = 94.7%`), 11 of the 25
+    failures hit the 20-tool-call limit while over-querying on broad exploratory prompts, 13 failed the Gemini quality
+    bar (`< 0.7`, including 2 with minor grounding errors and 1 reference miss), and 1 was grounding-only. Training
+    3 epochs exclusively on terse, narrow factoid lookups without out-of-domain KL replay over-specializes the 4B
+    model and hurts open-ended synthesis and stopping behavior.
+  - `run-think-fullcot-grpo.toml` is **config-only (not run)**: SFT already matched the teacher on `test[:150]` and
+    reached `97.9%` on full `test` (`98.9%` `fact_correct`), leaving little reward headroom on `nielsr/hf-hub-facts-v2`.
+  - Spend: additional 562 teacher traces $17.02; GPU ~$16 (H200 SFT 57 min, A100 merge 2 min, H200 validation +
+    377-row test + 51-row judged evals); Gemini judge <$1.
+
+## Thinking student (CoT-proxy recipe, 2026-11-26)
+
+`run-think.toml` is the recommended route; `run.toml` stays as the record of the thinking-off phase 1. It trains the
+`qwen3.5-4b-think` student with variant (a) of the CoT-proxy paper (arXiv 2611.33148), the profile's default: every
+SFT target opens with an empty think block (context, no loss), the teacher's prose around tool calls is stripped, and
+each update mixes 17 teacher trajectories with 3 samples of KL replay on the initial student's own out-of-domain
+generations (LoRA r16, lr 3e-5, 8 passes). The student thinks at inference. The recipe and its MCP ablation are in
+[docs/DESIGN.md](../../docs/DESIGN.md#cross-format-sft-cot-proxy-recipe) and the MCP twin's README.
+
+Same 600 GLM-5.3 traces as phase 1, `test[:150]`, first record per row (the teacher had no reruns, so first and final
+record agree). Published as run `qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160`; held-out drift 2.1e-3 nats/token.
+
+| Model | Passed | Tool calls/ep |
+| --- | ---: | ---: |
+| Base, thinking off | 71/150 (47.3%) | 8.62 |
+| Phase 1 SFT, thinking off | 117/150 (78.0%) | 7.19 |
+| Base, thinking on | 130/150 (86.7%) | 6.09 |
+| **Recipe (a), thinking on** | **145/150 (96.7%)** | 4.45 |
+| Full-CoT SFT, thinking on (#21, `run-think-fullcot.toml`) | 148/150 (98.7%) | 4.10 |
+| GLM-5.3 teacher | 148/150 (98.7%) | 4.58 |
+
+- Paired exact McNemar for recipe (a): vs phase 1 SFT 31 fixed / 3 broken (p = 7.7e-7); vs base thinking 18 / 3
+  (p = 0.0015); vs the teacher 1 ahead / 4 behind (p = 0.38).
+- Against #21's full-CoT run recipe (a) is 3 behind and none ahead (p = 0.25); all three are grounding misses with
+  the right fact. The full-CoT run changes several things at once (1,025 traces curated to zero `hf` errors instead
+  of 600, reasoning supervised instead of an empty think block, no stripping, no replay, 3 epochs at cosine 1e-4
+  instead of 8 at 3e-5), so the gap is not attributable to the target alone. On the 51 judged open-ended questions
+  it scores 26/51 against the teacher's 43/51; recipe (a) has not been run there.
+- Per template (base thinking / recipe (a) / teacher): `base_params` 18 / 30 / 30 of 30, `params_sum` 26 / 26 / 26,
+  `paper_first_author` 23 / 25 / 26, `paper_title` 24 / 23 / 24, `gguf_count` 12 / 13 / 15, `safetensors_count`
+  12 / 12 / 12, `base_pipeline` 11 / 12 / 11, `base_license` 4 / 4 / 4.
+- Row count: this comparison uses `test[:150]` like phase 1. Runs reported on the full `test` (377 rows), such as a CLI
+  GRPO, are not comparable with it row for row.
+- Spend: SFT about $7 (1.5 h), evaluation about $6; traces and the replay pool were reused.
