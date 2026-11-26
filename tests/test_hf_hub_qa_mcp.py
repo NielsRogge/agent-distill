@@ -217,3 +217,15 @@ def test_v2_templates_and_triples_follow_their_first_model():
     assert len(rows) == 2 and not dropped
     assert rows[0]["split"] == questions.split_of("model:a/A")
     assert "a/A, b/B and c/C combined" in rows[0]["question"]
+
+
+def test_sft_renders_exactly_the_mcp_tools_pi_offers_at_inference():
+    """SFT's tool list (harnesses.tools.harness_tools, from the snapshot) equals the `tools` of a real request Pi 1.6.0
+    sent the model for this task (captured 2026-11-26 from the pinned Pi with the task's mcp.json, against the live
+    server, whose tools still matched the snapshot): same names, descriptions and schemas, and no phantom `submit`."""
+    from agent_distill.harnesses.tools import harness_tools
+
+    captured = json.loads(Path("tests/fixtures/pi-1.6.0-hf-mcp-tools.json").read_text())
+    rendered = harness_tools("pi@1.6.0", TASK)
+    assert rendered == captured
+    assert [t["function"]["name"] for t in rendered] == tool_names(TASK) == TOOLS
