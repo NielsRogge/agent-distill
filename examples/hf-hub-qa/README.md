@@ -42,6 +42,36 @@ Full-CoT SFT on the remaining splits: **369/377 (97.9%)** on full `test` (`98.9%
 | `base_pipeline` | 12 | 7 | 8 | 11 | **12** | 11 |
 | `base_license` | 5 | 2 | 5 | 4 | **4** | 4 |
 
+### Non-thinking SFT → GRPO on full `test` (`run-grpo.toml`)
+
+Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactly `bash` and `read`). A difficulty probe then ran the SFT model 4 times on 700 sampled train rows, and GRPO trained from the SFT merge on the 157 rows it solved on 1–3 of the 4 attempts. That is 78 steps, about 38 minutes on 2× H200. The evaluation covers all 377 `test` rows, first record per row, with the MCP twin's numbers in brackets (its teacher counted on first records as well):
+
+| Model | Thinking | Passed | Tool calls / ep | `hf` errors / ep | Read skill | Hit call limit |
+| --- | :---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-4B (base) | off | 206/377 (54.6%) [72.1%] | 8.9 | 0.50 | 2% | 91 |
+| + SFT (post-#19) | off | 321/377 (85.1%) [81.4%] | 7.0 | 0.93 | 93% | 30 |
+| **+ GRPO** | off | **331/377 (87.8%)** [96.0%] | **4.9** | **0.22** | 70% | 18 |
+| GLM-5.3 (teacher) | on | 375/377 (99.5%) [96.3%] | 4.3 | 0.10 | 92% | 0 |
+
+- **Paired comparisons:** SFT against base fixed 141 rows and broke 26 (sign test `p ≈ 2.6e-20`). GRPO against SFT fixed 46 and broke 36 (`p ≈ 0.32`, not significant).
+- **GRPO bought mainly efficiency:** 30% fewer tool calls, a quarter of the rejected `hf` calls, and 18 call-limit hits instead of 30. It gained only +2.7 points of accuracy, against +14.6 for the MCP twin. The likely cause is the small pool: 157 qualified rows (22% of those sampled), against 350 for the MCP twin.
+- **The thinking students do better on the CLI:** Full-CoT SFT scores 97.9% on the same 377 rows, and recipe (a) 96.7% on `test[:150]`.
+- **Per template (base / SFT / GRPO / teacher, of n):**
+  - `base_params` 30 / 73 / 73 / 80 of 81
+  - `paper_title` 52 / 63 / 68 / 69 of 69
+  - `paper_first_author` 42 / 58 / 63 / 67 of 67
+  - `params_sum` 24 / 50 / 44 / 52 of 52
+  - `gguf_count` 11 / 23 / 23 / 37 of 37
+  - `base_pipeline` 29 / 32 / 33 / 35 of 36
+  - `safetensors_count` 9 / 10 / 12 / 20 of 20
+  - `base_license` 9 / 12 / 15 / 15 of 15
+- **File counts remain the gap:** 14 of GRPO's 18 call-limit failures are count questions. `params_sum` regressed by 6 rows; 6 of GRPO's 8 failures there added the sizes with a script, and the cause has not been diagnosed.
+- **GRPO's 46 failures:**
+  - 18 hit the call limit;
+  - 14 were wrong;
+  - 13 were correct but named a Hub id the agent never looked up;
+  - 1 never used the Hub.
+
 ## Task and rubrics
 
 - **Agent setup:** Pi (`pi@1.6.0`) with `bash` and `read`, the pinned `hf` CLI (`huggingface_hub==2.4.0`, logged out / read-only), `curl`/`jq`/`wget`, and the `hf-cli` Agent Skill (`skills/hf-cli/SKILL.md`, loaded via `--skill`). Each episode runs under an unprivileged UID (`agent_distill.harnesses.isolation`). The agent's final natural-language message is the answer (`TextAnswer`). <!-- pragma: allowlist secret -->
@@ -71,6 +101,9 @@ uv run distill run examples/hf-hub-qa/run-think.toml --dry-run
 # Phase 1: non-thinking SFT baseline (traces -> sft -> merge -> eval)
 uv run distill run examples/hf-hub-qa/run.toml --dry-run
 
+# Non-thinking SFT rerun -> probe -> GRPO -> eval on all 377 test rows
+uv run distill run examples/hf-hub-qa/run-grpo.toml --dry-run
+
 # Curated full-CoT SFT experiment (1,025 zero-error traces)
 uv run distill run examples/hf-hub-qa/run-think-fullcot.toml --dry-run
 
@@ -88,5 +121,5 @@ uv run --extra hub python examples/hf-hub-qa/questions.py
 
 - **Phase 1 SFT tool-list mismatch:** Phase 1 non-thinking SFT (`run.toml`) ran before PR #19 and included a phantom `submit` tool in its SFT prompt (evaluation offered only `bash` and `read`, matching traces). Both `run-think.toml` and `run-think-fullcot.toml` use the fixed `[bash, read]` tool list.
 - **Shell tool parity across job images:** Student TRL images initially lacked `curl`, `jq`, and `wget` (causing 139 `curl: command not found` errors and depressing non-thinking validation from 61% to 43%). `Task.commands` and `JOB_SETUP` now install and verify them before every job.
-- **Published runs:** Phase 1 (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160`), recommended recipe (a) (`qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160`), and curated full-CoT (`cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160`) are published in the [agent-distillation collection](https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31). <!-- pragma: allowlist secret -->
-- **Approximate spend:** Phase 1 traces ~$21 + teacher eval $4.49 + GPU ~$12; recipe (a) SFT + eval ~$13 (reusing traces and replay pool); full-CoT additional 562 traces $17.02 + GPU ~$16.
+- **Published runs:** Phase 1 (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160`), Phase 2 GRPO (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-grpo`), recommended recipe (a) (`qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160`), and curated full-CoT (`cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160`) are published in the [agent-distillation collection](https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31). <!-- pragma: allowlist secret -->
+- **Approximate spend:** Phase 1 traces ~$21 + teacher eval $4.49 + GPU ~$12; recipe (a) SFT + eval ~$13 (reusing traces and replay pool); full-CoT additional 562 traces $17.02 + GPU ~$16; Phase 2 GRPO (`run-grpo.toml`): GPU ~$43 (SFT $6.75, probe $11, GRPO pilot $1.90, GRPO $6.30, merges ~$0.60, evaluations ~$16) + teacher eval $11.80.
