@@ -486,6 +486,7 @@ final record, see above):
 | Qwen3.5-4B (base) | on | 336/377 (89.1%) | 6.47 |
 | **+ SFT, recipe (a)** | on | **370/377 (98.1%)** | 2.23 |
 | + SFT, recipe (b): (a) + CoT-proxies | on | 365/377 (96.8%) | 3.32 |
+| + SFT, variant (c): full CoT | on | 333/377 (88.3%) | 2.52 |
 | GLM-5.3 (teacher), first record | on | 363/377 (96.3%) | 3.24 |
 
 Calls per episode here count every tool call in the episode records (6.16 for the base, against 6.13 in the tables
@@ -499,6 +500,26 @@ Paired on the same 377 questions (exact McNemar):
 - recipe (a) against the teacher (first record): fixed 13, broke 6, p = 0.17;
 - the thinking base against the non-thinking SFT: fixed 57, broke 28, p = 0.002;
 - recipe (b) against (a): fixed 5, broke 10, p = 0.30. CoT-proxies do not help on these short tasks (2-4 calls).
+- variant (c) against (a): fixed 5, broke 42, **p = 2.5e-8**; against the thinking base: fixed 38, broke 41,
+  p = 0.82; against the teacher (first record): fixed 6, broke 36, p = 2.8e-6.
+
+Variant (c) supervises the teacher's own thought: as (a), with KL replay and the same hyperparameters, but only
+`<think>\n` is prompt and the thought, `</think>` and the action are trained (`--think-target native
+--keep-reasoning`, 1,684,349 supervised tokens over 599 traces, none truncated; held-out drift 2.7e-3 nats/token
+against 1.6e-3 for (a)). It loses 37 questions to (a), and every one of its 35 failures is the 300 s episode timeout
+(the limit every run here has); without them it passes 333 of 342. All 35 were cut off inside a think block, 22 of
+them after more than 500 words of one thought that re-checks what a tool already returned ("Hmm, but wait… let me
+reconsider"). The student takes on the teacher's way of thinking, as the paper's Table 8 reports:
+
+| Think blocks | Words/turn, median / mean | Most common openings |
+|---|---|---|
+| GLM-5.3 teacher (training traces) | 62 / 408 | "The user wants" 16%, "The base model" 9%, "The model card" 8% |
+| Thinking base | 53 / 102 | "I keep getting" 15%, "I can see" 14%, "The user is" 12% |
+| Recipe (a) | 58 / 62 | "The user is" 28%, "I found the" 26%, "I can see" 4% |
+| Variant (c) | 36 / 119 | "The base model" 19%, "The user wants" 18%, "The user asks" 12% |
+
+Recipe (a) keeps the base's own voice and evens out its length; (c) copies the teacher's openings and its long tail of
+deliberation, which a 4B model at 8,192 tokens per turn cannot afford inside the time limit.
 
 | Template | n | SFT (off) | SFT + GRPO (off) | Base (on) | Recipe (a) (on) | Teacher (first record) |
 |---|---|---|---|---|---|---|
@@ -515,14 +536,18 @@ Thinking fixes the sums of three parameter counts (52/52 already for the thinkin
 base model's parameter count. File counts stay the one template where GRPO's single precise call does better.
 
 Cost: about $8 for SFT (one H200) and $5 for the evaluation; the replay pool (about $1) is shared by every
-Qwen3.5-4B run. Phase 2 of `run.toml` (probe and GRPO) cost $74.57.
+Qwen3.5-4B run. Phase 2 of `run.toml` (probe and GRPO) cost $74.57. Variant (c): about $10 for SFT (1 h 53 min) and $10 for the
+evaluation (1 h 45 min, the timeouts included).
 
 Artifacts: adapters
 [`…-think-cfx-a-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora) and
-[`…-think-cfx-b-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-lora);
+[`…-think-cfx-b-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-lora) and
+[`…-think-cfx-c-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160-lora);
 evaluations
 [`…-think-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) (thinking
 base),
 [`…-think-cfx-a-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-eval)
+
+[`…-think-cfx-b-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval)
 and
-[`…-think-cfx-b-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval).
+[`…-think-cfx-c-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160-eval).

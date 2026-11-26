@@ -211,7 +211,21 @@ record agree). Published as run `qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-16
   the right fact. The full-CoT run changes several things at once (1,025 traces curated to zero `hf` errors instead
   of 600, reasoning supervised instead of an empty think block, no stripping, no replay, 3 epochs at cosine 1e-4
   instead of 8 at 3e-5), so the gap is not attributable to the target alone. On the 51 judged open-ended questions
-  it scores 26/51 against the teacher's 43/51; recipe (a) has not been run there.
+  it scores 26/51 against the teacher's 43/51 (#21's count; 41/51 by the teacher's first record).
+- Open-ended judged questions (the 51 of `judged.py`, the settings of `run-think-fullcot-judged.toml`, Gemini judge):
+
+  | Model | Passed | Hit the 20-call limit | Answer quality | Tool calls/ep |
+  | --- | ---: | ---: | ---: | ---: |
+  | Recipe (a) | **33/51 (64.7%)** | 9 | 0.77 | 10.4 |
+  | Full-CoT SFT (#21) | 26/51 (51.0%) | 11 | 0.72 | 10.3 |
+  | GLM-5.3 teacher pilot, first record | 41/51 (80.4%) | 1 | — | 6.5 |
+
+  Recipe (a) against full-CoT: 12 ahead, 5 behind (p = 0.14); against the teacher: 4 ahead, 12 behind (p = 0.08).
+  That points the way #21 suggested (KL replay and a light recipe keep more open-ended ability than 3 epochs of
+  factoid SFT) but is not significant at 51 questions, and the thinking base was not run on these questions, so
+  neither run's loss against the base is measured. Evaluation:
+  [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval),
+  about $3 of GPU (35 min on an H200) and under $1 of judge.
 - Per template (base thinking / recipe (a) / teacher): `base_params` 18 / 30 / 30 of 30, `params_sum` 26 / 26 / 26,
   `paper_first_author` 23 / 25 / 26, `paper_title` 24 / 23 / 24, `gguf_count` 12 / 13 / 15, `safetensors_count`
   12 / 12 / 12, `base_pipeline` 11 / 12 / 11, `base_license` 4 / 4 / 4.
