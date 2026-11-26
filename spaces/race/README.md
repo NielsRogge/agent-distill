@@ -45,7 +45,9 @@ One managed Inference Endpoint serves both adapters as LoRA modules on the base 
 
 - `huggingface/qwen35-4b-think-hub-qa-race`
 - one NVIDIA L4 (aws us-east-1), $0.80/h while up
-- vLLM 0.33.0 (the profile's version), with the `eval` stage's serving arguments
+- vLLM 0.33.0 (the profile's version), with the `eval` stage's serving arguments, except for one change:
+  `[endpoint] serve = { enforce_eager = false }` turns CUDA graphs on. Sampling is unchanged, and the student
+  decodes at 25.5 tok/s on the L4 instead of 13.9 (600-token completions, through the adapter).
 - at most one replica; scales to zero after 15 idle minutes
 
 The L4 is the smallest GPU with bf16 that fits a 4B model at the profile's 64k context (a T4 has no bf16).

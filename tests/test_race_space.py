@@ -3,6 +3,7 @@ as the `eval` stage does (CPU only, no network)."""
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 from pathlib import Path
 
@@ -37,7 +38,10 @@ def test_endpoint_serves_the_student_like_the_eval_stage() -> None:
     cfg = race_config.load()
     student = cfg.student()
     args = cfg.endpoint_args()
-    reference = vllm_command(student, student.model, "ADAPTER")[3:]
+    assert cfg.endpoint.serve == {"enforce_eager": False}  # the endpoint's only departure from the eval stage
+    served = dataclasses.replace(student, serve=dataclasses.replace(student.serve, **cfg.endpoint.serve))
+    reference = vllm_command(served, student.model, "ADAPTER")[3:]
+    assert "--enforce-eager" in vllm_command(student, student.model, "ADAPTER") and "--enforce-eager" not in args
     for flag in ("--host", "--port"):
         index = reference.index(flag)
         del reference[index : index + 2]

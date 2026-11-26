@@ -7,6 +7,7 @@ profile's `[serve]` settings decide how the endpoint serves it, exactly as the `
 
 from __future__ import annotations
 
+import dataclasses
 import shlex
 import tomllib
 from dataclasses import dataclass, field
@@ -33,6 +34,9 @@ class EndpointSettings:
     price_per_hour: float = 0.80
     scale_to_zero_minutes: int = 15
     max_num_seqs: int = 4
+    # Overrides of the student profile's `[serve]` settings for this endpoint only, e.g. `enforce_eager = false`
+    # (CUDA graphs: faster decoding, same sampling). Empty: serve exactly as the `eval` stage does.
+    serve: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -108,6 +112,8 @@ class SpaceConfig:
         """vLLM arguments for the endpoint: the `eval` stage's serving command for the student profile (reasoning
         parser, tool parser, context, evaluation sampling), with every race's adapter as a named LoRA module."""
         student = self.student()
+        if self.endpoint.serve:
+            student = dataclasses.replace(student, serve=dataclasses.replace(student.serve, **self.endpoint.serve))
         placeholder = "\0adapter"
         command = vllm_command(student, student.model, placeholder)
         args = command[3:]  # drop `vllm serve <model>`: the endpoint serves its own model folder

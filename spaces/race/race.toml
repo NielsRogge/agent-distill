@@ -24,6 +24,9 @@ instance_size = "x1"
 price_per_hour = 0.80  # USD, for the cost readout
 scale_to_zero_minutes = 15
 max_num_seqs = 4
+# Serve with CUDA graphs (the profile's --enforce-eager off): about 2-3x faster decoding on the L4, same sampling.
+# The only difference from the `eval` stage's serving; remove this table to serve exactly as it does.
+serve = { enforce_eager = false }
 
 [[races]]
 id = "cli"  # also the adapter's served name on the endpoint

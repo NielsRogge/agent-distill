@@ -35,6 +35,7 @@ from agent_distill.stages.eval import select_rows
 CONFIG = race_config.load()
 ENDPOINT_URL = os.environ.get("ENDPOINT_URL", "").rstrip("/")
 WAKE_TIMEOUT = float(os.environ.get("WAKE_TIMEOUT", "900"))
+THOUGHT_CHARS = 6000  # of a thought, per live frame
 
 # --------------------------------------------------------------------------------------------------
 # Questions: each race's evaluation rows (the split and limit the published numbers were measured on)
@@ -227,7 +228,11 @@ class AgentRun:
                 if tokens is not None:
                     row["tokens"] = tokens
                     thinking_tokens += tokens
-                rows.append({k: v for k, v in row.items() if k != "turn"})
+                shown = {k: v for k, v in row.items() if k != "turn"}
+                shown["chars"] = len(row["text"])
+                if len(row["text"]) > THOUGHT_CHARS:  # frames are resent twice a second: send a long thought's tail
+                    shown["text"] = "…" + row["text"][-THOUGHT_CHARS:]
+                rows.append(shown)
             elif row["kind"] == "text":
                 if row["text"].strip():
                     rows.append({**{k: v for k, v in row.items() if k != "turn"}, "text": row["text"][-2000:]})
