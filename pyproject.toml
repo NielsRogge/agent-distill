@@ -30,6 +30,7 @@ packages = ["agent_distill"]
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+extend-exclude = ["examples/inkling-2-mini"]  # verbatim copies of NielsRogge/url-extraction's hook modules
 
 [tool.ruff.format]
 exclude = ["*.md"]  # docs keep hand-aligned code examples

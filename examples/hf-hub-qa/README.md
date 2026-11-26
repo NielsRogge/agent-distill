@@ -104,6 +104,9 @@ uv run distill run examples/hf-hub-qa/run.toml --dry-run
 # Non-thinking SFT rerun -> probe -> GRPO -> eval on all 377 test rows
 uv run distill run examples/hf-hub-qa/run-grpo.toml --dry-run
 
+# Base Inkling-2-Mini, thinking on, all 377 test rows (see the MCP README)
+uv run distill run examples/hf-hub-qa/run-inkling.toml --dry-run
+
 # Curated full-CoT SFT experiment (1,025 zero-error traces)
 uv run distill run examples/hf-hub-qa/run-think-fullcot.toml --dry-run
 

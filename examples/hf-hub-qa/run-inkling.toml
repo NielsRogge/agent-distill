@@ -1,0 +1,34 @@
+# hf-hub-qa: base Inkling-2-Mini (thinkingmachines/Inkling-2-Mini, 26.4B MoE / 3.4B active) with the `hf` CLI and its skill, thinking on (its
+# native mode: the inkling reasoning parser splits the thought from the answer). Only the eval stage runs, on all 377
+# v2 test questions, with run-think.toml's settings (300 s, 15 tool calls, 4 concurrent episodes). Results: README.
+#
+# The profile serves only on RTX PRO 6000 with the vllm/vllm-openai:inkling-2-mini image. Its hook modules (from
+# NielsRogge/url-extraction) sit in examples/inkling-2-mini, which `profiles` adds to the lookup.
+#
+#   distill run examples/hf-hub-qa/run-inkling.toml --dry-run
+task = "."
+teacher = "glm-5.3"  # names the run (a later SFT on the GLM-5.3 traces shares its eval dataset); not evaluated here
+student = "inkling-2-mini"
+harness = "pi@1.6.0"
+name = "inkling-2-mini-hf-hub-qa-v2-glm-53-pi-160"
+stages = ["eval"]
+profiles = ["../inkling-2-mini"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false  # nielsr's private storage is full: raw harness logs stay in the jobs
+
+[eval]
+splits = ["test"]
+limit = 377  # every v2 test question
+concurrency = 4  # anonymous Hub API rate limits
+timeout = 300
+max_tool_calls = 15
+variants = ["base"]
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 20  # per stage: one RTX PRO 6000 eval job

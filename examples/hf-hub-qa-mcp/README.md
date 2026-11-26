@@ -56,6 +56,25 @@ Evaluated on all **377 test questions** of `nielsr/hf-hub-facts-v2` in `pi@1.6.0
 | `safetensors_count` | 20 | 13 | 12 | **20** | 18 | 19 | 20 |
 | `base_license` | 15 | 14 | 14 | 14 | 14 | 14 | 13 |
 
+## Inkling-2-Mini (base, thinking on)
+
+`run-inkling.toml` here and in [`hf-hub-qa`](../hf-hub-qa/run-inkling.toml) evaluate base
+[Inkling-2-Mini](https://huggingface.co/thinkingmachines/Inkling-2-Mini) (26.4B MoE / 3.4B active, thinking on: its
+native mode) on all 377 test questions with `run-think.toml`'s settings (300 s, 15 tool calls, 4 concurrent episodes).
+The `inkling-2-mini` profile serves only on RTX PRO 6000 with the `vllm/vllm-openai:inkling-2-mini` image (inkling tool
+and reasoning parsers); its hook modules are copied from url-extraction into [`../inkling-2-mini`](../inkling-2-mini).
+Estimated cost: one RTX PRO 6000 job per task (~$2.75/h), 2-3 h each, so ~$6-8 per task.
+
+Results: pending (the evaluation jobs have not run yet). [`analyze_inkling.py`](analyze_inkling.py) produces the
+comparison once they have: first record per row, exact paired McNemar tests against the thinking base, recipe (a) and
+the GLM-5.3 teacher, plus per-template pass rates, failure modes, tool calls, wall time and thinking length.
+
+```bash
+uv run distill run examples/hf-hub-qa-mcp/run-inkling.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-inkling.toml --dry-run
+uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task mcp   # or --task cli
+```
+
 ## CLI vs. MCP comparison
 
 Apples-to-apples comparison on the first **150 test questions** of `nielsr/hf-hub-facts-v2` (GLM-5.3 → Qwen3.5-4B, thinking off, `pi@1.6.0`, shared verifier):
