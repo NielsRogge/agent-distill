@@ -81,7 +81,7 @@ details.think summary{cursor:pointer;font-style:italic;list-style:none}
 details.think summary::-webkit-details-marker{display:none}
 details.think summary::before{content:"▸ ";font-style:normal}
 details.think[open] summary::before{content:"▾ "}
-details.think .body{white-space:pre-wrap;margin:4px 0 6px 1em;padding-left:8px;border-left:2px solid var(--panel-line);max-height:220px;overflow-y:auto;color:var(--ink-2)}
+details.think .body{margin:4px 0 6px 1em;padding-left:8px;border-left:2px solid var(--panel-line);max-height:220px;overflow-y:auto;color:var(--ink-2)}
 .say{font-family:"Source Sans 3",sans-serif;font-style:italic;color:var(--muted);font-size:.88rem;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .empty-rows{color:var(--muted);font-family:"Source Sans 3",sans-serif;font-size:.9rem;padding-top:4px}
 @keyframes enter{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
@@ -91,9 +91,21 @@ details.think .body{white-space:pre-wrap;margin:4px 0 6px 1em;padding-left:8px;b
 .pill.ok{border-color:var(--ok-line);background:var(--ok-bg);color:var(--ok-ink)}
 .pill.bad{border-color:var(--bad-line);background:var(--bad-bg);color:var(--bad-ink)}
 .pill.warn{border-color:var(--warn-line);background:var(--warn-bg);color:var(--warn-ink)}
-.answer{margin-top:8px;font-size:.9rem;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;max-height:220px;overflow-y:auto;overflow-wrap:anywhere}
-.answer p{margin:0 0 6px}.answer p:last-child{margin:0}
-.answer code{font-family:var(--mono);font-size:.8rem;background:var(--card-2);padding:0 3px;border-radius:3px}
+.answer{margin-top:8px;font-size:.9rem;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;max-height:340px;overflow-y:auto;overflow-wrap:anywhere}
+/* Rendered Markdown (answers and thoughts) */
+.md > :first-child{margin-top:0}.md > :last-child{margin-bottom:0}
+.md p{margin:0 0 6px}
+.md ul,.md ol{margin:0 0 6px;padding-left:1.4em}
+.md li{margin:1px 0}
+.md h1,.md h2,.md h3,.md h4{font-size:.95rem;font-weight:700;margin:8px 0 4px}
+.md code{font-family:var(--mono);font-size:.8rem;background:var(--card-2);padding:0 3px;border-radius:3px}
+.md pre{background:var(--card-2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;overflow-x:auto;margin:0 0 6px}
+.md pre code{background:none;padding:0;font-size:.76rem}
+.md table{border-collapse:collapse;margin:0 0 6px;font-size:.82rem;display:block;overflow-x:auto}
+.md th,.md td{border:1px solid var(--line);padding:2px 6px;text-align:left}
+.md blockquote{margin:0 0 6px;padding-left:8px;border-left:3px solid var(--line);color:var(--ink-2)}
+.md a{color:var(--verb)}
+.md hr{border:0;border-top:1px solid var(--line)}
 .scores{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;font-size:.78rem;font-family:var(--mono)}
 .scores span{border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--ink-2)}
 .scores span.one{border-color:var(--ok-line);color:var(--ok-ink)}
@@ -155,6 +167,8 @@ footer code{font-family:var(--mono);font-size:.78rem}
   <footer id="footer"></footer>
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const QUIET = new Set(["read", "ls", "find", "grep"]);
@@ -163,8 +177,20 @@ let frames = [], recorded = {}, source = null, replayTimer = null, running = fal
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-// A tiny, escaping Markdown subset for answers: paragraphs, line breaks, `code`, **bold**, bullet markers.
+// Markdown (GitHub-flavoured) for answers and thoughts: marked, then DOMPurify, since the text comes from the agents
+// (and so from whatever the Hub content they read told them). Links open in a new tab. Without the libraries, a
+// small escaping subset.
+if (window.DOMPurify) DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "A") { node.setAttribute("target", "_blank"); node.setAttribute("rel", "noopener nofollow"); }
+  if (node.tagName === "IMG") node.remove();   // no remote images from agent output
+});
 function md(text) {
+  if (window.marked && window.DOMPurify) {
+    return DOMPurify.sanitize(marked.parse(String(text || "").trim(), { gfm: true, breaks: true }), { FORBID_TAGS: ["style", "img", "form", "input"] });
+  }
+  return mdLite(text);
+}
+function mdLite(text) {
   return String(text || "").trim().split(/\n{2,}/).map((para) => {
     let h = esc(para).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
     // [text](https://...) links: the URL was escaped with the rest, and only http(s) URLs are linked.
@@ -190,7 +216,7 @@ function renderRows(side, run) {
     if (r.kind === "think") {
       const label = r.tokens != null ? `thought · ${r.tokens.toLocaleString()} tokens` : `thought · ${r.text.length.toLocaleString()} chars`;
       const live = r.status === "live" ? " (thinking…)" : "";
-      return `<details class="think${isNew}" data-i="${i}"${open.has(String(i)) ? " open" : ""}><summary>${esc(label + live)}</summary><div class="body">${esc(r.text)}</div></details>`;
+      return `<details class="think${isNew}" data-i="${i}"${open.has(String(i)) ? " open" : ""}><summary>${esc(label + live)}</summary><div class="body md">${md(r.text)}</div></details>`;
     }
     if (r.kind === "text") return `<div class="say${isNew}" title="${esc(r.text)}">“${esc(r.text)}”</div>`;
     const live = run.status === "running" && ["writing", "calling", "running"].includes(r.status);
@@ -229,7 +255,7 @@ function renderOutcome(side, run, p) {
   pill.textContent = text;
 
   let html = "";
-  if (run.answer) html += `<div class="answer">${md(run.answer)}</div>`;
+  if (run.answer) html += `<div class="answer md">${md(run.answer)}</div>`;
   if (g && g.scores && Object.keys(g.scores).length) {
     html += `<div class="scores">` + Object.entries(g.scores).map(([k, v]) => `<span class="${v === 1 ? "one" : v === 0 ? "zero" : ""}">${esc(k)} ${score(v)}</span>`).join("") + `</div>`;
   }
