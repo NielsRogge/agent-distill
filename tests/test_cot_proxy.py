@@ -443,3 +443,24 @@ def test_other_students_keep_the_legacy_recipe():
     run = pipeline.make_run(load_run(SMOKE))
     assert run.config.sft.replay is None and not pipeline.sft_replay(run)
     assert "--replay-repo" not in sft_job_args(run)
+
+
+def test_full_cot_target_supervises_the_teachers_thought():
+    tok = QwenLikeTokenizer()
+    messages = sft.trajectory(RECORD, keep_reasoning=True, strip_visible_text=True)
+    (example,) = sft.render_trajectory_examples([messages], tok, [])
+    first, second = supervised_texts(example)
+    assert first.startswith("I should call hf.\n</think>\n\n<tool_call>bash")  # only `<think>\n` is prompt
+    assert second.startswith("It says mit.\n</think>\n\nThe license is **MIT**.")
+    assert example["prompt"].count("<think>\n</think>") == 0  # the history keeps the teacher's thoughts
+
+
+def test_keep_reasoning_flag_overrides_the_profile_and_takes_the_papers_defaults():
+    args = sft.parse_args([*BASE_ARGS, "--think-target", "native", "--keep-reasoning", "--strip-visible-text"])
+    assert args.keep_reasoning and (args.epochs, args.learning_rate, args.lora_rank) == (8.0, 3e-5, 16)
+    assert sft.parse_args(BASE_ARGS).keep_reasoning is None  # the profile decides
+    with pytest.raises(SystemExit, match="--keep-reasoning needs --think-target native"):
+        sft.parse_args([*BASE_ARGS, "--think-target", "empty", "--keep-reasoning"])
+    student = load_profile("students", "qwen3.5-4b-think")  # recipe (c): the profile's args, then the run's
+    args = sft.parse_args([*BASE_ARGS, *student.sft.args, "--think-target", "native", "--keep-reasoning"])
+    assert (args.think_target, args.keep_reasoning, args.strip_visible_text) == ("native", True, True)
