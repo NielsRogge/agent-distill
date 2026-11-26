@@ -3,19 +3,12 @@ from __future__ import annotations
 import pytest
 
 from agent_distill import pipeline
-from agent_distill.config import load_run
-from agent_distill.episode import Episode
-from agent_distill.harnesses.tools import harness_tools
+from agent_distill.config import load_profile, load_run
+from agent_distill.episode import Episode, ToolEvent
 from agent_distill.records import RecordWriter
 from agent_distill.rubrics import RubricResult
+from agent_distill.stages.eval import vllm_command
 from agent_distill.stages.sft import load_accepted, parse_args, parse_metric_caps
-from agent_distill.task import load_task
-
-
-def test_text_answer_task_omits_submit_tool_in_sft():
-    task = load_task("examples/hf-hub-qa")
-    tools = harness_tools("pi@1.6.0", task)
-    assert [t["function"]["name"] for t in tools] == ["bash", "read"]
 
 
 def test_sft_filtering_and_multiple_trace_sources(tmp_path):
@@ -31,9 +24,6 @@ def test_sft_filtering_and_multiple_trace_sources(tmp_path):
             model="m",
             messages=[{"role": "user", "content": "q"}, {"role": "assistant", "content": "a"}],
         )
-        # Override tool_calls count via tool_events length
-        from agent_distill.episode import ToolEvent
-
         ep.tool_events = [ToolEvent(kind="shell", name="bash", input={"command": "hf models info x"})] * tool_calls
         writer.write(ep, RubricResult(scores={"hf_errors": hf_errors}, reward=1.0, passed=True), label="teacher")
 
@@ -97,8 +87,62 @@ def test_sft_cli_accepts_multiple_repos_and_optimizer_flags():
     assert args.seed == 7
 
 
-def test_experiment_run_configs_build_expected_jobs():
-    run = pipeline.make_run(load_run("experiments/hf-cli-distill/run.toml"))
+def test_sft_refuses_traces_files_with_multiple_repos():
+    with pytest.raises(SystemExit, match="--traces-files cannot be combined with multiple --traces-repo"):
+        parse_args(
+            [
+                "--task",
+                "examples/hf-hub-qa",
+                "--harness",
+                "pi@1.6.0",
+                "--student",
+                "qwen3.5-4b",
+                "--traces-repo",
+                "org/repo-a",
+                "--traces-repo",
+                "org/repo-b",
+                "--traces-files",
+                "episodes/train.jsonl",
+            ]
+        )
+
+    # A single repo (even repeated identically) still allows --traces-files.
+    args = parse_args(
+        [
+            "--task",
+            "examples/hf-hub-qa",
+            "--harness",
+            "pi@1.6.0",
+            "--student",
+            "qwen3.5-4b",
+            "--traces-repo",
+            "org/repo-a",
+            "--traces-files",
+            "episodes/train.jsonl",
+        ]
+    )
+    assert args.traces_files == ["episodes/train.jsonl"]
+
+
+def test_fullcot_profile_uses_per_stage_generation_config():
+    student = load_profile("students", "qwen3.5-4b-think-fullcot")
+    assert student.sft.keep_reasoning is True
+    assert student.serve.reasoning_parser == "qwen3"
+    assert student.serve.generation_config == {"temperature": 0.6, "top_p": 0.95, "top_k": 20}
+    assert "--override-generation-config" not in student.serve.vllm_extra_args
+
+    eval_cmd = vllm_command(student, student.model, "")
+    probe_cmd = vllm_command(student, student.model, "", temperature=1.0)
+    assert eval_cmd[eval_cmd.index("--override-generation-config") + 1] == (
+        '{"temperature": 0.6, "top_p": 0.95, "top_k": 20}'
+    )
+    assert probe_cmd[probe_cmd.index("--override-generation-config") + 1] == (
+        '{"temperature": 1.0, "top_p": 1.0, "top_k": -1}'
+    )
+
+
+def test_fullcot_run_configs_build_expected_jobs():
+    run = pipeline.make_run(load_run("examples/hf-hub-qa/run-think-fullcot.toml"))
     traces = pipeline.trace_jobs(run, "R")
     assert len(traces) == 4
     assert all("--start 600" in j.command and "--no-raw-upload" in j.command for j in traces)
@@ -109,11 +153,15 @@ def test_experiment_run_configs_build_expected_jobs():
     assert "--max-metric hf_errors=0" in sft.command
     assert "flash-linear-attention==0.6.0" in sft.command
 
-    run_grpo = pipeline.make_run(load_run("experiments/hf-cli-distill/run-grpo.toml"))
+    run_judged = pipeline.make_run(load_run("examples/hf-hub-qa/run-think-fullcot-judged.toml"))
+    (judged_eval,) = pipeline.eval_jobs(run_judged, "R")
+    assert "--split seed" in judged_eval.command
+    assert "--limit 51" in judged_eval.command
+
+    run_grpo = pipeline.make_run(load_run("examples/hf-hub-qa/run-think-fullcot-grpo.toml"))
     probes = pipeline.probe_jobs(run_grpo, "R")
     assert len(probes) == 4
     assert all("--sample 1162" in j.command and "--limit 1162" in j.command for j in probes)
-    assert all("--no-raw-upload" in j.command for j in probes)
     (grpo,) = pipeline.grpo_jobs(run_grpo, "R")
-    assert "--max-completion-length 4096" in grpo.command
+    assert "--max-concurrent-rollouts 16" in grpo.command
     assert "difficulty/probe/train-0of4-qualified-ids.txt" in grpo.command

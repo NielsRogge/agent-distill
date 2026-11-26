@@ -435,6 +435,8 @@ def resolve_defaults(args: argparse.Namespace) -> argparse.Namespace:
     for key, value in defaults.items():
         if getattr(args, key) is None:
             setattr(args, key, value)
+    if args.traces_files and len(dict.fromkeys(args.traces_repo or [])) > 1:
+        raise SystemExit("--traces-files cannot be combined with multiple --traces-repo values")
     if args.summaries_repo and args.think_target != "empty":
         raise SystemExit("CoT-proxy summaries go after an empty think block: pass --think-target empty")
     if args.replay_repo and args.batch_size != 1:

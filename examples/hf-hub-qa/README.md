@@ -136,3 +136,42 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
     A GRPO stage on the efficiency-shaped reward is the obvious next step for these.
   - Spend: teacher traces about $21 (one shard's upload hit the account's private storage limit and was resumed),
     teacher evaluation $4.49, GPU about $12 (SFT 82 min, two evaluations and the merge on H200).
+- **Full-CoT thinking SFT** (`run-think-fullcot.toml`, `cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160`):
+  collected the remaining 562 train rows (`600..1161`, 561/562 accepted), combined with rows `0..599` (`1,161/1,162`
+  accepted), curated to `hf_errors=0` and `tool_calls<=12` (1,025 traces), and trained `qwen3.5-4b-think-fullcot`
+  (`keep_reasoning = true`, post-#19 tool list `[bash, read]`, 3 epochs, cosine LR `1e-4`, `warmup_ratio=0.05`,
+  `weight_decay=0.01`, LoRA `r=32`, `alpha=64`):
+
+  | Run | Split | Passed | `fact_correct` | `grounded` | Tool calls | `hf` errors | `read_skill` | Limit/timeout |
+  | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | Base Qwen3.5-4B (`nothink`) | `test[:150]` | 71/150 (47.3%) | — | — | 8.62 | 0.36 | 2.0% | 40 |
+  | Phase 1 SFT (`nothink`, 600 traces) | `test[:150]` | 117/150 (78.0%) | — | 98.1% (8 unseen) | 7.19 | 0.95 | 93.3% | 19 |
+  | Base Qwen3.5-4B (`think`) | `test[:150]` | 130/150 (86.7%) | — | 100.0% (0 unseen) | 6.09 | 1.53 | 0.0% | 12 |
+  | GLM-5.3 teacher (first = final record) | `test[:150]` | 148/150 (98.7%) | — | 99.8% (1 unseen) | 4.58 | 0.08 | 93.3% | 0 |
+  | Full-CoT thinking SFT | `test[:150]` | **148/150 (98.7%)** | 148/150 (98.7%) | 100.0% (303/303) | 4.10 | 0.04 | 93.3% | 0 |
+  | Full-CoT thinking SFT | Full `test` (377) | **369/377 (97.9%)** | 373/377 (98.9%) | 99.5% (765/769) | 4.29 | 0.058 | 92.6% | 1 |
+  | Full-CoT thinking SFT | `validation` (149) | **145/149 (97.3%)** | 147/149 (98.7%) | 99.4% (299/301) | 4.32 | 0.067 | 90.6% | 2 |
+
+  - Like-for-like teacher counting: all 150 CLI teacher test episodes finished on `attempt=1` with `cut_short=None`
+    (no reruns), so first-record and final-record teacher scores are both `148/150 (98.7%)`.
+  - Paired exact McNemar on `test[:150]`: vs Phase 1 SFT (`117/150`), 32 gained / 1 lost (`p = 7.9e-9`); vs Base
+    `think` (`130/150`), 18 gained / 0 lost (`p = 7.6e-6`); vs GLM-5.3 teacher (`148/150`), 1 gained / 1 lost
+    (`p = 1.00`).
+  - Per template on full `test` (377 rows): `base_pipeline` 36/36 (100%), `gguf_count` 37/37 (100%), `params_sum`
+    52/52 (100%), `safetensors_count` 20/20 (100%), `paper_title` 68/69 (98.6%), `paper_first_author` 65/67 (97.0%),
+    `base_params` 77/81 (95.1%), `base_license` 14/15 (93.3%).
+  - Multi-variable comparison caveat: relative to Phase 1 SFT, this run changes several things at once (nearly 2x
+    traces + zero-error curation, full-CoT reasoning supervision instead of thinking off, 3 epochs at cosine LR `1e-4`,
+    and the post-#19 tool list). Main's cross-format recipe (a) CLI counterpart on the original 600 traces is still
+    running; once published, paired McNemar against it and a single-variable data ablation can isolate data vs recipe.
+  - Open-ended judged eval (`run-think-fullcot-judged.toml`, 51 questions in `judged.py`): **26/51 (51.0%)**, far
+    below the GLM-5.3 teacher pilot (`43/51 = 84.3%`). Although the student still uses the skill (`read_skill = 98.0%`),
+    queries the Hub (`used_hub = 100%`), and stays grounded (`98.3%`, 433/436 IDs; `reference = 94.7%`), 11 of the 25
+    failures hit the 20-tool-call limit while over-querying on broad exploratory prompts, 13 failed the Gemini quality
+    bar (`< 0.7`, including 2 with minor grounding errors and 1 reference miss), and 1 was grounding-only. Training
+    3 epochs exclusively on terse, narrow factoid lookups without out-of-domain KL replay over-specializes the 4B
+    model and hurts open-ended synthesis and stopping behavior.
+  - `run-think-fullcot-grpo.toml` is **config-only (not run)**: SFT already matched the teacher on `test[:150]` and
+    reached `97.9%` on full `test` (`98.9%` `fact_correct`), leaving little reward headroom on `nielsr/hf-hub-facts-v2`.
+  - Spend: additional 562 teacher traces $17.02; GPU ~$16 (H200 SFT 57 min, A100 merge 2 min, H200 validation +
+    377-row test + 51-row judged evals); Gemini judge <$1.
