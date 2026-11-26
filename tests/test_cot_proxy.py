@@ -472,7 +472,7 @@ def test_the_fullcot_example_still_resolves_as_it_trained():
     assert not pipeline.sft_replay(run)
     command = sft_job_args(run)
     assert "--replay-repo" not in command and "--keep-reasoning" not in command
-    args = sft.resolve_defaults(sft.parse_args(command[command.index("--task"):]))
+    args = sft.resolve_defaults(sft.parse_args(command[command.index("--task") :]))
     assert not sft.cross_format(args)
     assert (args.think_target, args.strip_visible_text, args.epochs, args.learning_rate, args.lr_scheduler_type) == (
         "native", False, 3.0, 1e-4, "cosine")  # fmt: skip
