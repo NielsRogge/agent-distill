@@ -136,3 +136,55 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
     A GRPO stage on the efficiency-shaped reward is the obvious next step for these.
   - Spend: teacher traces about $21 (one shard's upload hit the account's private storage limit and was resumed),
     teacher evaluation $4.49, GPU about $12 (SFT 82 min, two evaluations and the merge on H200).
+- **SFT → GRPO on all 377 test questions** (`run-grpo.toml`, `qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-grpo`):
+  - SFT was rerun after #19 on the same 600 GLM-5.3 traces, so the student trained with exactly `bash` and `read`.
+  - A difficulty probe then ran the SFT model 4 times on 700 train questions. 157 qualified (solved on 1-3 of the 4
+    attempts), against 350 of 1,162 for the MCP twin.
+  - GRPO trained from the SFT merge on those 157 questions: 78 steps, one pass over the pool, 38 minutes on 2x H200.
+  - The table compares the MCP twin's run on the same 377 questions, in brackets:
+
+  | | Base Qwen3.5-4B | SFT | SFT + GRPO | GLM-5.3 |
+  | --- | --- | --- | --- | --- |
+  | Passed | 206/377 (54.6%) [72.1%] | 321/377 (85.1%) [81.4%] | **331/377 (87.8%)** [96.0%] | 375/377 (99.5%) [98.7%] |
+  | Hit the 15-call limit | 91 | 30 | 18 | 0 |
+  | Tool calls per episode | 8.9 | 7.0 | 4.9 | 4.3 |
+  | `hf` calls / rejected per episode | 4.3 / 0.50 | 5.5 / 0.93 | 3.7 / 0.22 | 3.1 / 0.10 |
+  | Read the skill | 2% | 93% | 70% | 92% |
+
+  - Paired comparisons:
+    - SFT against base: 141 questions fixed, 26 broken (sign test p ≈ 2.6e-20).
+    - GRPO against SFT: 46 fixed, 36 broken (p ≈ 0.32).
+    - GRPO against base: 145 fixed, 20 broken.
+  - On the CLI, SFT does the heavy lifting. It beats the MCP twin's SFT (85.1% vs 81.4%) from a much weaker base.
+  - GRPO mostly made the student more efficient rather than more accurate:
+    - it uses 30% fewer tool calls;
+    - it has a quarter of SFT's rejected `hf` calls;
+    - it hits the call limit 18 times instead of 30.
+  - The accuracy gain from GRPO is +2.7 points and not significant, against +14.6 for the MCP twin.
+  - The likely cause is the small pool. The probe qualified 22% of sampled train questions, so GRPO saw 157 questions
+    once (78 steps), against 350 (100 steps) for the MCP twin.
+  - Per template (base / SFT / GRPO / teacher):
+
+    | Template | Base | SFT | GRPO | Teacher |
+    | --- | --- | --- | --- | --- |
+    | `base_license` | 9 | 12 | 15 | 15 of 15 |
+    | `base_params` | 30 | 73 | 73 | 80 of 81 |
+    | `base_pipeline` | 29 | 32 | 33 | 35 of 36 |
+    | `paper_first_author` | 42 | 58 | 63 | 67 of 67 |
+    | `paper_title` | 52 | 63 | 68 | 69 of 69 |
+    | `params_sum` | 24 | 50 | 44 | 52 of 52 |
+    | `gguf_count` | 11 | 23 | 23 | 37 of 37 |
+    | `safetensors_count` | 9 | 10 | 12 | 20 of 20 |
+
+  - File counts remain the gap: 14 of GRPO's 18 call-limit failures are count questions.
+  - `params_sum` regressed by 6. Of GRPO's 8 failures there, 6 added the three sizes with a script, so the cause is
+    not unscripted arithmetic; it has not been diagnosed further.
+  - Of GRPO's 46 failures:
+    - 18 hit the call limit;
+    - 14 are wrong;
+    - 13 name the right fact but also a Hub id the agent never looked up (`grounded`);
+    - 1 never used the Hub.
+  - Spend:
+    - GPU about $43 of the approved $90: SFT $6.75, probe $11, GRPO pilot $1.90, GRPO $6.30, merges about $0.60,
+      evaluations $16 (base, SFT and GRPO on H200).
+    - The teacher's evaluation cost $11.80 of API calls.
