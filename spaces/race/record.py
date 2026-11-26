@@ -17,6 +17,7 @@ import httpx
 
 HERE = Path(__file__).resolve().parent
 THOUGHT_CHARS = 1500
+OUT_CHARS = 3000  # of each tool result kept in a replay
 
 
 def frames_from(url: str, race: str, row: str, timeout: float) -> list[dict[str, Any]]:
@@ -39,8 +40,8 @@ def slim(frame: dict[str, Any]) -> dict[str, Any]:
         for row in frame[side]["rows"]:
             if row.get("kind") == "think" and len(row.get("text", "")) > THOUGHT_CHARS:
                 row["text"] = "…" + row["text"][-THOUGHT_CHARS:]
-            if row.get("out"):
-                row["out"] = row["out"][:300]
+            if row.get("out") and len(row["out"]) > OUT_CHARS:
+                row["out"] = row["out"][:OUT_CHARS]
     return frame
 
 

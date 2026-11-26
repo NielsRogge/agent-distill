@@ -36,6 +36,7 @@ CONFIG = race_config.load()
 ENDPOINT_URL = os.environ.get("ENDPOINT_URL", "").rstrip("/")
 WAKE_TIMEOUT = float(os.environ.get("WAKE_TIMEOUT", "900"))
 THOUGHT_CHARS = 6000  # of a thought, per live frame
+OUT_CHARS = 6000  # of a tool result (what the model saw), per live frame
 
 # --------------------------------------------------------------------------------------------------
 # Questions: each race's evaluation rows (the split and limit the published numbers were measured on)
@@ -173,7 +174,7 @@ class AgentRun:
         elif kind == "tool_execution_end":
             row = self._tool_row(str(event.get("toolCallId")), str(event.get("toolName") or ""))
             text = result_text(event.get("result"))
-            row.update(status="error" if event.get("isError") else "ok", out=text[:600], out_len=len(text))
+            row.update(status="error" if event.get("isError") else "ok", out=text[:OUT_CHARS], out_len=len(text))
 
     def _block(self, index: int, kind: str) -> dict[str, Any]:
         key = (self._message, index)
