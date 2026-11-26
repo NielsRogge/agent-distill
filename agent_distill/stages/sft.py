@@ -16,6 +16,9 @@ training patch and whether the teacher's reasoning is distilled come from the st
   (`<think>\n\n</think>\n\n`) that is in the context but not supervised; the loss starts after it. A trajectory longer
   than `--max-length` is cut to its longest prefix of complete turns. The student is then served with thinking on
   (e.g. the `qwen3.5-4b-think` profile) and reasons in its own words before acting.
+- `--keep-reasoning` (with the default `--think-target native`): the paper's full-CoT target. Every think block holds
+  the teacher's reasoning; only `<think>` is prompt, and the thought, `</think>` and the action are supervised. Long
+  trajectories are cut to complete turns, as with the empty target.
 - `--strip-visible-text`: a turn that calls tools keeps only its calls (the teacher's prose around them is dropped).
   A turn without tool calls is the final natural-language answer of a `TextAnswer` task and keeps its text.
 - `--summaries-repo`: CoT-proxies from the `annotate` stage. Each turn becomes `<think></think><summary>S</summary>`
@@ -49,7 +52,48 @@ SUBMIT_TOOLS = {"structuredoutput", "submit"}
 # --------------------------------------------------------------------------------------------------
 
 
-def load_accepted(paths: list[Path], *, harness: str, allow_mismatch: bool = False) -> list[dict[str, Any]]:
+def parse_metric_caps(specs: list[str] | None) -> dict[str, float]:
+    caps: dict[str, float] = {}
+    for spec in specs or []:
+        key, sep, raw = spec.partition("=")
+        if not sep or not key.strip():
+            raise SystemExit(f"bad --max-metric {spec!r} (expected NAME=MAX)")
+        caps[key.strip()] = float(raw)
+    return caps
+
+
+def filter_records(
+    records: list[dict[str, Any]],
+    *,
+    max_metrics: dict[str, float] | None = None,
+    max_tool_calls: int | None = None,
+) -> list[dict[str, Any]]:
+    """Drop accepted traces that exceed metric caps (e.g. `hf_errors=0`) or tool-call caps."""
+    if not max_metrics and max_tool_calls is None:
+        return records
+    kept: list[dict[str, Any]] = []
+    for record in records:
+        if max_tool_calls is not None and int(record.get("tool_calls") or 0) > max_tool_calls:
+            continue
+        scores = record.get("scores") or {}
+        if max_metrics and any(
+            scores.get(key) is not None and float(scores[key]) > cap for key, cap in max_metrics.items()
+        ):
+            continue
+        kept.append(record)
+    if not kept:
+        raise ValueError("no accepted trajectories remain after filtering")
+    return kept
+
+
+def load_accepted(
+    paths: list[Path],
+    *,
+    harness: str,
+    allow_mismatch: bool = False,
+    max_metrics: dict[str, float] | None = None,
+    max_tool_calls: int | None = None,
+) -> list[dict[str, Any]]:
     """Accepted records (first per row) from episode JSONL files, all from `harness` (`name@version`).
 
     DESIGN.md §6 "No mixing of versions": records from another `harness@version` refuse the run, unless
@@ -71,7 +115,15 @@ def load_accepted(paths: list[Path], *, harness: str, allow_mismatch: bool = Fal
         print(f"WARNING: {message} (--allow-harness-mismatch: training on them)", flush=True)
     if not by_row:
         raise ValueError(f"no accepted {harness} trajectories in {[str(p) for p in paths]}")
-    return list(by_row.values())
+    records = list(by_row.values())
+    filtered = filter_records(records, max_metrics=max_metrics, max_tool_calls=max_tool_calls)
+    if len(filtered) != len(records):
+        print(
+            f"filtered {len(records)} accepted traces -> {len(filtered)} "
+            f"(max_metrics={max_metrics or {}}, max_tool_calls={max_tool_calls})",
+            flush=True,
+        )
+    return filtered
 
 
 def chat_message(message: dict[str, Any], *, keep_reasoning: bool) -> dict[str, Any]:
@@ -301,9 +353,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--profiles", action="append", type=Path, default=[])
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--traces", nargs="+", type=Path, help="Local episode JSONL files")
-    source.add_argument("--traces-repo", help="Dataset repo; reads episodes/**/*.jsonl (or --traces-files)")
+    source.add_argument(
+        "--traces-repo",
+        action="append",
+        help="Dataset repo (repeatable); reads episodes/**/*.jsonl (or --traces-files)",
+    )
     parser.add_argument("--traces-files", nargs="*", help="Files in --traces-repo")
     parser.add_argument("--allow-harness-mismatch", action="store_true")
+    parser.add_argument(
+        "--max-metric",
+        action="append",
+        default=[],
+        metavar="NAME=MAX",
+        help="Skip accepted traces whose score[NAME] exceeds MAX (repeatable, e.g. hf_errors=0)",
+    )
+    parser.add_argument("--max-tool-calls", type=int, help="Skip accepted traces with more than N tool calls")
     parser.add_argument("--model", help="Student checkpoint (default: the profile's model)")
     parser.add_argument("--output", type=Path, default=Path("/sft/adapter"))
     parser.add_argument("--hub-model-id", default="", help="Push the adapter (a public model repo)")
@@ -314,6 +378,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, help="Default 2e-4; 3e-5 with the cross-format recipe")
+    parser.add_argument("--lr-scheduler-type", default="", help="Default linear; constant_with_warmup with the recipe")
+    parser.add_argument("--warmup-ratio", type=float, default=0.0)
+    parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--epochs", type=float, help="Default 2; 8 with the cross-format recipe")
     parser.add_argument("--lora-rank", type=int)
     parser.add_argument("--save-steps", type=int, default=5)
@@ -332,8 +399,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     recipe.add_argument(
         "--strip-visible-text",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=False,
         help="Drop the prose of turns that call tools (the final answer turn keeps its text)",
+    )
+    recipe.add_argument(
+        "--keep-reasoning",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Render the teacher's reasoning in each think block and supervise it (the paper's full-CoT target, with "
+        "--think-target native); default: the student profile's [sft] keep_reasoning",
     )
     recipe.add_argument("--summaries-repo", default="", help="CoT-proxy summaries (the annotate stage's dataset)")
     recipe.add_argument("--summaries-file", default="summaries/summaries.jsonl")
@@ -362,7 +437,8 @@ PAPER_DEFAULTS = {"learning_rate": 3e-5, "epochs": 8.0, "lora_dropout": 0.0, "wa
 
 
 def cross_format(args: argparse.Namespace) -> bool:
-    return args.think_target == "empty" or bool(args.replay_repo) or bool(args.summaries_repo)
+    return (args.think_target == "empty" or bool(args.replay_repo) or bool(args.summaries_repo)
+            or bool(args.keep_reasoning))  # fmt: skip
 
 
 def resolve_defaults(args: argparse.Namespace) -> argparse.Namespace:
@@ -371,6 +447,10 @@ def resolve_defaults(args: argparse.Namespace) -> argparse.Namespace:
     for key, value in defaults.items():
         if getattr(args, key) is None:
             setattr(args, key, value)
+    if args.keep_reasoning and args.think_target == "empty":
+        raise SystemExit("--think-target empty supervises no reasoning: --keep-reasoning needs --think-target native")
+    if args.traces_files and len(dict.fromkeys(args.traces_repo or [])) > 1:
+        raise SystemExit("--traces-files cannot be combined with multiple --traces-repo values")
     if args.summaries_repo and args.think_target != "empty":
         raise SystemExit("CoT-proxy summaries go after an empty think block: pass --think-target empty")
     if args.replay_repo and args.batch_size != 1:
@@ -392,16 +472,25 @@ def main(argv: list[str] | None = None) -> None:
     if args.traces_repo:
         from huggingface_hub import HfApi, hf_hub_download
 
-        names = args.traces_files or [
-            name
-            for name in HfApi().list_repo_files(args.traces_repo, repo_type="dataset")
-            if name.startswith("episodes/") and name.endswith(".jsonl")
-        ]
-        paths = [Path(hf_hub_download(args.traces_repo, name, repo_type="dataset")) for name in names]
-    records = load_accepted(paths, harness=args.harness, allow_mismatch=args.allow_harness_mismatch)
-    keep_reasoning = student.sft.keep_reasoning
+        api = HfApi()
+        for repo in dict.fromkeys(args.traces_repo):
+            names = args.traces_files or [
+                name
+                for name in api.list_repo_files(repo, repo_type="dataset")
+                if name.startswith("episodes/") and name.endswith(".jsonl")
+            ]
+            paths.extend(Path(hf_hub_download(repo, name, repo_type="dataset")) for name in names)
+    records = load_accepted(
+        paths,
+        harness=args.harness,
+        allow_mismatch=args.allow_harness_mismatch,
+        max_metrics=parse_metric_caps(args.max_metric),
+        max_tool_calls=args.max_tool_calls,
+    )
+    keep_reasoning = student.sft.keep_reasoning if args.keep_reasoning is None else args.keep_reasoning
     if args.think_target == "empty" and keep_reasoning:
-        raise SystemExit("--think-target empty supervises no reasoning; the student profile sets keep_reasoning")
+        raise SystemExit("--think-target empty supervises no reasoning; drop --keep-reasoning (or the student "
+                         "profile's keep_reasoning)")  # fmt: skip
     summaries = None
     if args.summaries_repo:
         summaries = load_summaries(args.summaries_repo, args.summaries_file, records, args.min_summary_coverage)
@@ -427,7 +516,7 @@ def main(argv: list[str] | None = None) -> None:
     tokenizer.pad_token = tokenizer.pad_token or tokenizer.eos_token
     render = render_trajectory_examples if args.full_trajectory else render_examples
     examples = render(trajectories, tokenizer, tools, args.think_target)
-    rows = tokenize_examples(examples, tokenizer, args.max_length, whole_turns=args.think_target == "empty")
+    rows = tokenize_examples(examples, tokenizer, args.max_length, whole_turns=cross_format(args))
     supervised = sum(sum(row["completion_mask"]) for row in rows)
     print(f"{len(rows)} tokenized examples, {supervised} supervised tokens", flush=True)
     replay = heldout = None
@@ -723,13 +812,14 @@ def train(args: argparse.Namespace, student: Any, model_id: str, tokenizer: Any,
                 config.use_cache = False
         model_init_kwargs = None
     rank = args.lora_rank or student.lora.rank
+    alpha = args.lora_alpha if args.lora_alpha is not None else rank * 2
     trainer = SFTTrainer(
         model=model,
         processing_class=tokenizer,
         train_dataset=Dataset.from_list(rows),
         peft_config=LoraConfig(
             r=rank,
-            lora_alpha=args.lora_alpha or rank * 2,
+            lora_alpha=alpha,
             lora_dropout=args.lora_dropout,
             bias="none",
             task_type="CAUSAL_LM",
@@ -744,9 +834,12 @@ def train(args: argparse.Namespace, student: Any, model_id: str, tokenizer: Any,
             gradient_accumulation_steps=args.gradient_accumulation,
             learning_rate=args.learning_rate,
             warmup_steps=args.warmup_steps,
-            lr_scheduler_type="constant_with_warmup" if cross_format(args) else "linear",
+            warmup_ratio=args.warmup_ratio,
+            weight_decay=args.weight_decay,
+            lr_scheduler_type=args.lr_scheduler_type or ("constant_with_warmup" if cross_format(args) else "linear"),
             num_train_epochs=args.epochs,
             max_steps=args.max_steps,
+            seed=args.seed,
             bf16=not args.fp16,
             fp16=args.fp16,
             gradient_checkpointing=True,

@@ -1,0 +1,55 @@
+# Full-CoT Thinking-SFT experiment on the Hugging Face CLI + hf-cli Skill task (GLM-5.3 -> Qwen3.5-4B, pi@1.6.0):
+# - Collects the remaining 562 train rows (indices 600..1161) from nielsr/hf-hub-facts-v2 in 4 shards.
+# - Combines them with the existing 600 traces (nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces, rows 0..599).
+# - Filters accepted trajectories to zero CLI errors (`hf_errors=0`) and `<= 12` tool calls (1,025 traces).
+# - Trains full-trajectory LoRA SFT with full-CoT reasoning supervision (`qwen3.5-4b-think-fullcot`, 3 epochs,
+#   cosine LR 1e-4, warmup_ratio 0.05, weight_decay 0.01, LoRA r=32 alpha=64), merges, and evaluates.
+#
+#   distill run examples/hf-hub-qa/run-think-fullcot.toml --dry-run
+task = "."
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think-fullcot"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160"
+stages = ["traces", "sft", "merge", "eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false  # skip uploading -raw to avoid private storage limits
+
+[traces]
+split = "train"
+start = 600  # rows 0..599 already exist in nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces
+limit = 562  # remaining rows of the 1,162 train split
+attempts = 2
+shards = 4
+
+[sft]
+args = [
+  "--traces-repo", "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces",
+  "--max-metric", "hf_errors=0",
+  "--max-tool-calls", "12",
+  "--epochs", "3",
+  "--learning-rate", "1e-4",
+  "--lr-scheduler-type", "cosine",
+  "--warmup-ratio", "0.05",
+  "--weight-decay", "0.01",
+  "--lora-rank", "32",
+  "--lora-alpha", "64",
+  "--save-steps", "65",
+  "--save-total-limit", "3",
+]
+
+[eval]
+splits = ["validation", "test"]
+limit = 377
+concurrency = 4
+timeout = 300
+max_tool_calls = 15
+variants = ["sft"]
+
+[budget]
+traces_usd = 25
+gpu_usd = 60

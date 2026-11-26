@@ -124,6 +124,9 @@ class SFTSettings:
     model_class: str = ""
     train_patch: str = ""
     keep_reasoning: bool = False
+    # KL replay by default for this student (the cross-format recipe, `stages.sft --replay-repo`); a run's
+    # `[sft] replay` overrides it.
+    replay: bool = False
     args: list[str] = field(
         default_factory=lambda: [
             "--no-4bit",
@@ -310,6 +313,7 @@ class EvalSettings:
 @dataclass
 class TracesRun:
     split: str = "train"
+    start: int = 0  # first row index after the task's train filter
     limit: int | None = None  # first N train rows after the task's train filter, in total over the shards (None: all)
     shards: int | None = None  # default: the teacher profile's
     attempts: int | None = None  # default: the teacher profile's
@@ -321,7 +325,7 @@ class SFTRun:
     timeout: str = ""  # default: the student profile's
     # Cross-format recipe (stages.sft): KL replay on the `replay` dataset, CoT-proxies from the `summaries` dataset
     # (repos default to the run's own `<run>-replay` / `<run>-summaries`; `[repos]` can point to shared ones).
-    replay: bool = False
+    replay: bool | None = None  # None: the student profile's `[sft] replay`
     summaries: bool = False
 
 
