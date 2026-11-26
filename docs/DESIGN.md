@@ -437,14 +437,22 @@ McNemar on the same test rows; the teacher counted by its first record per row, 
 | Base, thinking on | 89.1% | 86.7% |
 | **Recipe (a): empty think + stripped text + KL replay, thinking on** | **98.1%** | **96.7%** |
 | Recipe (a) + CoT-proxies | 96.8% | — |
+| Full CoT, (a) with the teacher's thought supervised (`--think-target native --keep-reasoning`) | 88.3% | — |
 | Full-CoT SFT, thinking on (#21: 1,025 curated traces, 3 epochs at 1e-4, no replay) | — | 98.7% |
 | Teacher GLM-5.3 | 96.3% | 98.7% |
 
-On MCP, recipe (a) against action-only SFT fixes 66 questions and breaks 3 (p = 2e-16), and against base-thinking
-fixes 39 and breaks 5 (p = 1e-7); against SFT + GRPO it is a tie (15 fixed, 7 broken, p = 0.13) at a fraction of
-the cost (no difficulty probe or GRPO). On the CLI, recipe (a) against action-only SFT fixes 31 and breaks 3 (p = 8e-7), against base-thinking fixes 18 and breaks 3 (p = 0.001), and is level with the teacher (4 behind, 1 ahead, p = 0.38). #21's full-CoT run is 3 ahead of it (p = 0.25) but changes data, curation, target and schedule at once, and on 51 open-ended judged questions it scores 26/51 against the teacher's 43/51. CoT-proxies do not help on these short tasks: (b) against (a) fixes 5 and breaks 10
-(p = 0.30). The adapters' held-out drift after 8 passes is 1.6e-3 (a) and 2.0e-3 (b) nats per token, close to the
-paper's 1.3e-3 and 2.2e-3. Per-task tables are in the examples' READMEs.
+On MCP, recipe (a) against action-only SFT fixes 66 questions and breaks 3 (p = 2e-16), and against base-thinking fixes
+39 and breaks 5 (p = 1e-7); against SFT + GRPO it is a tie (15 fixed, 7 broken, p = 0.13) at a fraction of the cost (no
+difficulty probe or GRPO). On the CLI, recipe (a) against action-only SFT fixes 31 and breaks 3 (p = 8e-7), against
+base-thinking fixes 18 and breaks 3 (p = 0.001), and is level with the teacher (4 behind, 1 ahead, p = 0.38). #21's
+full-CoT run is 3 ahead of it (p = 0.25) but changes data, curation, target and schedule at once, and on 51 open-ended
+judged questions it scores 26/51; recipe (a) scores 33/51 (12 ahead, 5 behind, p = 0.14) and the teacher pilot's
+published records 41/51 (43/51 as reported). CoT-proxies do not help on these short tasks: (b) against (a) fixes 5 and
+breaks 10 (p = 0.30). Supervising the teacher's thought instead, variant (c), loses 37 questions to (a) (fixed 5, broken
+42, p = 2.5e-8): all its failures are episode timeouts inside long, teacher-style deliberation, and its think blocks
+take on the teacher's openings where (a) keeps the base's own. The adapters' held-out drift after 8 passes is 1.6e-3
+(a), 2.0e-3 (b) and 2.7e-3 (c) nats per token, against the paper's 1.3e-3 (a) and 2.2e-3 (b). Per-task tables are in the
+examples' READMEs.
 
 | Piece | Where | What it does |
 |---|---|---|

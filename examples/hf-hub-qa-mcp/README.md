@@ -16,6 +16,7 @@ Evaluated on all **377 test questions** of `nielsr/hf-hub-facts-v2` in `pi@1.6.0
 | Qwen3.5-4B (base) | on | 336/377 (89.1%) | 6.47 | — |
 | **+ Cross-format SFT, recipe (a) (`run-think.toml`)** | **on** | **370/377 (98.1%)** | **2.23** | — |
 | + Cross-format SFT, recipe (b) (+ CoT-proxies) | on | 365/377 (96.8%) | 3.32 | — |
+| + Full-CoT SFT, variant (c) (teacher's thought supervised) | on | 333/377 (88.3%) | 2.52 | — |
 | GLM-5.3 (teacher, first record) | on | 363/377 (96.3%) | 3.24 | 6.6% |
 | GLM-5.3 (teacher, final record after reruns) | on | 372/377 (98.7%) | 3.15 | 6.6% |
 
@@ -25,6 +26,19 @@ Evaluated on all **377 test questions** of `nielsr/hf-hub-facts-v2` in `pi@1.6.0
   - Reaches **98.1% (370/377)** for ~$13 in GPU spend (~$8 SFT, ~$5 eval; ~$1 shared replay pool) without needing a difficulty probe or GRPO.
   - Paired exact McNemar: beats non-thinking SFT (66 fixed / 3 broken, `p = 1.9e-16`) and thinking base (39 / 5, `p = 1.4e-7`), and ties both SFT + GRPO (15 / 7, `p = 0.13`) and the teacher's first record (13 / 6, `p = 0.17`).
   - Adding CoT-proxy summaries (recipe (b), 2-sentence turn summaries by Qwen3-4B-Instruct-2507) did not help on these short 2–4 call episodes (5 fixed / 10 broken vs. recipe (a), `p = 0.30`).
+- **Supervising the teacher's thought hurts — variant (c):** recipe (a) with KL replay and the same hyperparameters, but only `<think>\n` is prompt and the teacher's thought, `</think>` and the action are trained (`--think-target native --keep-reasoning`; held-out drift `2.7e-3` nats/token).
+  - Scores **333/377 (88.3%)**: 5 fixed / 42 broken vs. recipe (a) (`p = 2.5e-8`), level with the thinking base (38 / 41, `p = 0.82`), below the teacher's first record (6 / 36, `p = 2.8e-6`).
+  - All 35 failures are the 300 s episode timeout every run has, each cut off inside a think block; 22 of them after 500+ words of one thought re-checking tool output ("Hmm, but wait… let me reconsider"). Without them it passes 333/342.
+  - As in the paper's Table 8, (c) takes on the teacher's phrasing while (a) keeps the base's own:
+
+    | Think blocks | Words/turn (median / mean) | Most common openings |
+    | --- | ---: | --- |
+    | GLM-5.3 teacher (training traces) | 62 / 408 | "The user wants" 16%, "The base model" 9%, "The model card" 8% |
+    | Qwen3.5-4B base (thinking on) | 53 / 102 | "I keep getting" 15%, "I can see" 14%, "The user is" 12% |
+    | Recipe (a) | 58 / 62 | "The user is" 28%, "I found the" 26%, "I can see" 4% |
+    | Variant (c) | 36 / 119 | "The base model" 19%, "The user wants" 18%, "The user asks" 12% |
+
+  - Cost: ~$10 SFT (1 h 53 min on one H200) and ~$10 eval (1 h 45 min, timeouts included).
 - **Non-thinking SFT + GRPO (`run.toml`, phase 2):** a difficulty probe over all 1,162 train rows (4 attempts each at `T=0.8`) selected 350 rows solved 1–3/4 times. Running 100 steps of TRL async GRPO in Pi (2 prompts/step, 8 generations/prompt, 16 concurrent rollouts; $74.57 total for probe + GRPO + eval) lifted accuracy from **81.4% to 96.0%** (64 fixed / 9 broken, `p = 2.4e-11`).
   - GRPO fixed the exact templates SFT could not (recursive file counts: `gguf_count` 17 → 34/37, `safetensors_count` 12 → 20/20) by learning single precise `hf_fs find --recursive` calls, cutting tool calls to **1.75/episode** and failed calls to **1.2%**.
 - **Teacher counting rule:** the traces stage reruns episodes cut short by timeouts or provider errors (`--rerun-cut-short`), whereas student evaluations never rerun. Across 377 test questions, 11 teacher episodes were rerun (9 passed), yielding **98.7%** by final record and **96.3%** under the students' first-record rule.
@@ -95,4 +109,5 @@ uv run distill smoke examples/hf-hub-qa-mcp/run.toml \
   - Non-thinking GRPO: [`…-grpo-lora`](https://huggingface.co/nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-lora), [`…-grpo-merged`](https://huggingface.co/nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-merged) <!-- pragma: allowlist secret -->
   - Cross-format SFT (recommended): [`…-think-cfx-a-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-a-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
   - Cross-format SFT + CoT-proxies: [`…-think-cfx-b-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-b-…-summaries`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-summaries), [`…-think-cfx-b-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
+  - Full-CoT SFT, variant (c): [`…-think-cfx-c-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-c-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
   - Thinking base eval: [`…-think-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
