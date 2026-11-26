@@ -147,23 +147,30 @@ uv run --extra hub python examples/hf-hub-qa/questions.py      # the judged ques
   | Base Qwen3.5-4B (`nothink`) | `test[:150]` | 71/150 (47.3%) | — | — | 8.62 | 0.36 | 2.0% | 40 |
   | Phase 1 SFT (`nothink`, 600 traces) | `test[:150]` | 117/150 (78.0%) | — | 98.1% (8 unseen) | 7.19 | 0.95 | 93.3% | 19 |
   | Base Qwen3.5-4B (`think`) | `test[:150]` | 130/150 (86.7%) | — | 100.0% (0 unseen) | 6.09 | 1.53 | 0.0% | 12 |
+  | Main recipe (a) CLI SFT (`think`, 600 traces + KL replay) | `test[:150]` | 145/150 (96.7%) | 148/150 (98.7%) | 99.0% (309/312) | 4.45 | 0.233 | 92.0% | 0 |
   | GLM-5.3 teacher (first = final record) | `test[:150]` | 148/150 (98.7%) | — | 99.8% (1 unseen) | 4.58 | 0.08 | 93.3% | 0 |
-  | Full-CoT thinking SFT | `test[:150]` | **148/150 (98.7%)** | 148/150 (98.7%) | 100.0% (303/303) | 4.10 | 0.04 | 93.3% | 0 |
+  | Full-CoT thinking SFT | `test[:150]` | **148/150 (98.7%)** | 148/150 (98.7%) | 100.0% (303/303) | 4.10 | 0.040 | 93.3% | 0 |
   | Full-CoT thinking SFT | Full `test` (377) | **369/377 (97.9%)** | 373/377 (98.9%) | 99.5% (765/769) | 4.29 | 0.058 | 92.6% | 1 |
   | Full-CoT thinking SFT | `validation` (149) | **145/149 (97.3%)** | 147/149 (98.7%) | 99.4% (299/301) | 4.32 | 0.067 | 90.6% | 2 |
 
   - Like-for-like teacher counting: all 150 CLI teacher test episodes finished on `attempt=1` with `cut_short=None`
     (no reruns), so first-record and final-record teacher scores are both `148/150 (98.7%)`.
-  - Paired exact McNemar on `test[:150]`: vs Phase 1 SFT (`117/150`), 32 gained / 1 lost (`p = 7.9e-9`); vs Base
-    `think` (`130/150`), 18 gained / 0 lost (`p = 7.6e-6`); vs GLM-5.3 teacher (`148/150`), 1 gained / 1 lost
-    (`p = 1.00`).
+  - Paired exact McNemar on `test[:150]`:
+    - vs Phase 1 SFT (`117/150`): 32 gained / 1 lost (`p = 7.9e-9`);
+    - vs Base `think` (`130/150`): 18 gained / 0 lost (`p = 7.6e-6`);
+    - vs Main recipe (a) CLI SFT (`145/150`, `nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160-eval`): 3 gained /
+      0 lost (`p = 0.25`, not statistically significant). Both score `148/150 (98.7%)` on `fact_correct`; all 3
+      discordant rows were grounding misses on recipe (a) (`fact_correct = 1`, `grounded < 1`), while our curated
+      full-CoT run also had fewer `hf` CLI errors (`0.040` vs `0.233`/episode) and tool calls (`4.10` vs `4.45`);
+    - vs GLM-5.3 teacher (`148/150`): 1 gained / 1 lost (`p = 1.00`).
   - Per template on full `test` (377 rows): `base_pipeline` 36/36 (100%), `gguf_count` 37/37 (100%), `params_sum`
     52/52 (100%), `safetensors_count` 20/20 (100%), `paper_title` 68/69 (98.6%), `paper_first_author` 65/67 (97.0%),
     `base_params` 77/81 (95.1%), `base_license` 14/15 (93.3%).
-  - Multi-variable comparison caveat: relative to Phase 1 SFT, this run changes several things at once (nearly 2x
-    traces + zero-error curation, full-CoT reasoning supervision instead of thinking off, 3 epochs at cosine LR `1e-4`,
-    and the post-#19 tool list). Main's cross-format recipe (a) CLI counterpart on the original 600 traces is still
-    running; once published, paired McNemar against it and a single-variable data ablation can isolate data vs recipe.
+  - Multi-variable comparison caveat: relative to Phase 1 SFT and main's recipe (a) CLI SFT, this run changes several
+    things at once (nearly 2x traces + zero-error curation, full-CoT reasoning supervision vs empty think blocks +
+    strip visible text + KL replay, 3 epochs at cosine LR `1e-4` vs 8 epochs at `3e-5`). A single-variable ablation
+    (full-CoT on the original 600 traces only, or recipe (a) on the 1,025 curated traces) is needed to isolate data
+    volume/curation from the SFT recipe.
   - Open-ended judged eval (`run-think-fullcot-judged.toml`, 51 questions in `judged.py`): **26/51 (51.0%)**, far
     below the GLM-5.3 teacher pilot (`43/51 = 84.3%`). Although the student still uses the skill (`read_skill = 98.0%`),
     queries the Hub (`used_hub = 100%`), and stays grounded (`98.3%`, 433/436 IDs; `reference = 94.7%`), 11 of the 25
