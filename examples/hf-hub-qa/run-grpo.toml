@@ -1,0 +1,56 @@
+# hf-hub-qa (CLI), phase 2 (user-approved 2026-11-26, GPU cap $90): SFT rerun -> probe -> GRPO -> evaluation.
+#
+# - SFT is rerun on phase 1's 600 GLM-5.3 traces (run.toml's -traces dataset, reused through [repos]). Phase 1's SFT
+#   trained with a phantom `submit` tool that Pi does not offer (fixed in #19), so this rerun trains with exactly
+#   `bash` and `read`. Phase 1's published adapter and merged model are left as they are.
+# - Then the MCP twin's recipe: difficulty probe of the SFT model on train questions (k = 4), GRPO from the SFT merge
+#   on the qualified rows (solved on 1-3 of 4 attempts), and evaluation of base, SFT, GRPO and teacher on all 377
+#   test questions, like the MCP twin's table.
+#
+#   distill run examples/hf-hub-qa/run-grpo.toml --dry-run
+#   distill smoke examples/hf-hub-qa/run-grpo.toml --set 'stages=["grpo"]' --dry-run
+task = "."
+teacher = "glm-5.3"
+student = "qwen3.5-4b-nothink"
+harness = "pi@1.6.0"
+name = "qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-grpo"
+stages = ["sft", "merge", "probe", "grpo", "eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false  # nielsr's private storage is nearly full: raw harness logs stay in the jobs
+
+[repos]
+traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # phase 1's 600 accepted traces (run.toml)
+
+[sft]
+timeout = "2h"  # phase 1's SFT on the same 600 traces took 82 min (H200 at $5/h: at most $10)
+
+[eval]
+splits = ["test"]
+limit = 377  # every v2 test question, as in the MCP twin's GRPO table
+concurrency = 4  # anonymous Hub API rate limits
+timeout = 300
+max_tool_calls = 15
+variants = ["base", "sft", "grpo", "teacher"]
+
+[probe]
+split = "train"
+sample = 700  # of 1,162: CLI episodes run about twice as long as MCP ones; ~30% qualify (MCP: 350 of 1,162), enough
+k = 4         # for 100 GRPO steps of 2 prompts
+shards = 4
+timeout = "90m"  # 4 x 1.5 h x $5: at most $30 (expected ~$12)
+
+[grpo]
+args = ["--max-concurrent-rollouts", "16", "--save-steps", "10"]  # anonymous Hub API rate limits; checkpoints survive a timeout
+timeout = "270m"  # 2x H200 at $10/h: at most $45 (the MCP twin's 100 steps took 5 h 38 m; a timeout keeps the last checkpoint)
+use_probe = true
+
+[budget]
+traces_usd = 30  # the teacher's evaluation on 377 test questions (~$11); no new traces
+judge_usd = 0
+# Per stage. The user approved $90 of GPU for all of phase 2: SFT ~$7, merge <$1, probe <=$30 (expected ~$12),
+# GRPO <=$45, GRPO merge <$1, evaluations ~$19 (base, SFT, GRPO on 377 questions each).
+gpu_usd = 90
