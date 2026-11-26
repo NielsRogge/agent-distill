@@ -1,0 +1,45 @@
+# Optional Phase 2 GRPO configuration (CONFIG ONLY — NOT RUN):
+# Full-CoT Thinking-SFT (`run-think-fullcot.toml`) already reached 148/150 (98.7%) on test[:150] (matching GLM-5.3)
+# and 369/377 (97.9%) on the full 377-row test set, leaving negligible reward headroom on nielsr/hf-hub-facts-v2.
+# Keep this config for reproducibility if a future harder split or task needs RL on top of the merged SFT checkpoint.
+#
+#   distill run examples/hf-hub-qa/run-think-fullcot-grpo.toml --dry-run
+task = "."
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think-fullcot"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160"
+stages = ["probe", "grpo", "grpo-merge", "eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[probe]
+split = "train"
+sample = 1162
+shards = 4
+k = 4
+
+[grpo]
+timeout = "5h"
+use_probe = true
+args = [
+  "--max-steps", "60",
+  "--num-generations", "8",
+  "--max-concurrent-rollouts", "16",
+  "--save-steps", "10",
+]
+
+[eval]
+splits = ["validation", "test"]
+limit = 377
+concurrency = 4
+timeout = 300
+max_tool_calls = 15
+variants = ["grpo"]
+
+[budget]
+gpu_usd = 60

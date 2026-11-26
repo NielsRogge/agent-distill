@@ -467,6 +467,8 @@ def trace_jobs(run: Run, rev: str) -> list[jobs.Job]:
             "--output-repo",
             jobs.q(run.repo("traces")),
         ]
+        if settings.start:
+            args += ["--start", str(settings.start)]
         if settings.limit:
             args += ["--limit", str(settings.limit)]
         if settings.attempts:
@@ -529,7 +531,7 @@ def check_sft_args(run: Run, student: Any) -> None:
     `[sft] summaries = true` without `--think-target empty`) is refused by the dry run, not on the GPU."""
     from agent_distill.stages import sft as sft_stage
 
-    sft_stage.parse_args(["--task", "t", "--harness", "h", "--student", "s", "--traces", "x", *student.sft.args,
+    sft_stage.parse_args(["--task", "t", "--harness", "h", "--student", "s", "--traces-repo", "x", *student.sft.args,
                           *[a.strip("'") for a in recipe_args(run)], *run.config.sft.args])  # fmt: skip
 
 
