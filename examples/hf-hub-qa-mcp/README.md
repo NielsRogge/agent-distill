@@ -2,7 +2,8 @@
 
 **Status: done. On all 377 v2 test questions, non-thinking Qwen3.5-4B goes from 72.1% (base) to 81.4% (SFT on 599
 GLM-5.3 traces) to 96.0% (GRPO, 100 steps), close to the teacher's 98.7%, with fewer MCP calls than the teacher (1.75
-against 3.15 per episode). See "Results: GRPO (phase 2)".**
+against 3.15 per episode). See "Results: GRPO (phase 2)". With thinking on and the cross-format SFT recipe
+(`run-think.toml`, no GRPO) the same student reaches 98.1%; see "Thinking student (CoT-proxy recipe)".**
 
 A Pi agent answers questions about the Hugging Face Hub using only the tools of the
 [Hugging Face MCP server](https://huggingface.co/docs/hub/en/agents-mcp), through
@@ -449,15 +450,79 @@ reruns passed:
 
 Under the students' rule the teacher is at 96.3%, tied with GRPO's 96.0%.
 
-### Related: thinking students (#19)
+## Thinking student (CoT-proxy recipe, 2026-11-26)
 
-The CoT-proxy session (#19) trained the same student with thinking on (recipe (a), on the same traces and the same 377
-test questions):
+`run-think.toml`, the recommended route: the same Qwen3.5-4B served **with thinking** (`qwen3.5-4b-think`: vLLM's
+`qwen3` reasoning parser, temperature 0.6 / top-p 0.95 / top-k 20, 8,192 tokens per turn), trained on the same 599
+accepted GLM-5.3 traces with the cross-format recipe of
+[CoT-Proxy](https://arxiv.org/abs/2611.33148) (Kopiczko, Blankevoort, Asano), which the thinking profile now applies by
+default (`docs/DESIGN.md`, "Cross-format SFT"):
 
-| Run | Passed |
-|---|---|
-| Qwen3.5-4B thinking base (`qwen35-4b-think-…-eval`, `base-think`) | 336/377 (89.1%) |
-| Recipe (a) SFT (`qwen35-4b-think-cfx-a-…-eval`, `sft`) | 370/377 (98.1%) |
+- every SFT target starts after an empty, unsupervised think block, so the student learns the teacher's actions
+  without being taught to stop thinking;
+- the teacher's prose around tool calls is stripped (the final answer keeps its text);
+- KL replay keeps the student close to its initial self: each update mixes 17 teacher trajectories with 3 of the
+  initial student's own generations on out-of-domain prompts (OpenR1-Math, OpenAssistant;
+  [`nielsr/qwen35-4b-think-replay-openr1-oasst`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-replay-openr1-oasst));
+- LoRA r16 / alpha 32, lr 3e-5, 8 passes (283 updates, 1 h 27 min on one H200).
 
-The thinking base is stronger than the non-thinking base (72.1%), and thinking SFT beats non-thinking SFT (81.4%).
-Non-thinking SFT + GRPO reaches 96.0% with 1.75 MCP calls per question.
+Pi keeps the student's own reasoning in its history, as the recipe expects: Pi sends the parsed reasoning back on
+later turns and the Qwen3.5 template renders it (prompt tokens grow by the previous turn's reasoning in 179 of 180
+checked turn pairs).
+
+Variant (b) adds CoT-proxies: a two-sentence summary of the teacher's reasoning per turn (by Qwen3-4B-Instruct-2507,
+2,138 of 2,231 turns accepted;
+[`…-cfx-b-…-summaries`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-summaries)),
+supervised between the empty think block and the action.
+
+All 377 test questions; the teacher counted by its first record per question, the students' rule (98.7% by its
+final record, see above):
+
+| | Thinking | Passed | MCP calls / episode |
+|---|---|---|---|
+| Qwen3.5-4B (base) | off | 272/377 (72.1%) | 6.16 |
+| + SFT (run.toml) | off | 307/377 (81.4%) | 3.38 |
+| + SFT + GRPO (run.toml, phase 2) | off | 362/377 (96.0%) | 1.75 |
+| Qwen3.5-4B (base) | on | 336/377 (89.1%) | 6.47 |
+| **+ SFT, recipe (a)** | on | **370/377 (98.1%)** | 2.23 |
+| + SFT, recipe (b): (a) + CoT-proxies | on | 365/377 (96.8%) | 3.32 |
+| GLM-5.3 (teacher), first record | on | 363/377 (96.3%) | 3.24 |
+
+Calls per episode here count every tool call in the episode records (6.16 for the base, against 6.13 in the tables
+above).
+
+Paired on the same 377 questions (exact McNemar):
+
+- recipe (a) against the non-thinking SFT: fixed 66, broke 3, **p = 1.9e-16**;
+- recipe (a) against the thinking base: fixed 39, broke 5, p = 1.4e-7;
+- recipe (a) against SFT + GRPO: fixed 15, broke 7, p = 0.13 (a tie at this size, without the probe and GRPO);
+- recipe (a) against the teacher (first record): fixed 13, broke 6, p = 0.17;
+- the thinking base against the non-thinking SFT: fixed 57, broke 28, p = 0.002;
+- recipe (b) against (a): fixed 5, broke 10, p = 0.30. CoT-proxies do not help on these short tasks (2-4 calls).
+
+| Template | n | SFT (off) | SFT + GRPO (off) | Base (on) | Recipe (a) (on) | Teacher (first record) |
+|---|---|---|---|---|---|---|
+| base_params | 81 | 63 | 79 | 58 | **81** | 80 |
+| paper_title | 69 | 61 | 67 | 66 | **69** | 69 |
+| paper_first_author | 67 | 66 | 66 | 63 | 66 | 67 |
+| params_sum | 52 | 40 | 49 | 52 | **52** | 41 |
+| gguf_count | 37 | 17 | 34 | 30 | 33 | 37 |
+| base_pipeline | 36 | 34 | 33 | 35 | **36** | 36 |
+| safetensors_count | 20 | 12 | 20 | 18 | 19 | 20 |
+| base_license | 15 | 14 | 14 | 14 | 14 | 13 |
+
+Thinking fixes the sums of three parameter counts (52/52 already for the thinking base) and, with the recipe, the
+base model's parameter count. File counts stay the one template where GRPO's single precise call does better.
+
+Cost: about $8 for SFT (one H200) and $5 for the evaluation; the replay pool (about $1) is shared by every
+Qwen3.5-4B run. Phase 2 of `run.toml` (probe and GRPO) cost $74.57.
+
+Artifacts: adapters
+[`…-think-cfx-a-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora) and
+[`…-think-cfx-b-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-lora);
+evaluations
+[`…-think-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) (thinking
+base),
+[`…-think-cfx-a-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-eval)
+and
+[`…-think-cfx-b-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval).

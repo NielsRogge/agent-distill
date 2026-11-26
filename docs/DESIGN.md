@@ -433,13 +433,15 @@ McNemar on the same test rows; the teacher counted by its first record per row, 
 |---|---|---|
 | Base, thinking off | 72.1% | 47.3% |
 | Action-only SFT, thinking off (phase 1) | 81.4% | 78.0% |
+| Action-only SFT + GRPO, thinking off (phase 2) | 96.0% | — |
 | Base, thinking on | 89.1% | 86.7% |
 | **Recipe (a): empty think + stripped text + KL replay, thinking on** | **98.1%** | CLI_A |
 | Recipe (a) + CoT-proxies | 96.8% | — |
 | Teacher GLM-5.3 | 96.3% | CLI_T |
 
 On MCP, recipe (a) against action-only SFT fixes 66 questions and breaks 3 (p = 2e-16), and against base-thinking
-fixes 39 and breaks 5 (p = 1e-7). CoT-proxies do not help on these short tasks: (b) against (a) fixes 5 and breaks 10
+fixes 39 and breaks 5 (p = 1e-7); against SFT + GRPO it is a tie (15 fixed, 7 broken, p = 0.13) at a fraction of
+the cost (no difficulty probe or GRPO). CoT-proxies do not help on these short tasks: (b) against (a) fixes 5 and breaks 10
 (p = 0.30). The adapters' held-out drift after 8 passes is 1.6e-3 (a) and 2.0e-3 (b) nats per token, close to the
 paper's 1.3e-3 and 2.2e-3. Per-task tables are in the examples' READMEs.
 
