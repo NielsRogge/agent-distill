@@ -1,0 +1,42 @@
+# CoT-proxy experiments, step 3 (c): the paper's full-CoT target on hf-hub-qa-mcp. Everything as in (a) (the same
+# 599 GLM-5.3 traces, visible text stripped, KL replay on the same pool, LoRA r16/alpha 32, lr 3e-5, 8 passes,
+# thinking on at inference) except the target: the teacher's reasoning stays in every think block and is supervised
+# (`--think-target native --keep-reasoning`: only `<think>` is prompt; thought, `</think>` and action are trained).
+#
+#   distill run experiments/cot-proxy/mcp-cfx-c.toml --dry-run
+task = "../../examples/hf-hub-qa-mcp"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160"
+stages = ["sft", "eval"]
+
+[repos]
+traces = "nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-traces"  # phase 1's accepted traces, read only
+replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[sft]
+replay = true
+timeout = "10h"
+args = ["--think-target", "native", "--keep-reasoning", "--strip-visible-text", "--full-trajectory", "--lora-rank", "16",
+        "--lora-alpha", "32", "--lora-dropout", "0", "--learning-rate", "3e-5", "--warmup-steps", "2",
+        "--epochs", "8", "--save-steps", "50"]
+
+[eval]
+splits = ["test"]
+limit = 377
+concurrency = 4
+timeout = 300
+max_tool_calls = 15
+variants = ["sft"]
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 60  # per stage: SFT <= 10 h on H200
