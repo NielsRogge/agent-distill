@@ -1,0 +1,32 @@
+# The 51 open-ended judged questions (`judged.py`) for run-think-curated.toml's adapter: recipe (a) on #21's 1,025
+# curated traces. Same settings as run-think-fullcot-judged.toml, so it pairs with #21 (26/51) and recipe (a)-600
+# (33/51) question by question.
+#
+#   distill run examples/hf-hub-qa/run-think-curated-judged.toml --dry-run
+task = "judged.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+sft = "Qwen/Qwen3.5-4B+nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora"
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 20  # worst case: the serve profile's 4 h timeout on one H200; expected ~$3

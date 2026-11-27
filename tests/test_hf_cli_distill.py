@@ -165,3 +165,57 @@ def test_fullcot_run_configs_build_expected_jobs():
     (grpo,) = pipeline.grpo_jobs(run_grpo, "R")
     assert "--max-concurrent-rollouts 16" in grpo.command
     assert "difficulty/probe/train-0of4-qualified-ids.txt" in grpo.command
+
+
+def test_open_ended_questions_disjoint_and_well_formed():
+    import importlib.util
+    import json
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "open_ended_questions", Path("examples/hf-hub-qa/open_ended_questions.py")
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    rows = mod.rows()
+    assert len(rows) == 240
+    assert len({r["question_id"] for r in rows}) == 240
+    refs = [json.loads(r["reference"]) for r in rows if r["reference"]]
+    assert len(refs) >= 50
+    for ref in refs:
+        assert "ids" in ref or ("fact" in ref and "path" in ref)
+
+
+def test_open_ended_task_and_mixed_run_configs():
+    from agent_distill.task import load_task
+
+    oe = load_task("examples/hf-hub-qa/open_ended.py")
+    judged = load_task("examples/hf-hub-qa/judged.py")
+    fact = load_task("examples/hf-hub-qa")
+    assert oe.system_prompt == judged.system_prompt == fact.system_prompt
+    assert oe.tools == judged.tools == fact.tools
+    assert oe.skills == judged.skills == fact.skills
+    assert oe.judge == judged.judge == "gemini-4-hydrogen"
+    assert oe.limits == judged.limits
+
+    run_traces = pipeline.make_run(load_run("examples/hf-hub-qa/run-think-open-ended-traces.toml"))
+    traces = pipeline.trace_jobs(run_traces, "R")
+    assert len(traces) == 4
+    assert all("--judge gemini-4-hydrogen" in j.command and "--no-raw-upload" in j.command for j in traces)
+    assert all("GEMINI_API_KEY" in j.secret_envs for j in traces)
+
+    run_mixed = pipeline.make_run(load_run("examples/hf-hub-qa/run-think-mixed.toml"))
+    (sft,) = pipeline.sft_jobs(run_mixed, "R")
+    assert "--traces-repo nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces" in sft.command
+    assert "--traces-repo nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces" in sft.command
+    assert "--max-tool-calls 12" in sft.command
+    (eval_job,) = pipeline.eval_jobs(run_mixed, "R")
+    assert "--limit 377" in eval_job.command
+
+    run_mixed_judged = pipeline.make_run(load_run("examples/hf-hub-qa/run-think-mixed-judged.toml"))
+    (judged_eval,) = pipeline.eval_jobs(run_mixed_judged, "R")
+    assert "--split seed" in judged_eval.command
+    assert "--limit 51" in judged_eval.command
+    assert "GEMINI_API_KEY" in judged_eval.secret_envs

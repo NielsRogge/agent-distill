@@ -203,3 +203,34 @@ def test_terminate_kills_the_agent_when_cancelled_while_waiting_for_it() -> None
     started = time.monotonic()
     assert asyncio.run(main()) != 0  # killed, long before the 10-second grace period
     assert time.monotonic() - started < 5
+
+
+def test_event_stream_splits_on_lf_only_and_survives_bad_records_and_observers() -> None:
+    """`on_event` gets every JSON record of Pi's stream: split on LF only (U+2028 is valid inside a string), across
+    read boundaries; a record that does not parse, or an observer that raises, never stops the stream."""
+    import asyncio
+    import json
+
+    from agent_distill.harnesses.pi import _events
+
+    records = [{"type": "session", "id": "s"}, {"type": "message_update", "delta": "a" + chr(0x2028) + "b"},
+               {"type": "tool_execution_start", "toolName": "bash"}]  # fmt: skip
+    data = "\n".join(json.dumps(r, ensure_ascii=False) for r in records[:2]) + "\nnot json\n\n"
+    data += json.dumps(records[2]) + "\n"
+    seen: list[dict] = []
+
+    def observe(event: dict) -> None:
+        seen.append(event)
+        if event["type"] == "session":
+            raise RuntimeError("a broken observer")
+
+    async def main() -> None:
+        reader = asyncio.StreamReader()
+        raw = data.encode()
+        for start in range(0, len(raw), 7):  # records split across reads
+            reader.feed_data(raw[start : start + 7])
+        reader.feed_eof()
+        await _events(reader, observe)
+
+    asyncio.run(main())
+    assert seen == records
