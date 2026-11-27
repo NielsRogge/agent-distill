@@ -325,3 +325,33 @@ def test_inkling_hub_qa_evals_stage_the_hook_modules(example):
     for flag, value in (("--concurrency", think.concurrency), ("--timeout", think.timeout),
                         ("--max-tool-calls", think.max_tool_calls)):  # fmt: skip
         assert float(args[args.index(flag) + 1]) == value
+
+
+@pytest.mark.parametrize(
+    ("config", "reference"),
+    [
+        ("examples/hf-hub-qa/run-inkling-8k.toml", "examples/hf-hub-qa/run-inkling.toml"),
+        ("examples/hf-hub-qa-mcp/run-inkling-8k.toml", "examples/hf-hub-qa-mcp/run-inkling.toml"),
+        ("examples/hf-hub-qa/run-inkling-judged.toml", "examples/hf-hub-qa/run-think-fullcot-judged.toml"),
+    ],
+)
+def test_inkling_8k_evals_use_the_project_profile(config, reference):
+    """The 8k runs serve Inkling-2-Mini with Qwen's thinking-profile output limit through a staged project profile
+    (the built-in keeps 4,096), with the eval settings of the run they are compared against."""
+    run = pipeline.make_run(load_run(Path(config)))
+    other = load_run(Path(reference)).eval
+    assert load_profile("students", "inkling-2-mini").serve.max_output_tokens == 4096
+    assert pipeline.student_profile(run).serve.max_output_tokens == 8192
+    staged = pipeline.profile_files(run)
+    assert (
+        staged["profiles/students/inkling-2-mini-8k.toml"].resolve().parent
+        == Path("examples/inkling-2-mini/students").resolve()
+    )
+    pipeline.check_hooks(run, pipeline.requires_files(run))
+    (job,) = pipeline.eval_jobs(run, "REV")
+    args = shlex.split(job.command.splitlines()[-2])
+    assert args[args.index("--student") + 1] == "inkling-2-mini-8k"
+    assert args[args.index("--model") + 1] == "thinkingmachines/Inkling-2-Mini"
+    for flag, value in (("--limit", other.limit), ("--concurrency", other.concurrency), ("--timeout", other.timeout),
+                        ("--max-tool-calls", other.max_tool_calls)):  # fmt: skip
+        assert float(args[args.index(flag) + 1]) == value
