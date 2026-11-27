@@ -319,6 +319,10 @@ class EvalSettings:
     # OpenCode: a bash call naming a missing `workdir` fails with an error the model sees (instead of hanging until
     # the episode times out). Off only for parity runs that must match the reference harness exactly.
     workdir_guard: bool = True
+    # Run against an MCP server whose live tool list no longer matches the task's snapshot (sets
+    # AGENT_DISTILL_ALLOW_MCP_DRIFT=1 in the eval jobs; each record keeps both digests and the live server version).
+    # For a drift the model cannot see (e.g. an `outputSchema` change); refresh the snapshot otherwise.
+    allow_mcp_drift: bool = False
 
 
 @dataclass

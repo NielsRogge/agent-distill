@@ -194,3 +194,15 @@ def test_recipe_a_run_configs_build_sft_on_l4_and_adapter_eval(task):
     assert "--output-repo nielsr/lfm3-17b-replay-openr1-oasst" in built["replay"].command
     command = built["eval"].command  # the adapter served on the pinned base (no merge stage)
     assert "--model LiquidAI/LFM3-1.7B " in command and f"--adapter {run.repo('lora')} " in command
+
+
+def test_mcp_drift_override_reaches_only_the_runs_that_set_it():
+    from agent_distill.mcp import ALLOW_DRIFT_ENV
+
+    mcp = make_run(load_run(Path("examples/hf-hub-qa-mcp/run-lfm3-think.toml")))
+    (job,) = pipeline.eval_jobs(mcp, "REV")
+    assert job.env[ALLOW_DRIFT_ENV] == "1"
+    cli = make_run(load_run(Path("examples/hf-hub-qa/run-lfm3-think.toml")))
+    assert all(ALLOW_DRIFT_ENV not in job.env for job in pipeline.eval_jobs(cli, "REV"))
+    base = make_run(load_run(Path("examples/hf-hub-qa-mcp/run-lfm3.toml")))
+    assert all(ALLOW_DRIFT_ENV not in job.env for job in pipeline.eval_jobs(base, "REV"))

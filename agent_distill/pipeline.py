@@ -33,6 +33,7 @@ from typing import Any
 
 from agent_distill import jobs
 from agent_distill.config import BUILTIN_PROFILES, UV_IMAGE, RunConfig, load_profile, load_run, slugify
+from agent_distill.mcp import ALLOW_DRIFT_ENV
 from agent_distill.task import Task, load_task
 
 STAGES = ("traces", "annotate", "replay", "sft", "merge", "probe", "grpo", "eval", "publish")
@@ -388,6 +389,9 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
             built.append(served_job(run, rev, "eval", name, model, adapter, label, args, minutes))
     if "teacher" in settings.variants and not settings.models:
         built += [teacher_eval_job(run, rev, split) for split in settings.splits]
+    if settings.allow_mcp_drift:
+        for job in built:
+            job.env[ALLOW_DRIFT_ENV] = "1"
     return built
 
 
