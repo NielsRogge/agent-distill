@@ -14,9 +14,9 @@ name = "qwen35-4b-hf-hub-qa-v2-glm-53-pi-160"  # v1 runs: qwen35-4b-hf-hub-qa-gl
 stages = ["traces", "sft", "merge", "eval"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
 
 [traces]
 split = "train"

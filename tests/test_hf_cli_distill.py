@@ -148,8 +148,8 @@ def test_fullcot_run_configs_build_expected_jobs():
     assert all("--start 600" in j.command and "--no-raw-upload" in j.command for j in traces)
 
     (sft,) = pipeline.sft_jobs(run, "R")
-    assert "--traces-repo nielsr/cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160-traces" in sft.command
-    assert "--traces-repo nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces" in sft.command
+    assert "--traces-repo agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160-traces" in sft.command
+    assert "--traces-repo agent-distillation-hf/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces" in sft.command
     assert "--max-metric hf_errors=0" in sft.command
     assert "flash-linear-attention==0.6.0" in sft.command
 
@@ -208,8 +208,11 @@ def test_open_ended_task_and_mixed_run_configs():
 
     run_mixed = pipeline.make_run(load_run("examples/hf-hub-qa/run-think-mixed.toml"))
     (sft,) = pipeline.sft_jobs(run_mixed, "R")
-    assert "--traces-repo nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces" in sft.command
-    assert "--traces-repo nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces" in sft.command
+    assert "--traces-repo agent-distillation-hf/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces" in sft.command
+    assert (
+        "--traces-repo agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces"
+        in sft.command
+    )
     assert "--max-tool-calls 12" in sft.command
     (eval_job,) = pipeline.eval_jobs(run_mixed, "R")
     assert "--limit 377" in eval_job.command

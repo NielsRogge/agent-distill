@@ -6,7 +6,7 @@ This is the MCP twin of [`hf-hub-qa`](../hf-hub-qa/README.md), which answers the
 
 ## Headline results
 
-Evaluated on all **377 test questions** of `nielsr/hf-hub-facts-v2` in `pi@1.6.0` against HF MCP server `0.4.39`:
+Evaluated on all **377 test questions** of `agent-distillation-hf/hf-hub-facts-v2` in `pi@1.6.0` against HF MCP server `0.4.39`:
 
 | Model | Thinking | Passed | MCP calls / ep | Failed MCP calls |
 | --- | :---: | ---: | ---: | ---: |
@@ -65,8 +65,8 @@ The `inkling-2-mini` profile serves only on RTX PRO 6000 with the `vllm/vllm-ope
 and reasoning parsers); its hook modules are copied from url-extraction into [`../inkling-2-mini`](../inkling-2-mini).
 
 Results (Nov 2026; first record per row, exact McNemar tests on the paired rows; eval datasets
-[MCP](https://huggingface.co/datasets/nielsr/inkling-2-mini-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
-[CLI](https://huggingface.co/datasets/nielsr/inkling-2-mini-hf-hub-qa-v2-glm-53-pi-160-eval)). Each job took 76 min
+[MCP](https://huggingface.co/datasets/agent-distillation-hf/inkling-2-mini-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
+[CLI](https://huggingface.co/datasets/agent-distillation-hf/inkling-2-mini-hf-hub-qa-v2-glm-53-pi-160-eval)). Each job took 76 min
 (~$3.50); with the 5-question smoke runs, Phase 1 cost ~$8 of GPU.
 
 | Inkling-2-Mini base vs. | MCP: Inkling / other (only Inkling, only other, p) | CLI: Inkling / other (only Inkling, only other, p) |
@@ -108,8 +108,8 @@ Results (Nov 2026; first record per row, exact McNemar tests on the paired rows;
 `run-inkling-8k.toml` here and in [`hf-hub-qa`](../hf-hub-qa/run-inkling-8k.toml) repeat the runs above with the
 project profile [`inkling-2-mini-8k`](../inkling-2-mini/students/inkling-2-mini-8k.toml). That profile is the built-in
 one with `max_output_tokens = 8192`, the Qwen thinking setting. The built-in profile keeps 4,096. Eval datasets:
-[MCP](https://huggingface.co/datasets/nielsr/inkling-2-mini-8k-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
-[CLI](https://huggingface.co/datasets/nielsr/inkling-2-mini-8k-hf-hub-qa-v2-glm-53-pi-160-eval). Each job took about
+[MCP](https://huggingface.co/datasets/agent-distillation-hf/inkling-2-mini-8k-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
+[CLI](https://huggingface.co/datasets/agent-distillation-hf/inkling-2-mini-8k-hf-hub-qa-v2-glm-53-pi-160-eval). Each job took about
 85 min (~$3.90).
 
 | Inkling-2-Mini 8k vs. | MCP: 8k / other (only 8k, only other, p) | CLI: 8k / other (only 8k, only other, p) |
@@ -253,7 +253,7 @@ uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task mcp -
 
 ## CLI vs. MCP comparison
 
-Apples-to-apples comparison on the first **150 test questions** of `nielsr/hf-hub-facts-v2` (GLM-5.3 → Qwen3.5-4B, thinking off, `pi@1.6.0`, shared verifier):
+Apples-to-apples comparison on the first **150 test questions** of `agent-distillation-hf/hf-hub-facts-v2` (GLM-5.3 → Qwen3.5-4B, thinking off, `pi@1.6.0`, shared verifier):
 
 | Model (thinking off) | `hf` CLI (`bash` + skill) | HF MCP server (3 tools) |
 | --- | ---: | ---: |
@@ -271,7 +271,7 @@ Apples-to-apples comparison on the first **150 test questions** of `nielsr/hf-hu
   - Only `hub_repo_search`, `hub_repo_details`, and `hf_fs` are exposed (`exposure: "hidden"` by default; no `bash`, `read`, `write`, `edit`, `hf_whoami`, or codemode).
   - Full tool schemas and sha256 are frozen in [`mcp-tools.json`](mcp-tools.json). Every episode stage verifies `tools/list` against this snapshot and refuses to start on drift unless `--allow-mcp-drift` is passed.
   - Agents run as unprivileged UIDs with no Hub credentials.
-- **Dataset (`questions_v2.py`):** [`nielsr/hf-hub-facts-v2`](https://huggingface.co/datasets/nielsr/hf-hub-facts-v2) (1,162 train / 149 validation / 377 test, frozen 2026-11-25). Splits are entity-disjoint and every row passes oracle, no-op, and canary checks. Single-hop v1 (`nielsr/hf-hub-facts`) was retired after base Qwen3.5-4B scored 96.1% on validation. <!-- pragma: allowlist secret -->
+- **Dataset (`questions_v2.py`):** [`agent-distillation-hf/hf-hub-facts-v2`](https://huggingface.co/datasets/agent-distillation-hf/hf-hub-facts-v2) (1,162 train / 149 validation / 377 test, frozen 2026-11-25). Splits are entity-disjoint and every row passes oracle, no-op, and canary checks. Single-hop v1 (`agent-distillation-hf/hf-hub-facts`) was retired after base Qwen3.5-4B scored 96.1% on validation. <!-- pragma: allowlist secret -->
 - **Rubrics (`rubrics.py`):**
   - **Gates (0 on failure):** `answered` (natural-language `TextAnswer`), `allowed_tools` (no calls outside the 3-tool allow-list), and `used_hub` (≥ 1 successful MCP call).
   - **Scores:** `fact_correct` (shared `agent_distill.rubrics.facts` checker; drifted live Hub values are marked unscorable, not wrong) and `grounded` (every named Hub ID appears in MCP tool outputs), plus a `+0.1` tool-efficiency bonus on passing episodes.
@@ -298,11 +298,11 @@ uv run distill smoke examples/hf-hub-qa-mcp/run.toml \
 
 - **Phase 1 SFT tool-list bug (fixed in #19):** Phase 1 non-thinking SFT (`run.toml`) rendered training prompts with a phantom `submit` tool instead of the MCP tool schemas. Published evaluation numbers (81.4%) were measured in the real harness with real MCP tools, so the SFT gain is a lower bound; GRPO rollouts and `run-think.toml` (recipe (a)/(b)) all used the real MCP tool definitions.
 - **Reasoning-leak guard:** serving Qwen3.5 in thinking mode without a reasoning parser leaked `</think>` into 148/150 early base answers. `agent_distill.reasoning` now flags leakage automatically, and `qwen3.5-4b-think` enables vLLM's `qwen3` reasoning parser while `qwen3.5-4b-nothink` disables thinking.
-- **Artifacts** (all in the [agent-distillation collection](https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31)): <!-- pragma: allowlist secret -->
-  - Dataset: [`nielsr/hf-hub-facts-v2`](https://huggingface.co/datasets/nielsr/hf-hub-facts-v2) <!-- pragma: allowlist secret -->
-  - Shared replay pool: [`nielsr/qwen35-4b-think-replay-openr1-oasst`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-replay-openr1-oasst) <!-- pragma: allowlist secret -->
-  - Non-thinking GRPO: [`…-grpo-lora`](https://huggingface.co/nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-lora), [`…-grpo-merged`](https://huggingface.co/nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-merged) <!-- pragma: allowlist secret -->
-  - Cross-format SFT (recommended): [`…-think-cfx-a-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-a-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
-  - Cross-format SFT + CoT-proxies: [`…-think-cfx-b-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-b-…-summaries`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-summaries), [`…-think-cfx-b-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
-  - Full-CoT SFT, variant (c): [`…-think-cfx-c-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-c-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
-  - Thinking base eval: [`…-think-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
+- **Artifacts** (all in the [agent-distillation collection](https://huggingface.co/collections/agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633)): <!-- pragma: allowlist secret -->
+  - Dataset: [`agent-distillation-hf/hf-hub-facts-v2`](https://huggingface.co/datasets/agent-distillation-hf/hf-hub-facts-v2) <!-- pragma: allowlist secret -->
+  - Shared replay pool: [`agent-distillation-hf/qwen35-4b-think-replay-openr1-oasst`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-replay-openr1-oasst) <!-- pragma: allowlist secret -->
+  - Non-thinking GRPO: [`…-grpo-lora`](https://huggingface.co/agent-distillation-hf/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-lora), [`…-grpo-merged`](https://huggingface.co/agent-distillation-hf/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-grpo-merged) <!-- pragma: allowlist secret -->
+  - Cross-format SFT (recommended): [`…-think-cfx-a-…-lora`](https://huggingface.co/agent-distillation-hf/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-a-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
+  - Cross-format SFT + CoT-proxies: [`…-think-cfx-b-…-lora`](https://huggingface.co/agent-distillation-hf/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-b-…-summaries`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-summaries), [`…-think-cfx-b-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
+  - Full-CoT SFT, variant (c): [`…-think-cfx-c-…-lora`](https://huggingface.co/agent-distillation-hf/qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-c-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
+  - Thinking base eval: [`…-think-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->

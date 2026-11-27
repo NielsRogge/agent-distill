@@ -14,8 +14,8 @@ Only questions that ask for a ranking (trending, most downloaded or liked, a lea
 a reference; "good models for X" questions have many right answers and are scored by the judge (and the grounding
 check) only.
 
-    uv run --extra hub python examples/hf-hub-qa/questions.py --push nielsr/hf-hub-questions \\
-        --collection nielsr/agent-distillation-6b0445568a39b1d979c52e31   # (re)publish the dataset
+    uv run --extra hub python examples/hf-hub-qa/questions.py --push agent-distillation-hf/hf-hub-questions \\
+        --collection agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633   # (re)publish the dataset
 """
 
 from __future__ import annotations

@@ -18,7 +18,7 @@ from typing import Any
 
 from agent_distill.records import mcnemar_exact
 
-NS = "nielsr"
+NS = "agent-distillation-hf"
 JUDGED = "hf-hub-qa-judged-glm-53-pi-160-eval"
 BASE, SFT = "episodes/base/seed.jsonl", "episodes/sft/seed.jsonl"
 BASELINES = {

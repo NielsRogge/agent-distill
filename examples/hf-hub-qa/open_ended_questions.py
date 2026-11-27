@@ -2,11 +2,12 @@
 
 Builds 240 diverse open-ended Hugging Face Hub questions across 10 categories (trending, discovery, libraries,
 model-details, datasets, papers, spaces, orgs, comparison, workflow), strictly disjoint from the 51 evaluation
-questions in `questions.py` (`nielsr/hf-hub-questions`).
+questions in `questions.py` (`agent-distillation-hf/hf-hub-questions`).
 
     uv run --extra hub python examples/hf-hub-qa/open_ended_questions.py --check
-    uv run --extra hub python examples/hf-hub-qa/open_ended_questions.py --push nielsr/hf-hub-questions-train \\
-        --collection nielsr/agent-distillation-6b0445568a39b1d979c52e31
+    uv run --extra hub python examples/hf-hub-qa/open_ended_questions.py \\
+        --push agent-distillation-hf/hf-hub-questions-train \\
+        --collection agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633
 """
 
 from __future__ import annotations
@@ -869,7 +870,7 @@ configs:
 
 240 open-ended training questions about the Hugging Face Hub for agent distillation
 (`examples/hf-hub-qa/open_ended.py`), strictly disjoint from the 51 evaluation questions in
-`nielsr/hf-hub-questions` (`questions.py`). `reference`, when set, is a canonical `hf` CLI command
+`agent-distillation-hf/hf-hub-questions` (`questions.py`). `reference`, when set, is a canonical `hf` CLI command
 (JSON) checked live by `judged_rubrics.py`.
 """
 
@@ -902,7 +903,7 @@ def main() -> None:
     api.create_commit(
         args.push,
         repo_type="dataset",
-        commit_message=f"{len(data)} open-ended training questions (disjoint from nielsr/hf-hub-questions)",
+        commit_message=f"{len(data)} open-ended training questions (disjoint from agent-distillation-hf/hf-hub-questions)",  # noqa: E501
         operations=[
             CommitOperationAdd("data/train.jsonl", io.BytesIO(lines)),
             CommitOperationAdd("README.md", io.BytesIO(CARD.encode())),

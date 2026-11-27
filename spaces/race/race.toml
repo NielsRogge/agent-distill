@@ -10,7 +10,7 @@ title = "Same question, two agents"
 lede = """A 4B student distilled from GLM-5.3's Pi traces (cross-format SFT, recipe (a): thinking on at inference) races \
 its teacher on a Hugging Face Hub question. Both run in the same pinned Pi harness, with the same prompt, tools and \
 limits; when both finish, the task's deterministic rubrics grade them."""
-space = "nielsr/agent-distill-race"  # private (AGENTS.md: Spaces stay private)
+space = "agent-distillation-hf/agent-distill-race"  # private (AGENTS.md: Spaces stay private)
 
 # The student's managed Inference Endpoint: the student profile's base model, served by vLLM with the profile's
 # [serve] settings and every race's adapter as a named LoRA (the race id). Scales to zero.
@@ -38,7 +38,7 @@ serve = { enforce_eager = false, vllm_extra_args = """--speculative-config '{"me
 id = "cli"  # also the adapter's served name on the endpoint
 name = "hf CLI + skill"
 run = "../../examples/hf-hub-qa/run-think.toml"
-adapter = "nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160-lora"
+adapter = "agent-distillation-hf/qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160-lora"
 student_label = "Qwen3.5-4B · recipe (a)"
 split = "test"
 limit = 150  # the test rows the published 96.7% was measured on ([eval] limit)
@@ -48,7 +48,7 @@ tools_note = "bash + the pinned hf CLI and its hf-cli skill"
 id = "mcp"
 name = "HF MCP tools"
 run = "../../examples/hf-hub-qa-mcp/run-think.toml"
-adapter = "nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora"
+adapter = "agent-distillation-hf/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora"
 student_label = "Qwen3.5-4B · recipe (a)"
 split = "test"
 limit = 377

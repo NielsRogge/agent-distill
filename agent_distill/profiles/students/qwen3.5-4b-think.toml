@@ -9,7 +9,7 @@
 # tool calls stripped, and KL replay on the initial student's own out-of-domain generations; thinking stays on at
 # inference. On hf-hub-qa-mcp it reached 98.1% (370/377) against 81.4% for action-only SFT served without thinking
 # (examples/hf-hub-qa-mcp/README.md). Replay needs a pool: the run's `replay` stage, or a shared one in `[repos] replay`
-# (nielsr/qwen35-4b-think-replay-openr1-oasst for Qwen3.5-4B). A run opts out with `[sft] replay = false` and
+# (agent-distillation-hf/qwen35-4b-think-replay-openr1-oasst for Qwen3.5-4B). A run opts out with `[sft] replay = false` and
 # `args = ["--think-target", "native", "--no-strip-visible-text"]`. Not for the action-only students of
 # `qwen3.5-4b-nothink`, whose training targets supervise the empty think block itself.
 #

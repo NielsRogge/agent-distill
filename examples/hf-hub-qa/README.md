@@ -6,7 +6,7 @@ This is the CLI twin of [`hf-hub-qa-mcp`](../hf-hub-qa-mcp/README.md), which ans
 
 ## Headline results
 
-Evaluated on `test[:150]` of `nielsr/hf-hub-facts-v2` (first record per row; the teacher had no reruns, so first and final records are identical):
+Evaluated on `test[:150]` of `agent-distillation-hf/hf-hub-facts-v2` (first record per row; the teacher had no reruns, so first and final records are identical):
 
 | Model | Thinking | Passed | Tool calls / ep | `hf` errors / ep | Read skill | Hit call limit |
 | --- | :---: | ---: | ---: | ---: | ---: | ---: |
@@ -53,7 +53,7 @@ Full-CoT SFT (#21) changed both the data (1,025 curated traces instead of 600) a
 | Full-CoT SFT (`run-think-fullcot.toml`) | 1,025 | 148/150 | 369/377 (97.9%) | 373 | 4.29 | 0.06 | 2 | 26/51 |
 | GLM-5.3 (teacher) | | 148/150 | 375/377 (99.5%) | | 4.27 | 0.10 | 0 | 41/51 ² |
 
-¹ On `test[:150]`. ² The pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`).
+¹ On `test[:150]`. ² The pilot's published records (`agent-distillation-hf/hf-hub-qa-pilot-glm-53-pi-160-eval`).
 
 Paired comparisons, exact McNemar (curated recipe (a) only / other only):
 
@@ -75,11 +75,11 @@ What this suggests:
   - 3 hit the 15-call limit.
 - **On the judged questions, more curated data did not help recipe (a).** It falls from 33/51 to 26/51, which is #21's score (`p = 0.14`, so not significant). It hits the 20-call limit less often: 7 times, against 11 for recipe (a)-600 and 12 for #21. Its failures are answers that miss the quality bar. On these open-ended questions, the curated set's short, zero-error factoid traces may matter more than the recipe.
 
-Spend: about $22.6 of GPU (SFT $12.2, eval of 377 rows $7.9, judged eval $2.4) and under $1 of judge. No new teacher traces. Adapter: [`…-cfx-a-curated-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora). Evaluations: [`…-cfx-a-curated-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-eval) and [`…-cfx-a-curated-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+Spend: about $22.6 of GPU (SFT $12.2, eval of 377 rows $7.9, judged eval $2.4) and under $1 of judge. No new teacher traces. Adapter: [`…-cfx-a-curated-…-lora`](https://huggingface.co/agent-distillation-hf/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora). Evaluations: [`…-cfx-a-curated-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-eval) and [`…-cfx-a-curated-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
 ### Mixed factual + open-ended SFT (`run-think-mixed.toml`)
 
-Factoid-only SFT (whether 600 traces, 1,025 curated traces, or full-CoT) leaves open-ended judged performance at 26–33/51 (51.0–64.7%). To test whether open-ended training traces lift `judged.py` without hurting `hf-hub-facts-v2`, we built 240 open-ended training questions (`open_ended_questions.py`, published at `nielsr/hf-hub-questions-train`, strictly disjoint from both `nielsr/hf-hub-questions` and `nielsr/hf-hub-facts-v2` test/validation entities), collected accepted GLM-5.3 traces with `open_ended.py` (**238/240 = 99.2%** accepted across 267 episodes, $14.19 teacher spend), and trained `qwen3.5-4b-think` (recipe (a) + KL replay, 8 passes, 378 updates, held-out drift `3.18e-3` nats/token) on the mixed pool filtered to `<= 12` tool calls: **802 traces** (597 factoid + 205 open-ended, 74.4% / 25.6%).
+Factoid-only SFT (whether 600 traces, 1,025 curated traces, or full-CoT) leaves open-ended judged performance at 26–33/51 (51.0–64.7%). To test whether open-ended training traces lift `judged.py` without hurting `hf-hub-facts-v2`, we built 240 open-ended training questions (`open_ended_questions.py`, published at `agent-distillation-hf/hf-hub-questions-train`, strictly disjoint from both `agent-distillation-hf/hf-hub-questions` and `agent-distillation-hf/hf-hub-facts-v2` test/validation entities), collected accepted GLM-5.3 traces with `open_ended.py` (**238/240 = 99.2%** accepted across 267 episodes, $14.19 teacher spend), and trained `qwen3.5-4b-think` (recipe (a) + KL replay, 8 passes, 378 updates, held-out drift `3.18e-3` nats/token) on the mixed pool filtered to `<= 12` tool calls: **802 traces** (597 factoid + 205 open-ended, 74.4% / 25.6%).
 
 | Model | Traces | `test[:150]` | Full `test` (377) | `fact_correct` (377) | Tool calls / ep | `hf` errors / ep | Hit call limit | Judged (51) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -89,7 +89,7 @@ Factoid-only SFT (whether 600 traces, 1,025 curated traces, or full-CoT) leaves 
 | Full-CoT SFT (`run-think-fullcot.toml`) | 1,025 fact | 148/150 (98.7%) | 369/377 (97.9%) | 373 | 4.29 | 0.06 | 2 | 26/51 (51.0%) |
 | GLM-5.3 (teacher) | | 148/150 (98.7%) | 375/377 (99.5%) | | 4.27 | 0.10 | 0 | 41/51 (80.4%) ² |
 
-¹ On `test[:150]`. ² The pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`).
+¹ On `test[:150]`. ² The pilot's published records (`agent-distillation-hf/hf-hub-qa-pilot-glm-53-pi-160-eval`).
 
 Paired comparisons, exact two-sided McNemar (mixed only / other only):
 
@@ -99,7 +99,7 @@ Paired comparisons, exact two-sided McNemar (mixed only / other only):
   - **CLI retrieval and efficiency improved cleanly:** on `judged.py`, live `reference` recall reached **18/18 (100.0%)** (vs 16/18 on recipe (a)-600), `read_skill` reached **51/51 (100%)**, median tool calls dropped from **8 → 6** (closest of any student to GLM-5.3's 5), and 20-call limit hits fell from 9 (recipe (a)-600) and 11 (full-CoT) to **6**.
   - **The remaining bottleneck is 4B parametric confabulation from teacher style mimicry:** GLM-5.3's open-ended traces enrich tool listings with encyclopedic descriptions drawn from frontier world knowledge (e.g., token counts, lab affiliations, architecture blurbs) without reading every model card. Distilled on those traces, the 4B student faithfully imitates the rich table/summary format (`relevance` 0.78–1.0, `clarity` 0.78–1.0) but fills in unverified details from shaky 4B memory, tanking the judge's `correctness` score. Of its 22 judged failures: **12** missed `answer_quality` specifically on `correctness` (0.11–0.56) despite high relevance/clarity, **4** passed both the quality bar (`≥ 7/10`) and live `reference` (`1.0`) but failed only the strict `grounded == 1.0` gate by 1–2 extra IDs (`grounded = 0.75–0.97`), and **6** hit the 20-call limit. Breaking this ceiling on a 4B student likely requires on-policy GRPO directly on `open_ended.py` (penalizing confabulation and limit hits) or rewriting teacher open-ended answers to contain only facts present in tool outputs.
 
-Spend: $14.19 teacher traces + ~$2 judge + ~$20 GPU (SFT ~$10.5, 377-row eval ~$7.2, judged eval ~$2.2). Datasets: [`nielsr/hf-hub-questions-train`](https://huggingface.co/datasets/nielsr/hf-hub-questions-train), [`…-open-ended-…-traces`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces). Adapter: [`…-cfx-a-mixed-…-lora`](https://huggingface.co/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora). Evaluations: [`…-cfx-a-mixed-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-eval) and [`…-cfx-a-mixed-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+Spend: $14.19 teacher traces + ~$2 judge + ~$20 GPU (SFT ~$10.5, 377-row eval ~$7.2, judged eval ~$2.2). Datasets: [`agent-distillation-hf/hf-hub-questions-train`](https://huggingface.co/datasets/agent-distillation-hf/hf-hub-questions-train), [`…-open-ended-…-traces`](https://huggingface.co/datasets/agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces). Adapter: [`…-cfx-a-mixed-…-lora`](https://huggingface.co/agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora). Evaluations: [`…-cfx-a-mixed-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-eval) and [`…-cfx-a-mixed-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
 ### Non-thinking SFT → GRPO on full `test` (`run-grpo.toml`)
 
@@ -134,11 +134,11 @@ Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactl
 ## Task and rubrics
 
 - **Agent setup:** Pi (`pi@1.6.0`) with `bash` and `read`, the pinned `hf` CLI (`huggingface_hub==2.4.0`, logged out / read-only), `curl`/`jq`/`wget`, and the `hf-cli` Agent Skill (`skills/hf-cli/SKILL.md`, loaded via `--skill`). Each episode runs under an unprivileged UID (`agent_distill.harnesses.isolation`). The agent's final natural-language message is the answer (`TextAnswer`). <!-- pragma: allowlist secret -->
-- **Main dataset (`task.py`):** `nielsr/hf-hub-facts-v2` (1,162 train / 149 validation / 377 test, frozen 2026-11-25, entity-disjoint splits), shared with `hf-hub-qa-mcp`. Every question requires multi-hop lookups or recursive file counting (base model's license/pipeline/size, linked paper title/first author, parameter sum of three models, or repo GGUF/safetensors count). Single-hop v1 (`nielsr/hf-hub-facts`) was retired after base Qwen3.5-4B hit 93% CLI / 96% MCP on validation.
+- **Main dataset (`task.py`):** `agent-distillation-hf/hf-hub-facts-v2` (1,162 train / 149 validation / 377 test, frozen 2026-11-25, entity-disjoint splits), shared with `hf-hub-qa-mcp`. Every question requires multi-hop lookups or recursive file counting (base model's license/pipeline/size, linked paper title/first author, parameter sum of three models, or repo GGUF/safetensors count). Single-hop v1 (`agent-distillation-hf/hf-hub-facts`) was retired after base Qwen3.5-4B hit 93% CLI / 96% MCP on validation.
 - **Deterministic rubrics (`rubrics.py`):**
   - **Gates (0 on failure):** `answered`, `read_only` (no write/login commands), and `used_hub` (at least one successful `hf` call).
   - **Scores:** `fact_correct` (shared `agent_distill.rubrics.facts` checker; drifted live values are marked unscorable) and `grounded` (every named Hub ID appears in tool output), plus a `+0.1` tool-efficiency bonus on passing episodes.
-- **Secondary task (`judged.py`):** 51 open-ended questions in `nielsr/hf-hub-questions` (`questions.py`), using the same gates and grounding plus live `hf` command references (18 factual/ranked questions) and a Gemini 4 Hydrogen quality judge (`≥ 7/10` to pass).
+- **Secondary task (`judged.py`):** 51 open-ended questions in `agent-distillation-hf/hf-hub-questions` (`questions.py`), using the same gates and grounding plus live `hf` command references (18 factual/ranked questions) and a Gemini 4 Hydrogen quality judge (`≥ 7/10` to pass).
 
 ### Open-ended judged evaluation (51 questions)
 
@@ -152,7 +152,7 @@ Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactl
 | Full-CoT SFT (`run-think-fullcot-judged.toml`) | 26/51 (51.0%) | 8 | <$1 judge |
 | Inkling-2-Mini base, 8,192 output tokens (`run-inkling-judged.toml`) | **49/51 (96.1%)** | 5 | ~$1.6 GPU + <$1 judge |
 
-The teacher pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`, one record per question) score 41/51, not the 43/51 reported for the pilot; paired against them, recipe (a) is 4 ahead / 12 behind (`p = 0.08`). Recipe (a) hit the 20-call limit 9 times, full-CoT 11 times. Evaluation: [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+The teacher pilot's published records (`agent-distillation-hf/hf-hub-qa-pilot-glm-53-pi-160-eval`, one record per question) score 41/51, not the 43/51 reported for the pilot; paired against them, recipe (a) is 4 ahead / 12 behind (`p = 0.08`). Recipe (a) hit the 20-call limit 9 times, full-CoT 11 times. Evaluation: [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
 **Base Inkling-2-Mini** (`run-inkling-judged.toml`: the settings of `run-think-fullcot-judged.toml`, with the
 `inkling-2-mini-8k` profile from [`../inkling-2-mini`](../inkling-2-mini/students/inkling-2-mini-8k.toml)) passes
@@ -195,7 +195,7 @@ The teacher pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eva
   - Against the same-day teacher, Inkling is 7 ahead and 1 behind (49 vs. 43, p = 0.07): ahead, but not significantly
     at 51 questions. Its gap over every Qwen student stays significant.
 
-Evaluations: [`inkling-2-mini-8k-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/inkling-2-mini-8k-hf-hub-qa-judged-glm-53-pi-160-eval) and the teacher re-run [`hf-hub-qa-judged-rerun-glm-53-pi-160-eval`](https://huggingface.co/datasets/nielsr/hf-hub-qa-judged-rerun-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+Evaluations: [`inkling-2-mini-8k-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/inkling-2-mini-8k-hf-hub-qa-judged-glm-53-pi-160-eval) and the teacher re-run [`hf-hub-qa-judged-rerun-glm-53-pi-160-eval`](https://huggingface.co/datasets/agent-distillation-hf/hf-hub-qa-judged-rerun-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
 ## Running it
 
@@ -243,5 +243,5 @@ uv run --extra hub python examples/hf-hub-qa/questions.py
 
 - **Phase 1 SFT tool-list mismatch:** Phase 1 non-thinking SFT (`run.toml`) ran before PR #19 and included a phantom `submit` tool in its SFT prompt (evaluation offered only `bash` and `read`, matching traces). Both `run-think.toml` and `run-think-fullcot.toml` use the fixed `[bash, read]` tool list.
 - **Shell tool parity across job images:** Student TRL images initially lacked `curl`, `jq`, and `wget` (causing 139 `curl: command not found` errors and depressing non-thinking validation from 61% to 43%). `Task.commands` and `JOB_SETUP` now install and verify them before every job.
-- **Published runs:** Phase 1 (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160`), Phase 2 GRPO (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-grpo`), recommended recipe (a) (`qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160`), and curated full-CoT (`cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160`) are published in the [agent-distillation collection](https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31). <!-- pragma: allowlist secret -->
+- **Published runs:** Phase 1 (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160`), Phase 2 GRPO (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-grpo`), recommended recipe (a) (`qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160`), and curated full-CoT (`cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160`) are published in the [agent-distillation collection](https://huggingface.co/collections/agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633). <!-- pragma: allowlist secret -->
 - **Approximate spend:** Phase 1 traces ~$21 + teacher eval $4.49 + GPU ~$12; recipe (a) SFT + eval ~$13 (reusing traces and replay pool); full-CoT additional 562 traces $17.02 + GPU ~$16; Phase 2 GRPO (`run-grpo.toml`): GPU ~$43 (SFT $6.75, probe $11, GRPO pilot $1.90, GRPO $6.30, merges ~$0.60, evaluations ~$16) + teacher eval $11.80.

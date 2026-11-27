@@ -1,4 +1,5 @@
-"""Build v2 of the Hub fact questions (`nielsr/hf-hub-facts-v2`): harder questions with one exact, frozen answer each.
+"""Build v2 of the Hub fact questions (`agent-distillation-hf/hf-hub-facts-v2`): harder questions with one exact, frozen
+answer each.
 
 v1 (questions.py) asked single-hop lookups, which base Qwen3.5-4B already solved 96% of the time, leaving SFT no room.
 Every v2 question needs at least two lookups, or listing a repo's files:
@@ -21,8 +22,9 @@ to re-read them (agent_distill.hub_facts), every row passes oracle / no-op / can
 splits are disjoint by entity.
 
     uv run python examples/hf-hub-qa-mcp/questions_v2.py --out /tmp/facts-v2           # build and validate, no upload
-    uv run python examples/hf-hub-qa-mcp/questions_v2.py --out /tmp/facts-v2 --push nielsr/hf-hub-facts-v2 \\
-        --collection nielsr/agent-distillation-6b0445568a39b1d979c52e31
+    uv run python examples/hf-hub-qa-mcp/questions_v2.py --out /tmp/facts-v2 \\
+        --push agent-distillation-hf/hf-hub-facts-v2 \\
+        --collection agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633
 """
 
 from __future__ import annotations
@@ -91,7 +93,8 @@ Harder questions about the Hugging Face Hub, each with one exact answer, for age
 (agent-distill's `hf-hub-qa-mcp` and `hf-hub-qa` tasks). Every question needs at least two lookups or a repo's full
 file listing: the base model's license, pipeline tag or size; the title or first author of the paper a model links;
 the total size of three models; the number of GGUF or safetensors files in a repo. v1
-([nielsr/hf-hub-facts](https://huggingface.co/datasets/nielsr/hf-hub-facts)) asked single lookups and was too easy.
+([agent-distillation-hf/hf-hub-facts](https://huggingface.co/datasets/agent-distillation-hf/hf-hub-facts))
+asked single lookups and was too easy.
 
 Gold values were read from the Hub API on **{date}** and are frozen (`snapshot_date`); `live` says how to re-read a
 value, so a scorer can tell a row the Hub has since changed from a wrong answer. Splits are disjoint by entity.

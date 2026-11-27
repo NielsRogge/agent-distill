@@ -19,7 +19,7 @@ traces  ->  [replay / annotate]  ->  sft  ->  merge  ->  [probe -> grpo]  ->  ev
 
 ## Headline results
 
-Distilling **GLM-5.3** into **Qwen3.5-4B** inside `pi@1.6.0` on multi-hop Hugging Face Hub questions (`nielsr/hf-hub-facts-v2`), comparing two tool surfaces — the HF MCP server vs. the `hf` CLI + skill:
+Distilling **GLM-5.3** into **Qwen3.5-4B** inside `pi@1.6.0` on multi-hop Hugging Face Hub questions (`agent-distillation-hf/hf-hub-facts-v2`), comparing two tool surfaces — the HF MCP server vs. the `hf` CLI + skill:
 
 | Model | Thinking | HF MCP (377 test) | `hf` CLI (150 test) |
 | --- | :---: | ---: | ---: |
@@ -33,7 +33,7 @@ Distilling **GLM-5.3** into **Qwen3.5-4B** inside `pi@1.6.0` on multi-hop Huggin
 - **Cross-format SFT** (`qwen3.5-4b-think`, ~600 traces + KL replay) matches the frontier teacher on both surfaces for ~$13 in GPU spend, without needing a difficulty probe or GRPO.
 - **Non-thinking SFT + GRPO** on MCP climbs from 72.1% to 96.0% while cutting tool calls from 6.13 to 1.75 per episode (fewer than the teacher's 3.15).
 
-All published models, evaluations, and viewable traces live in the [agent-distillation Hub collection](https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31). <!-- pragma: allowlist secret -->
+All published models, evaluations, and viewable traces live in the [agent-distillation Hub collection](https://huggingface.co/collections/agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633). <!-- pragma: allowlist secret -->
 
 ## Examples
 

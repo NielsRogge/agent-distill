@@ -75,4 +75,4 @@ uv run --extra hub --with httpx python examples/paper-urls/parity/tier1.py --url
 
 - Labels: [`nielsr/paper-url-extraction-v1`](https://huggingface.co/datasets/nielsr/paper-url-extraction-v1), `nielsr/paper-url-extraction-v1-validated`, and `nielsr/paper-url-extraction-v2` (`test_hard`). <!-- pragma: allowlist secret -->
 - `url-extraction` artifacts: [paper URL agent collection](https://huggingface.co/collections/nielsr/paper-url-agent-frontier-to-small-distillation-6b01c8378db0ff55d524014e). <!-- pragma: allowlist secret -->
-- `agent-distill` evaluations: [agent-distillation collection](https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31) (`nielsr/qwen35-9b-paper-urls-parity-opencode-124-eval`, `nielsr/qwen35-9b-paper-urls-smoke-opencode-232-eval`). <!-- pragma: allowlist secret -->
+- `agent-distill` evaluations: [agent-distillation collection](https://huggingface.co/collections/agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633) (`agent-distillation-hf/qwen35-9b-paper-urls-parity-opencode-124-eval`, `agent-distillation-hf/qwen35-9b-paper-urls-smoke-opencode-232-eval`). <!-- pragma: allowlist secret -->

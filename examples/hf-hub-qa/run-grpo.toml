@@ -17,13 +17,13 @@ name = "qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-grpo"
 stages = ["sft", "merge", "probe", "grpo", "eval"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
-raw_logs = false  # nielsr's private storage is nearly full: raw harness logs stay in the jobs
+collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
+raw_logs = false  # raw harness logs stay in the jobs (set while nielsr's private storage was nearly full)
 
 [repos]
-traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # phase 1's 600 accepted traces (run.toml)
+traces = "agent-distillation-hf/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # phase 1's 600 accepted traces (run.toml)
 
 [sft]
 timeout = "2h"  # phase 1's SFT on the same 600 traces took 82 min (H200 at $5/h: at most $10)

@@ -10,9 +10,9 @@ name = "cursor-qwen35-4b-think-hf-hub-qa-judged-glm-53-pi-160"
 stages = ["eval"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"  # pragma: allowlist secret
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
 raw_logs = false
 
 [eval]
@@ -23,7 +23,7 @@ timeout = 600
 max_tool_calls = 20
 
 [eval.models]
-sft = "Qwen/Qwen3.5-4B+nielsr/cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160-lora"
+sft = "Qwen/Qwen3.5-4B+agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-v2-glm-53-pi-160-lora"
 
 [budget]
 traces_usd = 0

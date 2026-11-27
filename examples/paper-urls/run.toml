@@ -12,9 +12,9 @@ name = "qwen35-9b-paper-urls-parity-opencode-124"
 stages = ["eval"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
 
 [eval]
 workdir_guard = false   # parity: the reference harness had no guard (the url-eval- workspace prefix avoids the hang)

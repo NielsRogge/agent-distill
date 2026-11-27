@@ -1,4 +1,4 @@
-"""Build the Hub fact questions (`nielsr/hf-hub-facts`): one exact, frozen answer per question.
+"""Build the Hub fact questions (`agent-distillation-hf/hf-hub-facts`): one exact, frozen answer per question.
 
 Entities are sampled from the Hub (the most downloaded models of 20 pipeline tags, the papers those models link,
 the most downloaded datasets, the most liked Spaces), and every gold value is read from the Hub API when the dataset
@@ -23,8 +23,8 @@ must reject, and `live`: how to re-read the value from the Hub, so the rubric ca
 since the snapshot) from a wrong answer.
 
     uv run python examples/hf-hub-qa-mcp/questions.py --out /tmp/facts           # build and validate, no upload
-    uv run python examples/hf-hub-qa-mcp/questions.py --out /tmp/facts --push nielsr/hf-hub-facts \\
-        --collection nielsr/agent-distillation-6b0445568a39b1d979c52e31          # private; scanned; then public
+    uv run python examples/hf-hub-qa-mcp/questions.py --out /tmp/facts --push agent-distillation-hf/hf-hub-facts \\
+        --collection agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633  # private; scanned; then public
 """
 
 from __future__ import annotations

@@ -112,19 +112,24 @@ def test_smoke_run_jobs():
     assert "--shard 0/1" in traces.command and "--limit 8" in traces.command and "--budget-usd 2.0000" in traces.command
     assert traces.flavor == "cpu-upgrade"
     (sft,) = pipeline.sft_jobs(run, "R")
-    assert "--traces-repo nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-traces" in sft.command
+    assert "--traces-repo agent-distillation-hf/qwen35-4b-paper-urls-glm53-opencode-232-smoke-traces" in sft.command
     assert "--max-steps 2" in sft.command and "trl==1.9.2" in sft.command and sft.timeout == "1h"
     (merge,) = pipeline.merge_jobs(run, "R")
-    assert "--adapter nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-lora" in merge.command
-    assert "--hub-model-id nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-sft-merged" in merge.command
+    assert "--adapter agent-distillation-hf/qwen35-4b-paper-urls-glm53-opencode-232-smoke-lora" in merge.command
+    assert (
+        "--hub-model-id agent-distillation-hf/qwen35-4b-paper-urls-glm53-opencode-232-smoke-sft-merged" in merge.command
+    )
     (probe,) = pipeline.probe_jobs(run, "R")
     assert (
         "--attempts 2" in probe.command and "--temperature 0.8" in probe.command and "--purpose train" in probe.command
     )
-    assert "--model nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-sft-merged" in probe.command
+    assert "--model agent-distillation-hf/qwen35-4b-paper-urls-glm53-opencode-232-smoke-sft-merged" in probe.command
     evals = pipeline.eval_jobs(run, "R")
     assert [job.name.rsplit("-", 2)[-2] for job in evals] == ["base", "sft", "grpo", "teacher"]
-    assert "--adapter nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-lora --adapter-label sft" in evals[1].command
+    assert (
+        "--adapter agent-distillation-hf/qwen35-4b-paper-urls-glm53-opencode-232-smoke-lora --adapter-label sft"
+        in evals[1].command
+    )
     assert "--label teacher" in evals[3].command and "--no-stop-when-passed" in evals[3].command
     for job in [traces, sft, merge, probe, *evals]:
         assert "HF_TOKEN" not in job.command
@@ -133,14 +138,17 @@ def test_smoke_run_jobs():
 def test_eval_models_variants():
     run = smoke_run(**{"eval.variants": ["grpo"]})
     assert pipeline.eval_models(run) == {
-        "grpo": "nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-sft-merged+"
-        "nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-grpo-lora"
+        "grpo": "agent-distillation-hf/qwen35-4b-paper-urls-glm53-opencode-232-smoke-sft-merged+"
+        "agent-distillation-hf/qwen35-4b-paper-urls-glm53-opencode-232-smoke-grpo-lora"
     }
 
 
 def test_artifacts_cover_every_stage():
     artifacts = pipeline.artifacts(smoke_run())
-    suffixes = [repo.removeprefix("nielsr/qwen35-4b-paper-urls-glm53-opencode-232-smoke-") for repo, _, _ in artifacts]
+    suffixes = [
+        repo.removeprefix("agent-distillation-hf/qwen35-4b-paper-urls-glm53-opencode-232-smoke-")
+        for repo, _, _ in artifacts
+    ]
     assert suffixes == ["traces", "lora", "sft-merged", "grpo-lora", "grpo-merged", "eval", "summaries", "replay"]
     assert all("opencode@2.3.2" in note for _, _, note in artifacts[:-1])  # the replay pool depends on the student only
 

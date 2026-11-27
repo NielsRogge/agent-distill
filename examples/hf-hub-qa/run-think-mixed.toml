@@ -4,7 +4,7 @@
 # `run-think-open-ended-traces.toml` (240 disjoint open-ended questions), filtered to <= 12 tool calls so the
 # student learns concise search habits without overfitting to single-factoid lookup.
 #
-# Evaluated on all 377 test questions of `nielsr/hf-hub-facts-v2` (paired with full-test runs on 377 rows and
+# Evaluated on all 377 test questions of `agent-distillation-hf/hf-hub-facts-v2` (paired with full-test runs on 377 rows and
 # with Recipe (a)-600 on test[:150]); evaluated on all 51 judged questions in `run-think-mixed-judged.toml`.
 #
 #   distill run examples/hf-hub-qa/run-think-mixed.toml --dry-run
@@ -16,18 +16,18 @@ name = "cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160"
 stages = ["sft", "eval"]
 
 [repos]
-traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's 600 accepted factoid traces
-replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
+traces = "agent-distillation-hf/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's 600 accepted factoid traces
+replay = "agent-distillation-hf/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"  # pragma: allowlist secret
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
 raw_logs = false
 
 [sft]
 args = [
-  "--traces-repo", "nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces",
+  "--traces-repo", "agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces",
   "--max-tool-calls", "12",
 ]
 timeout = "210m"  # 8 passes over ~800 mixed traces: ~2 h on one H200
