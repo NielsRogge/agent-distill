@@ -105,6 +105,19 @@ def test_help_on_a_write_command_is_read_only(monkeypatch):
     assert result.scores["read_only"] == 1.0
 
 
+def test_listing_branches_or_tags_is_read_only():
+    """`hf repos branch` only has create/delete subcommands; `hf repos branch list` fails without writing anything."""
+    cli = next(m for name, m in sys.modules.items() if name.endswith(".cli") and hasattr(m, "WRITE_COMMANDS"))
+    for command in ("hf repos branch list org/x --format json", "hf repos tag list org/x", "hf repo tag ls org/x"):
+        assert cli.read_only([shell(command, "error", success=False)]) == 1.0, command
+    for command in (
+        "hf repos branch create org/x dev",
+        "hf repos branch delete org/x dev",
+        "hf repo tag create org/x v1",
+    ):
+        assert cli.read_only([shell(command, "ok")]) == 0.0, command
+
+
 def test_good_grounded_answer_passes(monkeypatch):
     answer = "Trending now: `org/model-0`, `org/model-1`, `org/model-2` and `org/model-3`."
     events = [shell("hf models list --sort trending_score --limit 10 --format json", LISTING)]
