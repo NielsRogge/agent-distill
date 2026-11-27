@@ -232,3 +232,30 @@ def test_cli_error_and_skill_metrics(monkeypatch):
     events[0] = ToolEvent(**events[0], success=True)
     result = score_fact(monkeypatch, "`Qwen/Qwen3.5-9B` is licensed Apache 2.0.", events)
     assert result.scores["hf_errors"] == 2.0 and result.scores["read_skill"] == 1.0 and result.passed
+
+
+def test_efficient_skill_is_the_pinned_skill_plus_the_addendum():
+    """skills-efficient/hf-cli/SKILL.md must track the generated skill: regenerate it after `hf skills add`."""
+    root = Path("examples/hf-hub-qa")
+    pinned = (root / "skills/hf-cli/SKILL.md").read_text()
+    addendum = (root / "skills-efficient/ADDENDUM.md").read_text()
+    assert (root / "skills-efficient/hf-cli/SKILL.md").read_text() == pinned + addendum
+
+
+def test_efficient_judged_task_only_swaps_the_skill():
+    import dataclasses
+
+    from agent_distill import pipeline
+    from agent_distill.config import load_run
+
+    efficient = load_task("examples/hf-hub-qa/judged_efficient.py")
+    assert efficient.name == "hf-hub-qa-judged-efficient"
+    assert [p.parent.name + "/" + p.name for p in efficient.skills] == ["skills-efficient/hf-cli"]
+    assert all((p / "SKILL.md").is_file() for p in efficient.skills)
+    same = {"name", "skills"}
+    for field in dataclasses.fields(TASK):
+        if field.name not in same:
+            assert getattr(efficient, field.name) == getattr(TASK, field.name), field.name
+    run = pipeline.make_run(load_run(Path("examples/hf-hub-qa/run-inkling-judged-efficient.toml"), {}))
+    assert pipeline.job_task(run) == "/work/task/judged_efficient.py" and run.task.name == efficient.name
+    assert run.config.eval.max_tool_calls == 12

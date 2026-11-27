@@ -1,0 +1,31 @@
+# Base Inkling-2-Mini (8,192 output tokens, inkling-2-mini-8k profile) on the 51 judged questions with the efficiency
+# variant of the hf-cli skill (judged_efficient.py) and a 12-call cap (run-inkling-judged.toml: 20 calls, the plain
+# skill, 49/51 with a median of 5 calls). Tests whether the cap can come down without losing passes. Results: README.
+#
+#   distill run examples/hf-hub-qa/run-inkling-judged-efficient.toml --dry-run
+task = "judged_efficient.py"
+teacher = "glm-5.3"  # names the run family; not evaluated here (the teacher's records are the pilot's)
+student = "inkling-2-mini-8k"
+harness = "pi@1.6.0"
+name = "inkling-2-mini-8k-hf-hub-qa-judged-efficient-cap12-glm-53-pi-160"
+stages = ["eval"]
+profiles = ["../inkling-2-mini"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 12
+variants = ["base"]
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 10
