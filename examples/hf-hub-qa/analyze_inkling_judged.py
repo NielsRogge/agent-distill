@@ -28,6 +28,8 @@ BASELINES = {
     "qwen-recipe-a-mixed": (f"cursor-qwen35-4b-think-cfx-a-mixed-{JUDGED}", SFT),
     "qwen-fullcot": (f"cursor-qwen35-4b-think-{JUDGED}", SFT),
     "teacher": ("hf-hub-qa-pilot-glm-53-pi-160-eval", "episodes/teacher/seed.jsonl"),
+    # run-teacher-judged.toml: the same teacher re-run on the same day as Inkling, to measure Hub drift
+    "teacher-rerun": ("hf-hub-qa-judged-rerun-glm-53-pi-160-eval", "episodes/teacher/seed.jsonl"),
 }
 INKLING = (f"inkling-2-mini-8k-{JUDGED}", BASE)
 QUALITY_PASS = (7 - 1) / (10 - 1)  # judged_rubrics: PASS_SCORE 7 on the 1-10 scale
@@ -127,8 +129,8 @@ def paired(a: dict[str, dict[str, Any]], b: dict[str, dict[str, Any]]) -> dict[s
 
 
 def difficulty(inkling: dict[str, dict[str, Any]], others: dict[str, dict[str, dict[str, Any]]]) -> dict[str, Any]:
-    """Inkling's pass rate by how many of the Qwen students fail the question (the teacher is left out)."""
-    students = [name for name in others if name != "teacher"]
+    """Inkling's pass rate by how many of the Qwen students fail the question (the teacher runs are left out)."""
+    students = [name for name in others if not name.startswith("teacher")]
     buckets: dict[int, list[int]] = collections.defaultdict(lambda: [0, 0])
     hard = []
     for row, record in inkling.items():
@@ -147,6 +149,22 @@ def difficulty(inkling: dict[str, dict[str, Any]], others: dict[str, dict[str, d
     }
 
 
+def drift(inkling: dict[str, dict[str, Any]], old: dict[str, dict[str, Any]], new: dict[str, dict[str, Any]]) -> dict:
+    """Inkling's wins over the pilot teacher records: does the same-day teacher re-run pass them too?"""
+    wins = sorted(r for r in inkling if inkling[r].get("passed") and r in old and not old[r].get("passed"))
+    return {
+        "inkling_wins_over_pilot": len(wins),
+        "teacher_rerun_passes_them": sum(bool(new.get(r, {}).get("passed")) for r in wins),
+        "rows": {
+            r: {
+                "pilot": reasons(old[r]),
+                "rerun": "passed" if new.get(r, {}).get("passed") else reasons(new[r]) if r in new else "missing",
+            }
+            for r in wins
+        },
+    }
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inkling", default="", help="local episodes JSONL (default: the published eval dataset)")
@@ -161,6 +179,8 @@ def main(argv: list[str] | None = None) -> None:
         "inkling-2-mini-8k": describe(inkling, categories),
         "paired": {name: paired(inkling, other) for name, other in others.items()},
         "difficulty": difficulty(inkling, others),
+        "drift": {"teacher_rerun_vs_pilot": paired(others["teacher-rerun"], others["teacher"])}
+        | drift(inkling, others["teacher"], others["teacher-rerun"]),
         "baselines": {name: describe(other, categories) for name, other in others.items()},
     }
     print(json.dumps(report, indent=2))
