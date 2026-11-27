@@ -149,8 +149,40 @@ Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactl
 | Recipe (a) (`run-think.toml` adapter, same settings) | 33/51 (64.7%) | 8 | ~$3 GPU + <$1 judge |
 | Recipe (a), mixed (`run-think-mixed-judged.toml`) | 29/51 (56.9%) | 6 | ~$2.2 GPU + <$1 judge |
 | Full-CoT SFT (`run-think-fullcot-judged.toml`) | 26/51 (51.0%) | 8 | <$1 judge |
+| Inkling-2-Mini base, 8,192 output tokens (`run-inkling-judged.toml`) | **49/51 (96.1%)** | 5 | ~$1.6 GPU + <$1 judge |
 
 The teacher pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`, one record per question) score 41/51, not the 43/51 reported for the pilot; paired against them, recipe (a) is 4 ahead / 12 behind (`p = 0.08`). Recipe (a) hit the 20-call limit 9 times, full-CoT 11 times. Evaluation: [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+
+**Base Inkling-2-Mini** (`run-inkling-judged.toml`: the settings of `run-think-fullcot-judged.toml`, with the
+`inkling-2-mini-8k` profile from [`../inkling-2-mini`](../inkling-2-mini/students/inkling-2-mini-8k.toml)) passes
+**49/51** without any training. Paired on the same 51 questions (first record per row, exact McNemar;
+`analyze_inkling_judged.py`):
+
+| Inkling-2-Mini vs. | Other | Only Inkling / only other | p |
+| --- | ---: | ---: | ---: |
+| Qwen3.5-4B base, thinking | 31/51 | 19 / 1 | 4e-05 |
+| Recipe (a) | 33/51 | 16 / 0 | 3.1e-05 |
+| Recipe (a), curated | 26/51 | 23 / 0 | 2.4e-07 |
+| Recipe (a), mixed | 29/51 | 20 / 0 | 1.9e-06 |
+| Full-CoT SFT | 26/51 | 24 / 1 | 1.5e-06 |
+| GLM-5.3 teacher (published pilot records) | 41/51 | 9 / 1 | 0.021 |
+
+- **No timeouts or truncations, and one call limit.** Inkling uses a median of 5 tool calls (the teacher's number). It
+  reaches the 20-call limit once, and that answer still passes; the Qwen students fail on the limit 5–11 times each. It
+  reads the skill in 50/51 episodes and never leaks reasoning.
+- **Two failures, both on hard questions.**
+  - "Which object detection datasets are popular on the Hub?": the judge scored correctness 3/10.
+  - "What collections has NVIDIA published on Hugging Face?": the answer cleared the quality bar (7/10), but 2 of its 15
+    Hub IDs were never seen in a tool result (`grounded` = 0.87).
+  - All 5 Qwen students and the teacher fail the first question. Three students fail the second; the teacher passes it.
+- **Inkling doesn't fail the questions that are hard for the Qwen students.** By how many of the 5 students fail a
+  question, Inkling passes 10/10 at zero failures, 9/9 at one, 11/11 at two, 8/9 at three, 8/8 at four and 3/4 at five.
+  It also passes 9 of the teacher's 10 failures. The students' misses are mostly judge correctness (7–15 per student),
+  call limits (5–11) and the grounded gate, which Inkling avoids.
+- **Caveat:** the references and the judge's view of the Hub are live, and the baselines ran days to weeks earlier. A
+  few trending answers may have scored differently on another day.
+
+Evaluation: [`inkling-2-mini-8k-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/inkling-2-mini-8k-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
 ## Running it
 

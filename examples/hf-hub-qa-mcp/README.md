@@ -101,13 +101,43 @@ Results (Nov 2026; first record per row, exact McNemar tests on the paired rows;
   probe attempt (`qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-grpo-eval`, `episodes/probe/train-0of4.jsonl`). `distill rescore`
   leaves that file at 648/700 passed. Inkling moves from 365 to 367. No published Qwen or teacher number moves.
 - **Caveat:** the profile caps Inkling at 4,096 output tokens per reply, while `qwen3.5-4b-think` gets 8,192. The 8 MCP
-  truncations are therefore partly a setting.
+  truncations are therefore partly a setting. The 8,192-token re-run below tests this.
+
+### Inkling-2-Mini with 8,192 output tokens
+
+`run-inkling-8k.toml` here and in [`hf-hub-qa`](../hf-hub-qa/run-inkling-8k.toml) repeat the runs above with the
+project profile [`inkling-2-mini-8k`](../inkling-2-mini/students/inkling-2-mini-8k.toml). That profile is the built-in
+one with `max_output_tokens = 8192`, the Qwen thinking setting. The built-in profile keeps 4,096. Eval datasets:
+[MCP](https://huggingface.co/datasets/nielsr/inkling-2-mini-8k-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
+[CLI](https://huggingface.co/datasets/nielsr/inkling-2-mini-8k-hf-hub-qa-v2-glm-53-pi-160-eval). Each job took about
+85 min (~$3.90).
+
+| Inkling-2-Mini 8k vs. | MCP: 8k / other (only 8k, only other, p) | CLI: 8k / other (only 8k, only other, p) |
+|---|---|---|
+| Inkling-2-Mini 4k (above) | 363 / 360 of 377 (13, 10, p = 0.68) | 363 / 367 of 377 (5, 9, p = 0.42) |
+| Qwen3.5-4B base, thinking | **363** / 336 of 377 (35, 8, p = 4.2e-05) | **144** / 130 of 150 (19, 5, p = 0.0066) |
+| Qwen3.5-4B recipe (a) | 363 / 370 of 377 (6, 13, p = 0.17) | 144 / 145 of 150 (4, 5, p = 1.0) |
+| Qwen3.5-4B full-CoT SFT | - | 363 / 369 of 377 (6, 12, p = 0.24) |
+| GLM-5.3 teacher | 363 / 363 of 377 (12, 12, p = 1.0) | 363 / **375** of 377 (2, 14, p = 0.0042) |
+
+- **The longer limit fixes the truncations, but the pass rate doesn't move.** On MCP, 7 of the 8 rows that failed on the
+  4,096-token limit now pass (the eighth, `6bbe645c46af`, still runs past 8,192 tokens). Ten other rows that passed
+  before now fail: 5 hit the call limit, 3 time out, 1 hits the 8,192-token limit and 1 gives a wrong fact. The net is
+  +3 (360 to 363), well within run-to-run noise (13 vs. 10 discordant rows, p = 0.68).
+- **Budget failures move from tokens to calls and time.** On MCP, output-limit failures fall from 8 to 2, call-limit
+  hits stay at 5 (on different rows) and timeouts rise from 1 to 3. On the CLI, where no reply hit the 4,096-token
+  limit, call-limit hits rise from 5 to 7 and timeouts from 2 to 3 (367 to 363, p = 0.42).
+- Wrong facts stay rare: 2 on MCP and 3 on the CLI (one with the skill unread). The drifted GGUF row is again
+  unscorable on both tasks.
+- Cost per episode barely changes: 4.7 MCP calls and 2,236 output tokens (from 2,110); 5.8 CLI calls.
 
 ```bash
 uv run distill run examples/hf-hub-qa-mcp/run-inkling.toml --dry-run
 uv run distill run examples/hf-hub-qa/run-inkling.toml --dry-run
 uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task mcp
 uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task cli --passed d2303c64450f 330b2ba29472  # rescored rows
+uv run distill run examples/hf-hub-qa-mcp/run-inkling-8k.toml --dry-run   # and ../hf-hub-qa/run-inkling-8k.toml
+uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task mcp --inkling <8k episodes/base/test.jsonl>
 ```
 
 ## CLI vs. MCP comparison
