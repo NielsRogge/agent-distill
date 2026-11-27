@@ -32,11 +32,12 @@ limit = 377  # every v2 test question, as the base LFM3-1.7B runs (run-lfm3.toml
 concurrency = 4  # anonymous MCP rate limits
 timeout = 300
 max_tool_calls = 15
-variants = ["sft"]  # the adapter on the pinned base; the base itself: run-lfm3.toml
-# The HF MCP server moved from 0.4.39 (the snapshot, and the base run) to 0.5.1 on 2026-11-27: the only tool-list
-# change is one more error code in hf_fs's outputSchema, which the model never sees (tools are declared from their
-# inputSchema). 0.5.1 also rejects numbers inside hf_fs `args` arrays, which 0.4.39 accepted (34 of 1,511 hf_fs calls,
-# in 14 of the 377 base episodes). Records keep both tool digests and the live server version.
+variants = ["base", "sft"]  # the adapter on the pinned base, and the base again on the same MCP server version
+# The HF MCP server moved to 0.5.1 on 2026-11-27 (the snapshot is 0.4.39; the base LFM3 and Inkling runs saw 0.5.0
+# with the same tool list; the Qwen runs saw 0.4.39). The only tool-list change is one more error code in hf_fs's
+# outputSchema, which the model never sees (tools are declared from their inputSchema). 0.5.1 also rejects numbers
+# inside hf_fs `args` arrays, which 0.5.0 accepted (34 of 1,511 hf_fs calls, in 14 of the 377 base LFM3 episodes), so
+# the base is evaluated again here, next to the adapter. Records keep both tool digests and the live server version.
 allow_mcp_drift = true
 
 [budget]

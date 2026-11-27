@@ -188,7 +188,7 @@ def test_recipe_a_run_configs_build_sft_on_l4_and_adapter_eval(task):
     assert run.config.student == "lfm3-1.7b" and run.config.eval.limit == 377
     assert run.repo("replay") == "nielsr/lfm3-17b-replay-openr1-oasst"
     assert run.repo("traces") == f"nielsr/qwen35-4b-{task}-v2-glm-53-pi-160-traces"
-    built = {stage: job for stage in ("replay", "sft", "eval") for (job,) in pipeline.stage_waves(stage, run, "REV")}
+    built = {stage: jobs[-1] for stage in ("replay", "sft", "eval") for jobs in pipeline.stage_waves(stage, run, "REV")}
     assert built["sft"].flavor == "l4x1" and "transformers==5.23.0" in built["sft"].command
     assert "--replay-repo nielsr/lfm3-17b-replay-openr1-oasst" in built["sft"].command
     assert "--output-repo nielsr/lfm3-17b-replay-openr1-oasst" in built["replay"].command
@@ -200,8 +200,9 @@ def test_mcp_drift_override_reaches_only_the_runs_that_set_it():
     from agent_distill.mcp import ALLOW_DRIFT_ENV
 
     mcp = make_run(load_run(Path("examples/hf-hub-qa-mcp/run-lfm3-think.toml")))
-    (job,) = pipeline.eval_jobs(mcp, "REV")
-    assert job.env[ALLOW_DRIFT_ENV] == "1"
+    built = pipeline.eval_jobs(mcp, "REV")  # base and adapter, on the same server version
+    assert [job.name.rsplit("-eval-", 1)[1] for job in built] == ["base-test", "sft-test"]
+    assert all(job.env[ALLOW_DRIFT_ENV] == "1" for job in built)
     cli = make_run(load_run(Path("examples/hf-hub-qa/run-lfm3-think.toml")))
     assert all(ALLOW_DRIFT_ENV not in job.env for job in pipeline.eval_jobs(cli, "REV"))
     base = make_run(load_run(Path("examples/hf-hub-qa-mcp/run-lfm3.toml")))
