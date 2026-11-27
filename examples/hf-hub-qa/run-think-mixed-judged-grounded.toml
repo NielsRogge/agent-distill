@@ -1,0 +1,32 @@
+# Follow-up 1: prompt-level grounding ablation on the existing mixed Recipe (a) adapter
+# (`nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora`).
+# Identical to `run-think-mixed-judged.toml` except `task = "judged_grounded.py"` (`system_prompt_grounded.txt`).
+#
+#   distill run examples/hf-hub-qa/run-think-mixed-judged-grounded.toml --dry-run
+task = "judged_grounded.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-cfx-a-mixed-grounded-prompt-judged-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+sft = "Qwen/Qwen3.5-4B+nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora"
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 20  # worst case on one H200; expected ~$2.50

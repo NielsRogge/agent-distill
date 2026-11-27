@@ -1,0 +1,31 @@
+# Follow-up 2 judged eval: evaluates `run-think-mixed-grounded.toml`'s adapter on the original 51 `judged.py`
+# questions (exact same `system_prompt.txt` as all baselines for apples-to-apples comparison).
+#
+#   distill run examples/hf-hub-qa/run-think-mixed-grounded-judged.toml --dry-run
+task = "judged.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-cfx-a-mixed-grounded-hf-hub-qa-judged-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+sft = "Qwen/Qwen3.5-4B+nielsr/cursor-qwen35-4b-think-cfx-a-mixed-grounded-hf-hub-qa-v2-pi-160-lora"
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 20

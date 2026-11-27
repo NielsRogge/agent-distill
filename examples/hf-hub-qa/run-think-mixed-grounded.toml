@@ -1,0 +1,42 @@
+# Follow-up 2: mixed factual + strictly tool-grounded open-ended SFT (`qwen3.5-4b-think`, Recipe (a) + KL replay).
+# Identical to `run-think-mixed.toml` except the 205 open-ended traces come from `rewrite_grounded_traces.py`
+# (same tool trajectories, final answers rewritten to contain ONLY claims directly supported by tool outputs and
+# re-verified with `judged_rubrics.py` at correctness >= 8/10).
+#
+#   distill run examples/hf-hub-qa/run-think-mixed-grounded.toml --dry-run
+task = "."
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-cfx-a-mixed-grounded-hf-hub-qa-v2-pi-160"
+stages = ["sft", "eval"]
+
+[repos]
+traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's 600 accepted factoid traces
+replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[sft]
+args = [
+  "--traces-repo", "nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-grounded-glm-53-pi-160-traces",
+  "--max-tool-calls", "12",
+]
+timeout = "210m"
+
+[eval]
+splits = ["test"]
+limit = 377
+concurrency = 4
+timeout = 300
+max_tool_calls = 15
+variants = ["sft"]
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 20

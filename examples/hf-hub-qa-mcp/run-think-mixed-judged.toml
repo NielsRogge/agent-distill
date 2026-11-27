@@ -1,0 +1,31 @@
+# Follow-up 4 (MCP twin): evaluate the MCP mixed Recipe (a) adapter on the 51 judged open-ended questions
+# (`examples/hf-hub-qa-mcp/judged.py`) for direct apples-to-apples comparison with CLI mixed SFT and MCP baselines.
+#
+#   distill run examples/hf-hub-qa-mcp/run-think-mixed-judged.toml --dry-run
+task = "judged.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-mcp-judged-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+sft = "Qwen/Qwen3.5-4B+nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-mcp-v2-pi-160-lora"
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 20

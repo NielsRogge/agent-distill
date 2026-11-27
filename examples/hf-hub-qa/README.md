@@ -101,6 +101,34 @@ Paired comparisons, exact two-sided McNemar (mixed only / other only):
 
 Spend: $14.19 teacher traces + ~$2 judge + ~$20 GPU (SFT ~$10.5, 377-row eval ~$7.2, judged eval ~$2.2). Datasets: [`nielsr/hf-hub-questions-train`](https://huggingface.co/datasets/nielsr/hf-hub-questions-train), [`…-open-ended-…-traces`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces). Adapter: [`…-cfx-a-mixed-…-lora`](https://huggingface.co/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora). Evaluations: [`…-cfx-a-mixed-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-eval) and [`…-cfx-a-mixed-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
+### Closing the open-ended gap: strict-grounding ablations and open-ended GRPO
+
+Following the confabulation diagnosis above, three targeted CLI follow-ups tested (1) inference-time grounding instructions alone, (2) rewriting the 205 open-ended teacher answers to be strictly tool-grounded before SFT, and (3) on-policy GRPO directly on `open_ended.py` starting from the mixed SFT checkpoint:
+
+| Model | Full `test` (377) | `fact_correct` (377) | Facts limit hits | Judged (51) | Judged grounded | Judged live `reference` | Judged `answer_quality` | Judged med. calls |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| CLI Base `think` | — | — | — | 31/51 (60.8%) | 43/44 (0.999) | 13/17 (0.765) | 0.725 | 4.0 |
+| Factoid Recipe (a)-600 (`run-think.toml`) | — | — | — | 33/51 (64.7%) | 42/43 (0.998) | 16/18 (0.907) | 0.773 | 8.0 |
+| Mixed SFT (`run-think-mixed.toml`) | 365/377 (96.8%) | 370/376 (98.4%) | 4 | 29/51 (56.9%) | 39/45 (0.988) | 18/18 (1.000) | 0.731 | 6.0 |
+| **F1: Mixed SFT + strict-grounding prompt** (`judged_grounded.py`) | *(same adapter)* | *(same)* | *(same)* | 32/51 (62.7%) | 40/47 (0.988) | 18/18 (1.000) | 0.785 | 5.0 |
+| **F2: Grounded Mixed SFT** (`run-think-mixed-grounded.toml`) | **366/377 (97.1%)** | **372/376 (98.9%)** | **0** | **36/51 (70.6%)** | **40/42 (0.998)** | **18/19 (0.965)** | **0.806** | 7.0 |
+| **F3: Open-ended GRPO** (`run-think-mixed-grpo.toml`, 40 steps) | 317/377 (84.1%) | 318/376 (84.6%) | 40 | 34/51 (66.7%) | 47/48 (0.997) | 13/18 (0.752) | 0.741 | **3.0** |
+| MCP Mixed SFT (twin, `hf-hub-qa-mcp`) | 364/377 (96.6%) | 365/376 (97.1%) | 0 | **36/51 (70.6%)** | 41/45 (0.990) | 16/18 (0.922) | 0.775 | 2.0 |
+
+Key takeaways (paired exact two-sided McNemar):
+
+- **F1 — Prompting recovers half the drop, but not the baked-in habit (`32/51 = 62.7%`):** adding a strict-grounding paragraph (`system_prompt_grounded.txt`) to the exact PR #30 mixed adapter lifted judged pass rate by **+5.9pp** (`+11/-8`, `p = 0.65`), `answer_quality` `0.731 → 0.785`, `correctness` `0.652 → 0.721`, cut median calls `6 → 5`, and dropped `hf_errors` `0.51 → 0.27` while holding `reference = 18/18 (100%)`. Seven `grounded < 1.0` misses remained (`40/47`), confirming part of the confabulation habit sits in the SFT weights.
+- **F2 — Strictly tool-grounded trace rewriting is the clear CLI winner (`366/377 = 97.1%` factual AND `36/51 = 70.6%` judged):** `rewrite_grounded_traces.py` rewrote only the final assistant answer of the 205 open-ended traces via GLM-5.3 so every claim is directly supported by the episode's own tool output, then re-scored with `open_ended.py` rubrics (`correctness >= 8/10`), keeping **194/205 (94.6%)**. Retraining Recipe (a) SFT on `597 factoid + 194 grounded open-ended = 791 traces`:
+  - **Lifts `judged.py` by +13.7pp over unrewritten mixed SFT (`29/51 → 36/51`, `+13/-6`, `p = 0.17`)**, beating CLI Base `think` (`31/51`, `+14/-9`, `p = 0.40`) and Factoid Recipe (a)-600 (`33/51`, `+10/-7`, `p = 0.63`), and **tying the best MCP student (`36/51`, `+9/-9`, `p = 1.0`)**.
+  - Achieves the highest `answer_quality` (**0.806**) and `correctness` (**0.762**) of any student (CLI or MCP), cuts ungrounded IDs to **2 out of 528 (`grounded = 0.998`)**, keeps `reference = 18/19 (0.965)` and `hf_errors = 0.47`.
+  - **Preserves peak factual accuracy on `hf-hub-facts-v2`:** **366/377 (97.1%)**, `fact_correct = 372/376 (98.9%)`, **0 tool-call limit hits** (paired vs unrewritten mixed `+10/-9`, `p = 1.0`; vs MCP mixed `+11/-9`, `p = 0.82`).
+- **F3 — Pure open-ended GRPO fixes grounding & judged (`34/51 = 66.7%`) but causes factual task-forgetting (`317/377 = 84.1%`):** probing `open_ended.py` (`k = 4`) qualified **161/240 (67.1%)** partial-pass rows; 40 steps of TRL async GRPO (`num_generations=8`, 2× H200, 0 zero-std groups) lifted `judged.py` by **+9.8pp** (`29/51 → 34/51`, `+13/-8`, `p = 0.38`), drove `grounded` to **47/48 (0.997, 1 unseen ID of 405)**, and halved median tool calls (`6 → 3`, limit hits `6 → 2`). However, without factual prompts in the GRPO pool (and with `beta = 0`), the policy stopped reading `SKILL.md` (`read_skill: 1.0 → 0.0`) and over-explored on factoid lookups (`40` limit-15 hits, `hf_errors: 0.34 → 1.25`), dropping `hf-hub-facts-v2` by **-12.7pp** (`+8/-56`, `p < 1e-4`). Any future RL stage should mix both factual and open-ended prompts or add a non-zero KL anchor.
+
+Published follow-up artifacts (all public in the [agent-distillation collection](https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31)): <!-- pragma: allowlist secret -->
+- **F1:** [`…-mixed-grounded-prompt-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-grounded-prompt-judged-pi-160-eval) <!-- pragma: allowlist secret -->
+- **F2 (recommended CLI all-rounder):** rewritten traces [`…-open-ended-grounded-…-traces`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-grounded-glm-53-pi-160-traces), adapter [`…-mixed-grounded-…-lora`](https://huggingface.co/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-grounded-hf-hub-qa-v2-pi-160-lora), factual eval [`…-mixed-grounded-…-v2-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-grounded-hf-hub-qa-v2-pi-160-eval), judged eval [`…-mixed-grounded-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-grounded-hf-hub-qa-judged-pi-160-eval) <!-- pragma: allowlist secret -->
+- **F3:** merged SFT [`…-grpo-…-sft-merged`](https://huggingface.co/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-pi-160-sft-merged), GRPO adapter [`…-grpo-lora`](https://huggingface.co/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-pi-160-grpo-lora), GRPO merged [`…-grpo-merged`](https://huggingface.co/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-pi-160-grpo-merged), probe [`…-grpo-pi-160-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-pi-160-eval), factual eval [`…-grpo-facts-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-facts-pi-160-eval), judged eval [`…-grpo-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-judged-pi-160-eval) <!-- pragma: allowlist secret -->
+
 ### Non-thinking SFT → GRPO on full `test` (`run-grpo.toml`)
 
 Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactly `bash` and `read`). A difficulty probe then ran the SFT model 4 times on 700 sampled train rows, and GRPO trained from the SFT merge on the 157 rows it solved on 1–3 of the 4 attempts. That is 78 steps, about 38 minutes on 2× H200. The evaluation covers all 377 `test` rows, first record per row, with the MCP twin's numbers in brackets (its teacher counted on first records as well):
@@ -146,7 +174,11 @@ Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactl
 | --- | ---: | ---: | ---: |
 | Kimi-K3.1-Pro (teacher pilot) | 49/51 (96.1%) | 10 | $12.31 |
 | GLM-5.3 (teacher pilot) | 43/51 (84.3%) | 5 | $2.72 |
+| **Grounded Mixed Recipe (a) (`run-think-mixed-grounded-judged.toml`)** | **36/51 (70.6%)** | **7** | ~$2.5 GPU + <$1 judge |
+| Open-ended GRPO (`run-think-mixed-grpo-eval-judged.toml`) | 34/51 (66.7%) | 3 | ~$2.5 GPU + <$1 judge |
 | Recipe (a) (`run-think.toml` adapter, same settings) | 33/51 (64.7%) | 8 | ~$3 GPU + <$1 judge |
+| Mixed Recipe (a) + strict-grounding prompt (`run-think-mixed-judged-grounded.toml`) | 32/51 (62.7%) | 5 | ~$2.5 GPU + <$1 judge |
+| Qwen3.5-4B Base (`think`) | 31/51 (60.8%) | 4 | ~$2.5 GPU + <$1 judge |
 | Recipe (a), mixed (`run-think-mixed-judged.toml`) | 29/51 (56.9%) | 6 | ~$2.2 GPU + <$1 judge |
 | Full-CoT SFT (`run-think-fullcot-judged.toml`) | 26/51 (51.0%) | 8 | <$1 judge |
 
@@ -176,6 +208,21 @@ uv run --extra hub python examples/hf-hub-qa/open_ended_questions.py --check
 uv run distill run examples/hf-hub-qa/run-think-open-ended-traces.toml --dry-run
 uv run distill run examples/hf-hub-qa/run-think-mixed.toml --dry-run
 uv run distill run examples/hf-hub-qa/run-think-mixed-judged.toml --dry-run
+
+# Follow-up 1: prompt-only strict-grounding ablation on the mixed SFT adapter
+uv run distill run examples/hf-hub-qa/run-think-mixed-judged-grounded.toml --dry-run
+
+# Follow-up 2 (recommended all-rounder): strictly tool-grounded trace rewrite -> mixed recipe (a) SFT + evals
+uv run --extra hub python examples/hf-hub-qa/rewrite_grounded_traces.py --dry-run \
+  --source-repo nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces \
+  --output-repo nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-grounded-glm-53-pi-160-traces
+uv run distill run examples/hf-hub-qa/run-think-mixed-grounded.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-think-mixed-grounded-judged.toml --dry-run
+
+# Follow-up 3: on-policy GRPO on open_ended.py + factual & judged evals
+uv run distill run examples/hf-hub-qa/run-think-mixed-grpo.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-think-mixed-grpo-eval-facts.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-think-mixed-grpo-eval-judged.toml --dry-run
 
 # Secondary judged evaluation (teacher pilot / student eval)
 uv run distill run examples/hf-hub-qa/run-judged-pilot.toml --dry-run

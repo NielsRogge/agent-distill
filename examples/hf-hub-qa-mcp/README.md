@@ -70,6 +70,22 @@ Apples-to-apples comparison on the first **150 test questions** of `nielsr/hf-hu
 - **Base:** a constrained 3-tool MCP interface is much easier for an untrained 4B model than an open shell (73.3% vs. 47.3%), because it cannot wander off into ad-hoc scrapers.
 - **After SFT:** the gap disappears (~80% on both). With thinking enabled and cross-format SFT (recipe (a)), both surfaces match the teacher (98.1% MCP on 377 rows; 96.7% CLI on 150 rows).
 
+### Open-ended judged evaluation and mixed SFT (`judged.py`, `open_ended.py`)
+
+To test whether MCP's typed JSON tools avoid the open-ended confabulation drop seen in CLI mixed SFT, we mirrored `hf-hub-qa`'s judged (`nielsr/hf-hub-questions`, 51 rows) and open-ended training (`nielsr/hf-hub-questions-train`, 240 disjoint rows) tasks with identical grounding, live `hf` reference checks (stage-only), and Gemini 4 Hydrogen judge (`judged_rubrics.py`). GLM-5.3 open-ended MCP traces accepted **232/240 (96.7%)** across 264 episodes (**226** with `<= 12` calls, median 2 calls, $7.87 teacher spend). Training `qwen3.5-4b-think` (recipe (a) + KL replay) on `599 factoid + 226 MCP open-ended = 825 traces` (`run-think-mixed.toml`):
+
+| Model (`pi@1.6.0`, thinking on) | Full `test` (377) | `fact_correct` (377) | Judged (51) | Judged grounded | Judged live `reference` | Judged `answer_quality` | Judged med. calls |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| MCP Base `think` | 336/377 (89.1%) | — | 35/51 (68.6%) | 47/48 (0.999) | 14/18 (0.785) | 0.775 | 2.0 |
+| **MCP Factoid Recipe (a)-599** (`run-think.toml`) | **370/377 (98.1%)** | **371/377 (98.4%)** | **36/51 (70.6%)** | **48/49 (0.998)** | 13/17 (0.831) | 0.769 | **2.0** |
+| **MCP Mixed Recipe (a)** (`run-think-mixed.toml`) | 364/377 (96.6%) | 365/376 (97.1%) | **36/51 (70.6%)** | 41/45 (0.990) | **16/18 (0.922)** | **0.775** | **2.0** |
+| CLI Base `think` (twin) | — | — | 31/51 (60.8%) | 43/44 (0.999) | 13/17 (0.765) | 0.725 | 4.0 |
+| CLI Unrewritten Mixed SFT (twin) | 365/377 (96.8%) | 370/376 (98.4%) | 29/51 (56.9%) | 39/45 (0.988) | 18/18 (1.000) | 0.731 | 6.0 |
+| CLI Grounded Mixed SFT (twin, Follow-up 2) | 366/377 (97.1%) | 372/376 (98.9%) | **36/51 (70.6%)** | 40/42 (0.998) | 18/19 (0.965) | **0.806** | 7.0 |
+
+- **MCP avoids CLI's mixed-SFT confabulation collapse without trace rewriting:** MCP Base (`35/51 = 68.6%`) already starts +7.8pp above CLI Base (`31/51`, paired `+14/-10`, `p = 0.54`), and both MCP Factoid Recipe (a)-599 and MCP Mixed SFT hold **36/51 (70.6%)** (`+11/-11`, `p = 1.0`). Adding open-ended traces boosts live `reference` retrieval from `13/17 (0.831)` to **16/18 (0.922)** while keeping `364/377 (96.6%)` factual (`0` limit hits, `2.34` MCP calls/ep, `0.11` errors/ep; vs MCP Recipe (a)-599 `+3/-9`, `p = 0.15`).
+- **CLI catches up completely once its open-ended teacher traces are strictly tool-grounded:** Follow-up 2 on CLI matches MCP Mixed on both `judged.py` (`36/51` vs `36/51`, `+9/-9`, `p = 1.0`) and `hf-hub-facts-v2` (`366/377` vs `364/377`, `+11/-9`, `p = 0.82`), with MCP still requiring ~3× fewer tool calls (median 2 vs 7 on `judged.py`, 2 vs 4 on facts).
+
 ## Task, MCP setup, and rubrics
 
 - **Pinned, read-only MCP tools:** connects anonymously (no `Authorization` header, no HF token) to `https://huggingface.co/mcp` (server `0.4.39`) via [Pi's built-in MCP support](https://docs.pi.dev/latest/mcp) (`--no-extensions -e builtin:mcp`). <!-- pragma: allowlist secret -->
@@ -93,6 +109,12 @@ uv run distill run examples/hf-hub-qa-mcp/run.toml --dry-run
 # Phase 2: difficulty probe + GRPO on top of Phase 1 SFT
 uv run distill run examples/hf-hub-qa-mcp/run.toml --stages probe,grpo,grpo-merge --dry-run
 
+# Open-ended judged baselines, open-ended teacher traces, and mixed factual + open-ended SFT
+uv run distill run examples/hf-hub-qa-mcp/run-think-judged-baselines.toml --dry-run
+uv run distill run examples/hf-hub-qa-mcp/run-think-open-ended-traces.toml --dry-run
+uv run distill run examples/hf-hub-qa-mcp/run-think-mixed.toml --dry-run
+uv run distill run examples/hf-hub-qa-mcp/run-think-mixed-judged.toml --dry-run
+
 # End-to-end smoke check (8 traces, 2 SFT steps, 5-row eval)
 uv run distill smoke examples/hf-hub-qa-mcp/run.toml \
   --set 'stages=["traces","sft","merge","eval"]' \
@@ -111,3 +133,4 @@ uv run distill smoke examples/hf-hub-qa-mcp/run.toml \
   - Cross-format SFT + CoT-proxies: [`…-think-cfx-b-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-b-…-summaries`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-summaries), [`…-think-cfx-b-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
   - Full-CoT SFT, variant (c): [`…-think-cfx-c-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160-lora), [`…-think-cfx-c-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-c-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
   - Thinking base eval: [`…-think-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) <!-- pragma: allowlist secret -->
+  - Open-ended judged & mixed SFT (Follow-up 4): baselines [`…-mcp-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-hf-hub-qa-mcp-judged-pi-160-eval), open-ended traces [`…-mcp-open-ended-…-traces`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-hf-hub-qa-mcp-open-ended-glm-53-pi-160-traces), mixed adapter [`…-mixed-…-mcp-v2-…-lora`](https://huggingface.co/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-mcp-v2-pi-160-lora), factual eval [`…-mixed-…-mcp-v2-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-mcp-v2-pi-160-eval), judged eval [`…-mixed-…-mcp-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-mcp-judged-pi-160-eval) <!-- pragma: allowlist secret -->

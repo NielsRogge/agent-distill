@@ -1,0 +1,33 @@
+# Follow-up 4 (MCP twin): evaluate both Base `think` (Qwen/Qwen3.5-4B) and Factoid Recipe (a) MCP
+# (`nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora`, 98.1% factual) on the 51 judged
+# open-ended questions (`nielsr/hf-hub-questions`) through the 3-tool HF MCP server.
+#
+#   distill run examples/hf-hub-qa-mcp/run-think-judged-baselines.toml --dry-run
+task = "judged.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-cfx-a-hf-hub-qa-mcp-judged-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+base = "Qwen/Qwen3.5-4B"
+sft = "Qwen/Qwen3.5-4B+nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora"
+
+[budget]
+traces_usd = 0
+judge_usd = 8
+gpu_usd = 40  # 2 jobs (base + sft) worst case on H200; expected ~$5.70 total
