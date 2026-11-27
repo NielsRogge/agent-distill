@@ -146,6 +146,7 @@ Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactl
 | --- | ---: | ---: | ---: |
 | Kimi-K3.1-Pro (teacher pilot) | 49/51 (96.1%) | 10 | $12.31 |
 | GLM-5.3 (teacher pilot) | 43/51 (84.3%) | 5 | $2.72 |
+| GLM-5.3 (same-day re-run, `run-teacher-judged.toml`) | 43/51 (84.3%) | 5 | $2.70 + <$1 judge |
 | Recipe (a) (`run-think.toml` adapter, same settings) | 33/51 (64.7%) | 8 | ~$3 GPU + <$1 judge |
 | Recipe (a), mixed (`run-think-mixed-judged.toml`) | 29/51 (56.9%) | 6 | ~$2.2 GPU + <$1 judge |
 | Full-CoT SFT (`run-think-fullcot-judged.toml`) | 26/51 (51.0%) | 8 | <$1 judge |
@@ -166,6 +167,7 @@ The teacher pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eva
 | Recipe (a), mixed | 29/51 | 20 / 0 | 1.9e-06 |
 | Full-CoT SFT | 26/51 | 24 / 1 | 1.5e-06 |
 | GLM-5.3 teacher (published pilot records) | 41/51 | 9 / 1 | 0.021 |
+| GLM-5.3 teacher, same-day re-run (`run-teacher-judged.toml`) | 43/51 | 7 / 1 | 0.07 |
 
 - **No timeouts or truncations, and one call limit.** Inkling uses a median of 5 tool calls (the teacher's number). It
   reaches the 20-call limit once, and that answer still passes; the Qwen students fail on the limit 5–11 times each. It
@@ -179,10 +181,21 @@ The teacher pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eva
   question, Inkling passes 10/10 at zero failures, 9/9 at one, 11/11 at two, 8/9 at three, 8/8 at four and 3/4 at five.
   It also passes 9 of the teacher's 10 failures. The students' misses are mostly judge correctness (7–15 per student),
   call limits (5–11) and the grounded gate, which Inkling avoids.
-- **Caveat:** the references and the judge's view of the Hub are live, and the baselines ran days to weeks earlier. A
-  few trending answers may have scored differently on another day.
+- **Hub drift vs. teacher variance.** The references and the judge see the live Hub, and the baselines ran days to
+  weeks earlier. To separate the two effects, `run-teacher-judged.toml` re-ran GLM-5.3 on the same day as Inkling, with
+  the pilot's settings ($2.70 of teacher spend).
+  - The re-run scores **43/51**, against 41/51 for the pilot records (8 / 6 discordant, p = 0.79). The total is stable,
+    but 14 of the 51 rows flip between the two runs.
+  - Most flips come from the strict `grounded` gate, which fails an answer if any Hub ID was never seen in a tool
+    result. The pilot failed it on 6 rows; the re-run passes 5 of those and fails it on 4 others.
+  - Only one reference score changed, on "today's trending papers": the re-run listed today's daily papers instead of
+    `--sort trending`. That is the teacher answering a different reading of the question, not a Hub change.
+  - The re-run passes 8 of Inkling's 9 wins over the pilot records. Those wins came from teacher run-to-run variance,
+    not from Hub changes that favoured Inkling.
+  - Against the same-day teacher, Inkling is 7 ahead and 1 behind (49 vs. 43, p = 0.07): ahead, but not significantly
+    at 51 questions. Its gap over every Qwen student stays significant.
 
-Evaluation: [`inkling-2-mini-8k-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/inkling-2-mini-8k-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+Evaluations: [`inkling-2-mini-8k-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/inkling-2-mini-8k-hf-hub-qa-judged-glm-53-pi-160-eval) and the teacher re-run [`hf-hub-qa-judged-rerun-glm-53-pi-160-eval`](https://huggingface.co/datasets/nielsr/hf-hub-qa-judged-rerun-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
 ## Running it
 
