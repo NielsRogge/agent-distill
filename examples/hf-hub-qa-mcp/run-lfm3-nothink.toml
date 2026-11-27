@@ -1,0 +1,33 @@
+# hf-hub-qa-mcp: base LFM3-1.7B (LiquidAI/LFM3-1.7B, 1.73B dense conv/attention hybrid) with the anonymous HF MCP tools, thinking off (`enable_thinking: false`; the card calls this mode inconsistent, so the qwen3 reasoning parser stays on to catch stray thoughts).
+# Only the eval stage runs, on all 377 v2 test questions, with run-think.toml's settings (300 s, 15 tool calls, 4
+# concurrent episodes). No fine-tuning. Results: ../hf-hub-qa-mcp/README.md (LFM3-1.7B section).
+#
+# The lfm3-1.7b-nothink profile serves with vLLM 0.34.0 (native LFM3 support) on one L4, at the card's sampling (temperature 0.1,
+# top-k 50, repetition penalty 1.1) and the qwen3_coder tool-call parser.
+#
+#   distill run examples/hf-hub-qa-mcp/run-lfm3-nothink.toml --dry-run
+task = "."
+teacher = "glm-5.3"  # names the run (a later SFT on the GLM-5.3 traces shares its eval dataset); not evaluated here
+student = "lfm3-1.7b-nothink"
+harness = "pi@1.6.0"
+name = "lfm3-17b-nothink-hf-hub-qa-mcp-v2-glm-53-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false  # nielsr's private storage is full: raw harness logs stay in the jobs
+
+[eval]
+splits = ["test"]
+limit = 377  # every v2 test question
+concurrency = 4  # anonymous MCP rate limits
+timeout = 300
+max_tool_calls = 15
+variants = ["base"]
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 5  # per stage: one L4 eval job ($0.80/h; 3 h timeout = $2.40 worst case)

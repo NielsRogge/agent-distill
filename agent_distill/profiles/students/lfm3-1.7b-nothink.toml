@@ -1,0 +1,19 @@
+# LFM3-1.7B with thinking off: the lfm3-1.7b profile plus vLLM's server-wide chat-template default
+# `enable_thinking: false` (the template then opens the reply with an empty `<think></think>`). The model card warns
+# that thinking off "can be inconsistent", so the `qwen3` reasoning parser stays on: a thought the model writes anyway
+# is moved out of the visible content (and counted by the analysis) instead of leaking into the answer.
+# Everything else is lfm3-1.7b's: vLLM 0.34.0, qwen3_coder tool calls, temperature 0.1 / top-k 50 / repetition
+# penalty 1.1, 8,192 output tokens, one L4.
+name = "lfm3-1.7b-nothink"
+model = "LiquidAI/LFM3-1.7B"
+
+[serve]
+vllm_version = "0.34.0"
+flavor = "l4x1"
+timeout = "3h"
+reasoning_parser = "qwen3"
+tool_call_parser = "qwen3_coder"
+enforce_eager = false
+max_output_tokens = 8192
+generation_config = { temperature = 0.1, top_k = 50, repetition_penalty = 1.1 }
+vllm_extra_args = "--trust-remote-code --revision 1da06bec6a819da10b54c67e5c90972b46d81871 --default-chat-template-kwargs '{\"enable_thinking\": false}'"

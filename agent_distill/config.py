@@ -23,6 +23,7 @@ A run is a `run.toml`:
 from __future__ import annotations
 
 import dataclasses
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -218,6 +219,9 @@ class HarnessProfile:
         return f"{self.name}@{self.version}"
 
 
+RUN_NAME = re.compile(r"[A-Za-z0-9_-]+")
+
+
 def slugify(name: str) -> str:
     return "".join(char for char in name.lower().replace(".", "").replace("@", "-") if char.isalnum() or char == "-")
 
@@ -410,4 +414,9 @@ def load_run(path: str | Path, overrides: dict[str, Any] | None = None) -> RunCo
             target = target.setdefault(key, {})
         target[leaf] = value
     data.setdefault("base_dir", str(path.resolve().parent))
+    name = data.get("name")
+    if name and not RUN_NAME.fullmatch(str(name)):
+        # The name becomes HF Jobs labels, which allow only these characters: without this check `distill run` stages
+        # the job code (a `<name>-code` repo) and only then has every job refused. Default names are slugified.
+        raise ValueError(f"{path}: name {name!r} may contain only letters, digits, '-' and '_' (HF Jobs labels)")
     return _build(RunConfig, data, str(path))

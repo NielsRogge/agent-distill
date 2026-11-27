@@ -1,0 +1,28 @@
+# LFM3-1.7B (LiquidAI/LFM3-1.7B, 1.73B dense hybrid: 13 gated short-convolution, 5 sliding-window and 6 global-attention
+# layers; 256K context), served as its model card and Liquid's vLLM guide recommend (docs.liquid.ai, Nov 2026):
+# - vLLM 0.34.0, the first release with native LFM3 support; `--trust-remote-code` for the checkpoint's config class
+#   (configuration_lfm3.py, a plain PreTrainedConfig). The revision is pinned, so the remote code and weights are the
+#   ones reviewed for this profile.
+# - Thinking on (the chat template's default, `enable_thinking=True`, which opens `<think>` in the generation prompt):
+#   Liquid's thinking guide names agentic tool use among the tasks it helps, and calls thinking off inconsistent. The
+#   `qwen3` reasoning parser moves the thought out of the visible content; Pi sends it back on later turns of the same
+#   task, and the template keeps every thought after the user's question (as for qwen3.5-4b-think).
+# - Tool calls are Qwen3-Coder XML (`<tool_call><function=...><parameter=...>`): the default `qwen3_coder` parser.
+# - The card's sampling for chat, tool use and agents: temperature 0.1, top-k 50, repetition penalty 1.1 (also the
+#   checkpoint's generation_config.json; stated here so the evaluation does not depend on vLLM reading it).
+# - 8,192 output tokens per turn, as qwen3.5-4b-think. 65,536 tokens of context (the library default) of the 256K.
+# - L4 (24 GB) is the smallest flavor that fits: the BF16 weights are 3.5 GB (T4 has no BF16).
+# Evaluation serving only so far: `[lora]`, `[sft]` and `[grpo]` keep the Qwen defaults and are untested for LFM3.
+name = "lfm3-1.7b"
+model = "LiquidAI/LFM3-1.7B"
+
+[serve]
+vllm_version = "0.34.0"
+flavor = "l4x1"
+timeout = "3h"
+reasoning_parser = "qwen3"
+tool_call_parser = "qwen3_coder"
+enforce_eager = false
+max_output_tokens = 8192
+generation_config = { temperature = 0.1, top_k = 50, repetition_penalty = 1.1 }
+vllm_extra_args = "--trust-remote-code --revision 1da06bec6a819da10b54c67e5c90972b46d81871"

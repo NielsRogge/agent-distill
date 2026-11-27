@@ -45,6 +45,35 @@ def test_run_config_and_overrides():
     assert config.hub.bill_to == "huggingface"
 
 
+def test_run_name_must_fit_job_labels():
+    # HF Jobs labels allow only [A-Za-z0-9_-]: a dotted name used to stage the code repo and then fail every launch.
+    with pytest.raises(ValueError, match="HF Jobs labels"):
+        load_run(RUN_TOML, {"name": "lfm3-1.7b-paper-urls"})
+    assert load_run(RUN_TOML, {"name": "lfm3-17b-paper-urls"}).name == "lfm3-17b-paper-urls"
+
+
+def test_lfm3_eval_jobs_follow_the_model_card():
+    # LFM3-1.7B (examples/hf-hub-qa*/run-lfm3*.toml): vLLM 0.34.0 (native LFM3), pinned revision with
+    # --trust-remote-code, qwen3 reasoning + qwen3_coder tool parsers, the card's agent sampling, one L4.
+    from agent_distill.stages.eval import vllm_command
+
+    examples = Path(__file__).resolve().parents[1] / "examples"
+    for task in ("hf-hub-qa", "hf-hub-qa-mcp"):
+        for suffix, profile in (("", "lfm3-1.7b"), ("-nothink", "lfm3-1.7b-nothink")):
+            run = pipeline.make_run(load_run(examples / task / f"run-lfm3{suffix}.toml"))
+            student = load_profile("students", run.config.student, run.config.profile_paths)
+            assert student.name == profile and run.config.eval.limit == 377
+            (job,) = pipeline.eval_jobs(run, "R")
+            assert (
+                job.flavor == "l4x1" and "vllm==0.34.0" in job.command and "--model LiquidAI/LFM3-1.7B" in job.command
+            )
+            command = " ".join(vllm_command(student, student.model, ""))
+            assert "--reasoning-parser qwen3" in command and "--tool-call-parser qwen3_coder" in command
+            assert "--trust-remote-code" in command and "--revision 1da06bec" in command
+            assert '"repetition_penalty": 1.1' in command and '"top_k": 50' in command
+            assert ("enable_thinking" in command) == (suffix == "-nothink")
+
+
 def make_run(**overrides):
     config = load_run(RUN_TOML, overrides)
     return pipeline.make_run(config)
