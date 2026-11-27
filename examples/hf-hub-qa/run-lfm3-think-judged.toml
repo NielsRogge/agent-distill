@@ -1,0 +1,32 @@
+# LFM3-1.7B after recipe-(a) SFT on the CLI traces (run-lfm3-think.toml's adapter, served on the pinned base) on the
+# 51 open-ended Hugging Face Hub questions (`judged.py`), with run-lfm3-judged.toml's settings (600 s, 20 tool calls,
+# 4 concurrent episodes, Gemini judge). Results: README (LFM3-1.7B judged section).
+#
+#   distill run examples/hf-hub-qa/run-lfm3-think-judged.toml --dry-run
+task = "judged.py"
+teacher = "glm-5.3"
+student = "lfm3-1.7b"
+harness = "pi@1.6.0"
+name = "lfm3-17b-think-sft-hf-hub-qa-judged-glm-53-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+sft = "LiquidAI/LFM3-1.7B+nielsr/lfm3-17b-think-sft-hf-hub-qa-v2-glm-53-pi-160-lora"
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 5
