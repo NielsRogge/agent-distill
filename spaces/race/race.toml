@@ -24,9 +24,15 @@ instance_size = "x1"
 price_per_hour = 0.80  # USD, for the cost readout
 scale_to_zero_minutes = 15
 max_num_seqs = 4
-# Serve with CUDA graphs (the profile's --enforce-eager off): about 2-3x faster decoding on the L4, same sampling.
-# The only difference from the `eval` stage's serving; remove this table to serve exactly as it does.
-serve = { enforce_eager = false }
+# Speed-ups over the `eval` stage's serving that keep its outputs' distribution (same sampling, parsers and adapters);
+# remove this table to serve exactly as it does. Measured on the L4 with the first 5 test questions of each race (10
+# student episodes, all passed in each configuration; README):
+#   eager (eval stage)       13.7 tok/s, 52.2 s mean episode
+#   CUDA graphs              25.2 tok/s, 37.6 s
+#   CUDA graphs + MTP (2)    44.6 tok/s, 18.9 s   <- this
+# MTP is Qwen3.5's own multi-token-prediction head (`qwen3_5_mtp`), drafting 2 tokens that the adapter-carrying model
+# verifies by rejection sampling, so sampling is unchanged; 77% of draft tokens were accepted.
+serve = { enforce_eager = false, vllm_extra_args = """--speculative-config '{"method": "qwen3_5_mtp", "num_speculative_tokens": 2}'""" }
 
 [[races]]
 id = "cli"  # also the adapter's served name on the endpoint
