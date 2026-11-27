@@ -179,6 +179,9 @@ class GRPOSettings:
 class Student:
     name: str
     model: str
+    # Hub revision of `model` (a commit sha). Set it for checkpoints with custom code (`trust_remote_code`): SFT, the
+    # replay pool and evaluation serving of the base model then load exactly the reviewed code and weights.
+    revision: str = ""
     notes: str = ""
     requires: list[str] = field(default_factory=list)
     serve: ServeSettings = field(default_factory=ServeSettings)
@@ -187,6 +190,10 @@ class Student:
     merge: MergeSettings = field(default_factory=MergeSettings)
     probe: ProbeSettings = field(default_factory=ProbeSettings)
     grpo: GRPOSettings = field(default_factory=GRPOSettings)
+
+    def revision_of(self, model: str) -> str | None:
+        """The pinned revision when `model` is this profile's base model (never for merged or other checkpoints)."""
+        return (self.revision or None) if model == self.model else None
 
     def hooks(self) -> dict[str, str]:
         """Profile field -> the `module[:function]` hook it names (DESIGN.md §2): the modules must be staged with
