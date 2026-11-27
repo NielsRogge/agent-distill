@@ -30,6 +30,13 @@ MODELS = {
     for name, run in {"inkling-2-mini": "inkling-2-mini", "inkling-2-mini-8k": "inkling-2-mini-8k",
                       "lfm3-1.7b": "lfm3-17b", "lfm3-1.7b-nothink": "lfm3-17b-nothink"}.items()
 }  # fmt: skip
+# LFM3-1.7B recipe (a) (run-lfm3-think.toml); its MCP run also re-evaluates the base on the same MCP server version.
+RECIPE_A = "lfm3-17b-think-sft-{}-v2-glm-53-pi-160-eval"
+MODELS["lfm3-1.7b-recipe-a"] = {
+    task: (RECIPE_A.format("hf-hub-qa-mcp" if task == "mcp" else "hf-hub-qa"), "episodes/sft/test.jsonl")
+    for task in ("mcp", "cli")
+}
+MODELS["lfm3-1.7b-mcp051"] = {"mcp": (RECIPE_A.format("hf-hub-qa-mcp"), "episodes/base/test.jsonl")}
 BASELINES = {
     "mcp": {
         "qwen-base-nothink": ("qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval", "episodes/base-nothink/test.jsonl"),
@@ -215,7 +222,7 @@ def main(argv: list[str] | None = None) -> None:
     for row in args.passed:  # e.g. after `distill rescore` with a fixed rubric (the published records keep old scores)
         model[row] = {**model[row], "passed": True}
     report: dict[str, Any] = {args.model: describe(model, templates, args.task), "paired": {}, "baselines": {}}
-    others = {**BASELINES[args.task], **{name: sources[args.task] for name, sources in MODELS.items()}}
+    others = {**BASELINES[args.task], **{name: src[args.task] for name, src in MODELS.items() if args.task in src}}
     for name, source in others.items():
         if name == args.model:
             continue
