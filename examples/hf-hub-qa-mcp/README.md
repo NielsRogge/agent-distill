@@ -140,6 +140,117 @@ uv run distill run examples/hf-hub-qa-mcp/run-inkling-8k.toml --dry-run   # and 
 uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task mcp --inkling <8k episodes/base/test.jsonl>
 ```
 
+## LFM3-1.7B (base, thinking on and off)
+
+`run-lfm3.toml` and `run-lfm3-nothink.toml`, here and in [`hf-hub-qa`](../hf-hub-qa/run-lfm3.toml), evaluate base
+[LFM3-1.7B](https://huggingface.co/LiquidAI/LFM3-1.7B) out of the box. It is a 1.73B dense conv/attention hybrid, and
+no fine-tuning was done. The runs cover all 377 test questions with the Inkling settings (300 s, 15 tool calls,
+4 concurrent episodes).
+
+**Serving.** Both profiles use the model card's settings:
+- vLLM 0.34.0, which supports LFM3 natively, with `--trust-remote-code` and the revision pinned;
+- the `qwen3` reasoning parser and the `qwen3_coder` tool parser;
+- temperature 0.1, top_k 50, repetition_penalty 1.1, and 8,192 output tokens per reply;
+- one L4 (`l4x1`).
+
+**Profiles.** [`lfm3-1.7b`](../../agent_distill/profiles/students/lfm3-1.7b.toml) runs thinking on, the template's
+default and the card's choice for agentic use. [`lfm3-1.7b-nothink`](../../agent_distill/profiles/students/lfm3-1.7b-nothink.toml)
+passes `enable_thinking: false`, a mode the card calls inconsistent.
+
+**Data and cost.** Eval datasets:
+- thinking on: [MCP](https://huggingface.co/datasets/nielsr/lfm3-17b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
+  [CLI](https://huggingface.co/datasets/nielsr/lfm3-17b-hf-hub-qa-v2-glm-53-pi-160-eval);
+- thinking off: [MCP](https://huggingface.co/datasets/nielsr/lfm3-17b-nothink-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
+  [CLI](https://huggingface.co/datasets/nielsr/lfm3-17b-nothink-hf-hub-qa-v2-glm-53-pi-160-eval).
+
+The jobs took 2.0 h (MCP think), 1.2 h (MCP nothink), 1.5 h (CLI think) and 0.9 h (CLI nothink), about $4.50 at
+$0.80/h. With the 5-question smoke runs, the total is about $5.50 of GPU.
+
+Numbers use the first record per row, with exact McNemar tests on the paired rows. The Qwen thinking base and recipe (a)
+CLI baselines cover only 150 rows.
+
+| LFM3-1.7B vs. | MCP think: LFM3 / other (only LFM3, only other, p) | CLI think: LFM3 / other (only LFM3, only other, p) |
+|---|---|---|
+| LFM3-1.7B thinking off | **322** / 265 of 377 (91, 34, p = 3.5e-07) | **330** / 296 of 377 (58, 24, p = 0.00022) |
+| Qwen3.5-4B base, thinking off | **322** / 272 of 377 (87, 37, p = 8.3e-06) | **330** / 206 of 377 (142, 18, p = 4.3e-25) |
+| Qwen3.5-4B base, thinking | 322 / 336 of 377 (30, 44, p = 0.13) | 132 / 130 of 150 (17, 15, p = 0.86) |
+| Qwen3.5-4B recipe (a) | 322 / **370** of 377 (4, 52, p = 1.1e-11) | 132 / **145** of 150 (4, 17, p = 0.0072) |
+| Inkling-2-Mini 8k | 322 / **363** of 377 (7, 48, p = 1.3e-08) | 330 / **363** of 377 (10, 43, p = 5.6e-06) |
+| GLM-5.3 teacher | 322 / **363** of 377 (10, 51, p = 9.6e-08) | 330 / **375** of 377 (2, 47, p = 4.4e-12) |
+
+With thinking off, LFM3 scores 265/377 on MCP and 296/377 on the CLI. Against the non-thinking Qwen base that is
+265 vs. 272 on MCP (64, 71, p = 0.61) and 296 vs. 206 on the CLI (130, 40, p = 2.6e-12).
+
+| Template (n) | MCP think | MCP nothink | CLI think | CLI nothink |
+|---|---:|---:|---:|---:|
+| `base_params` (81) | 58 | 69 | 77 | 68 |
+| `paper_title` (69) | 63 | 53 | 68 | 65 |
+| `paper_first_author` (67) | 65 | 58 | 63 | 55 |
+| `params_sum` (52) | 36 | 43 | 48 | 41 |
+| `gguf_count` (37) | 30 | 12 | 18 | 20 |
+| `base_pipeline` (36) | 36 | 11 | 32 | 22 |
+| `safetensors_count` (20) | 20 | 7 | 10 | 11 |
+| `base_license` (15) | 14 | 12 | 14 | 14 |
+
+- **Pass rate, thinking on:** 85.4% on MCP and 87.5% on the CLI. At under half the size, it ties the thinking
+  Qwen3.5-4B base on both tasks (p = 0.13 and 0.86). It is 41 to 48 rows below recipe (a), Inkling and the teacher, so a
+  distillation recipe has room to gain.
+- **Thinking off costs a lot:** −57 rows on MCP and −34 on the CLI. In that mode the model invents tools:
+  - On MCP, 111/377 episodes call a tool that doesn't exist (1.4 per episode), such as `find`, `cat` or
+    `mcp__hf__hub_search`.
+  - On the CLI, 177/377 episodes do (0.68 per episode), mostly calling the skill name `hf-cli` as a tool.
+- **Parsing is clean in both modes:**
+  - No tool call was left unparsed as raw XML in the text.
+  - No answer contains a think tag. With thinking on, every turn carries its reasoning in `reasoning_content`.
+  - The 4 "reasoning leaks" flagged with thinking off are narration in the final answer ("The `find` result lists ...").
+    They are not template output; 2 of them fail.
+  - Pi's "Tool X not found" replies are correct: the unknown tools are the model's own inventions, not a parser drop.
+- **Failures, thinking on:**
+  - MCP: mostly budget. 31 rows hit the 15-call limit, 17 are wrong facts, 3 hit the output limit, 2 are ungrounded
+    and 1 timed out. The misses sit in `base_params` (58/81) and `params_sum` (36/52), where the model pages through
+    file listings instead of reading `safetensors` metadata.
+  - CLI: mostly not reading the skill. The skill is read in only 38/377 episodes (10%; thinking off, 2/377), against
+    77% for Inkling. 29 of the 47 failures are wrong facts in episodes that never read it: the model guesses `hf`
+    syntax (`hf model ...`) and hits 2.2 `hf` errors per episode. `gguf_count` (18/37) and `safetensors_count` (10/20)
+    suffer most, because they need the right `hf` listing commands.
+  - The drifted GGUF row is unscorable on three of the four runs.
+- **Cost per episode, thinking on:**
+  - MCP: 8.0 tool calls (teacher 3.2, recipe (a) 2.2, Inkling 4.7). Wall time is 73 s mean and 61 s median on one L4,
+    with 3,836 output tokens and a median of 133 thinking words per turn.
+  - CLI: 6.1 calls; 41 s mean and 24 s median wall time; 1,910 output tokens; 43 thinking words per turn.
+  - Thinking off makes episodes faster per call but uses more calls: 11.8 on MCP and 8.6 on the CLI.
+
+### Assessment: is LFM3-1.7B a viable student?
+
+**Yes, with thinking on.** Out of the box, the 1.7B model matches the thinking Qwen3.5-4B base on both tasks. It runs
+on a $0.80/h L4 and serves on stock vLLM with stock parsers. No tool call or reasoning-parsing problem showed up in
+1,508 episodes.
+
+Its gap to the teacher (41 to 45 rows) is behavioural, and the teacher traces cover it:
+- On MCP, it uses too many calls: 2.5× the teacher's.
+- On the CLI, it doesn't read the skill and guesses commands.
+
+**Recommended recipe: (a), a thinking student with cross-format SFT.** Don't use the non-thinking Phase 1 recipe. The
+card calls thinking-off inconsistent, and in this eval it is 34 to 57 rows worse and invents tools in 30 to 47% of
+episodes. Recipe (a) supervises the teacher's concise tool calls after an unsupervised empty think block, which targets
+exactly LFM3's two weaknesses: call count and the unread skill. Notes for running it:
+
+- **Think tags:** the pinned chat template renders `<think></think>` on history turns (and `reasoning_content` inside
+  it). It is prefix-stable, and with LFM3's tokenizer `stages/sft.py` already puts the supervised span after the empty
+  think block (checked with `render_trajectory_examples`). The SFT stage needs no LFM3-specific change. A trained
+  student would be served with the `lfm3-1.7b` profile.
+- **Replay pool:** sample it from LFM3-1.7B itself with thinking on (the `replay` stage on the `lfm3-1.7b` profile),
+  not from Qwen. Its thoughts are about twice as long as Qwen's per turn, 133 vs. ~60 words on MCP.
+- **GRPO:** the 31 MCP call-limit failures suggest a later GRPO stage with the same 15-call cap would pay off. Profile
+  and LoRA targets for its conv/attention hybrid layers still need to be checked before training. Nothing was trained
+  here.
+
+```bash
+uv run distill run examples/hf-hub-qa-mcp/run-lfm3.toml --dry-run          # and run-lfm3-nothink.toml
+uv run distill run examples/hf-hub-qa/run-lfm3.toml --dry-run              # and run-lfm3-nothink.toml
+uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task mcp --model lfm3-1.7b   # or lfm3-1.7b-nothink, --task cli
+```
+
 ## CLI vs. MCP comparison
 
 Apples-to-apples comparison on the first **150 test questions** of `nielsr/hf-hub-facts-v2` (GLM-5.3 → Qwen3.5-4B, thinking off, `pi@1.6.0`, shared verifier):
