@@ -31,11 +31,11 @@ serve = { enforce_eager = false }
 [[races]]
 id = "cli"  # also the adapter's served name on the endpoint
 name = "hf CLI + skill"
-run = "../../examples/hf-hub-qa/run-think.toml"
-adapter = "nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160-lora"
-student_label = "Qwen3.5-4B · recipe (a)"
+run = "../../examples/hf-hub-qa/run-think-mixed-grounded.toml"
+adapter = "nielsr/cursor-qwen35-4b-think-cfx-a-mixed-grounded-hf-hub-qa-v2-pi-160-lora"
+student_label = "Qwen3.5-4B · grounded mixed recipe (a)"
 split = "test"
-limit = 150  # the test rows the published 96.7% was measured on ([eval] limit)
+limit = 377  # all test rows (97.1% factual, 70.6% open-ended judged)
 tools_note = "bash + the pinned hf CLI and its hf-cli skill"
 
 [[races]]
