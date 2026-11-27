@@ -1,0 +1,33 @@
+# The 51 open-ended judged questions (`judged.py`) for `run-think-mixed.toml`'s adapter: Recipe (a) + KL replay
+# trained on 600 factoid traces + disjoint open-ended GLM-5.3 traces. Same settings as `run-think-curated-judged.toml`
+# and `run-think-fullcot-judged.toml`, so it pairs question-by-question with Base `think` (31/51), Recipe (a)-600
+# (33/51), Full-CoT (26/51), and GLM-5.3 (41/51).
+#
+#   distill run examples/hf-hub-qa/run-think-mixed-judged.toml --dry-run
+task = "judged.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-judged-glm-53-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+sft = "Qwen/Qwen3.5-4B+nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora"
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 20  # worst case: serve profile timeout on one H200; expected ~$3
