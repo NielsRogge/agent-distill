@@ -89,6 +89,18 @@ def unparsed_turns(record: dict[str, Any]) -> int:
     )
 
 
+UNKNOWN_TOOL = re.compile(r"^Tool \S+ not found")  # Pi's reply to a call of a tool the agent does not have
+
+
+def unknown_tool_calls(record: dict[str, Any]) -> int:
+    """Calls of tools the agent was not given (e.g. a skill's name called as a tool, or an invented MCP tool)."""
+    return sum(
+        bool(UNKNOWN_TOOL.match(str(m.get("content") or "")))
+        for m in record.get("messages") or []
+        if m.get("role") == "tool"
+    )
+
+
 def score(scores: dict[str, Any], key: str, default: float = 1) -> float:
     """A rubric score, with unscored (None) treated as the default."""
     value = scores.get(key)
@@ -157,6 +169,8 @@ def describe(records: dict[str, dict[str, Any]], templates: dict[str, str], task
         "think_tags_in_answer": sum(bool(THINK_TAG.search(str(r.get("answer") or ""))) for r in values),
         "episodes_with_unparsed_tool_calls": sum(unparsed_turns(r) > 0 for r in values),
         "episodes_with_reasoning": sum(sum(w) > 0 for w in words),
+        "unknown_tool_calls_per_episode": round(statistics.mean(unknown_tool_calls(r) for r in values), 2),
+        "episodes_with_unknown_tool_calls": sum(unknown_tool_calls(r) > 0 for r in values),
     }
     if task == "cli":
         report["read_skill"] = sum(score(r.get("scores") or {}, "read_skill", 0) >= 1 for r in values)
