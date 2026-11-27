@@ -77,6 +77,30 @@ What this suggests:
 
 Spend: about $22.6 of GPU (SFT $12.2, eval of 377 rows $7.9, judged eval $2.4) and under $1 of judge. No new teacher traces. Adapter: [`…-cfx-a-curated-…-lora`](https://huggingface.co/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-lora). Evaluations: [`…-cfx-a-curated-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-v2-glm-53-pi-160-eval) and [`…-cfx-a-curated-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-curated-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
+### Mixed factual + open-ended SFT (`run-think-mixed.toml`)
+
+Factoid-only SFT (whether 600 traces, 1,025 curated traces, or full-CoT) leaves open-ended judged performance at 26–33/51 (51.0–64.7%). To test whether open-ended training traces lift `judged.py` without hurting `hf-hub-facts-v2`, we built 240 open-ended training questions (`open_ended_questions.py`, published at `nielsr/hf-hub-questions-train`, strictly disjoint from both `nielsr/hf-hub-questions` and `nielsr/hf-hub-facts-v2` test/validation entities), collected accepted GLM-5.3 traces with `open_ended.py` (**238/240 = 99.2%** accepted across 267 episodes, $14.19 teacher spend), and trained `qwen3.5-4b-think` (recipe (a) + KL replay, 8 passes, 378 updates, held-out drift `3.18e-3` nats/token) on the mixed pool filtered to `<= 12` tool calls: **802 traces** (597 factoid + 205 open-ended, 74.4% / 25.6%).
+
+| Model | Traces | `test[:150]` | Full `test` (377) | `fact_correct` (377) | Tool calls / ep | `hf` errors / ep | Hit call limit | Judged (51) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Recipe (a) (`run-think.toml`) | 600 fact | 145/150 (96.7%) | not run | | 4.45 ¹ | 0.23 ¹ | 0 ¹ | 33/51 (64.7%) |
+| Recipe (a), curated (`run-think-curated.toml`) | 1,025 fact | 144/150 (96.0%) | 364/377 (96.6%) | 371 | 4.69 | 0.19 | 3 | 26/51 (51.0%) |
+| **Recipe (a), mixed (`run-think-mixed.toml`)** | **597 fact + 205 open** | **145/150 (96.7%)** | **365/377 (96.8%)** | **370** | **4.64** | **0.34** | **4** | **29/51 (56.9%)** |
+| Full-CoT SFT (`run-think-fullcot.toml`) | 1,025 fact | 148/150 (98.7%) | 369/377 (97.9%) | 373 | 4.29 | 0.06 | 2 | 26/51 (51.0%) |
+| GLM-5.3 (teacher) | | 148/150 (98.7%) | 375/377 (99.5%) | | 4.27 | 0.10 | 0 | 41/51 (80.4%) ² |
+
+¹ On `test[:150]`. ² The pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`).
+
+Paired comparisons, exact two-sided McNemar (mixed only / other only):
+
+- **Factual `test[:150]` vs recipe (a)-600:** 4 / 4, `p = 1.0`. Adding 25.6% open-ended traces preserved factual accuracy completely (and reached the highest full-`test` score among recipe (a) runs at **365/377 = 96.8%**, vs curated 11 / 10 `p = 1.0` and full-CoT 5 / 9 `p = 0.42`; its 12 failures are 5 grounding misses on correct facts, 3 wrong facts, and 4 call-limit hits).
+- **Judged (51):** 29/51 (56.9%) — vs recipe (a)-600: 5 / 9 (`p = 0.42`); vs curated: 11 / 8 (`p = 0.65`); vs full-CoT: 12 / 9 (`p = 0.66`); vs teacher: 4 / 16 (`p = 0.012`).
+- **What mixed SFT improved vs. why judged still plateaus around ~57–65%:**
+  - **CLI retrieval and efficiency improved cleanly:** on `judged.py`, live `reference` recall reached **18/18 (100.0%)** (vs 16/18 on recipe (a)-600), `read_skill` reached **51/51 (100%)**, median tool calls dropped from **8 → 6** (closest of any student to GLM-5.3's 5), and 20-call limit hits fell from 9 (recipe (a)-600) and 11 (full-CoT) to **6**.
+  - **The remaining bottleneck is 4B parametric confabulation from teacher style mimicry:** GLM-5.3's open-ended traces enrich tool listings with encyclopedic descriptions drawn from frontier world knowledge (e.g., token counts, lab affiliations, architecture blurbs) without reading every model card. Distilled on those traces, the 4B student faithfully imitates the rich table/summary format (`relevance` 0.78–1.0, `clarity` 0.78–1.0) but fills in unverified details from shaky 4B memory, tanking the judge's `correctness` score. Of its 22 judged failures: **12** missed `answer_quality` specifically on `correctness` (0.11–0.56) despite high relevance/clarity, **4** passed both the quality bar (`≥ 7/10`) and live `reference` (`1.0`) but failed only the strict `grounded == 1.0` gate by 1–2 extra IDs (`grounded = 0.75–0.97`), and **6** hit the 20-call limit. Breaking this ceiling on a 4B student likely requires on-policy GRPO directly on `open_ended.py` (penalizing confabulation and limit hits) or rewriting teacher open-ended answers to contain only facts present in tool outputs.
+
+Spend: $14.19 teacher traces + ~$2 judge + ~$20 GPU (SFT ~$10.5, 377-row eval ~$7.2, judged eval ~$2.2). Datasets: [`nielsr/hf-hub-questions-train`](https://huggingface.co/datasets/nielsr/hf-hub-questions-train), [`…-open-ended-…-traces`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces). Adapter: [`…-cfx-a-mixed-…-lora`](https://huggingface.co/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora). Evaluations: [`…-cfx-a-mixed-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-eval) and [`…-cfx-a-mixed-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+
 ### Non-thinking SFT → GRPO on full `test` (`run-grpo.toml`)
 
 Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactly `bash` and `read`). A difficulty probe then ran the SFT model 4 times on 700 sampled train rows, and GRPO trained from the SFT merge on the 157 rows it solved on 1–3 of the 4 attempts. That is 78 steps, about 38 minutes on 2× H200. The evaluation covers all 377 `test` rows, first record per row, with the MCP twin's numbers in brackets (its teacher counted on first records as well):
@@ -123,6 +147,7 @@ Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactl
 | Kimi-K3.1-Pro (teacher pilot) | 49/51 (96.1%) | 10 | $12.31 |
 | GLM-5.3 (teacher pilot) | 43/51 (84.3%) | 5 | $2.72 |
 | Recipe (a) (`run-think.toml` adapter, same settings) | 33/51 (64.7%) | 8 | ~$3 GPU + <$1 judge |
+| Recipe (a), mixed (`run-think-mixed-judged.toml`) | 29/51 (56.9%) | 6 | ~$2.2 GPU + <$1 judge |
 | Full-CoT SFT (`run-think-fullcot-judged.toml`) | 26/51 (51.0%) | 8 | <$1 judge |
 
 The teacher pilot's published records (`nielsr/hf-hub-qa-pilot-glm-53-pi-160-eval`, one record per question) score 41/51, not the 43/51 reported for the pilot; paired against them, recipe (a) is 4 ahead / 12 behind (`p = 0.08`). Recipe (a) hit the 20-call limit 9 times, full-CoT 11 times. Evaluation: [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
@@ -145,6 +170,12 @@ uv run distill run examples/hf-hub-qa/run-think-fullcot.toml --dry-run
 # Data-vs-recipe ablation: recipe (a) on the same 1,025 curated traces, then its judged evaluation
 uv run distill run examples/hf-hub-qa/run-think-curated.toml --dry-run
 uv run distill run examples/hf-hub-qa/run-think-curated-judged.toml --dry-run
+
+# Mixed factual + open-ended SFT: disjoint open-ended traces, mixed recipe (a) SFT + 377-row eval, and judged eval
+uv run --extra hub python examples/hf-hub-qa/open_ended_questions.py --check
+uv run distill run examples/hf-hub-qa/run-think-open-ended-traces.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-think-mixed.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-think-mixed-judged.toml --dry-run
 
 # Secondary judged evaluation (teacher pilot / student eval)
 uv run distill run examples/hf-hub-qa/run-judged-pilot.toml --dry-run
