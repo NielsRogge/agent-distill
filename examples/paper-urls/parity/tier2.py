@@ -4,7 +4,8 @@ Reads the evaluation summaries agent-distill published (`summaries/<label>/<spli
 (fraction of verified URL fields correct), exact match, completeness and tool calls per label, next to the
 url-extraction reference. Tier 2 passes when field accuracy is within +-5 points (DESIGN.md §9).
 
-    uv run python examples/paper-urls/parity/tier2.py --repo nielsr/qwen35-9b-paper-urls-parity-opencode-124-eval
+    uv run python examples/paper-urls/parity/tier2.py \\
+        --repo agent-distillation-hf/qwen35-9b-paper-urls-parity-opencode-124-eval
 """
 
 from __future__ import annotations

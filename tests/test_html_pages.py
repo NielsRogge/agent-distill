@@ -282,6 +282,6 @@ def test_model_jobs_join_the_collection_at_once():
     from agent_distill.config import load_run
 
     run = pipeline.make_run(load_run(Path("examples/html-pages/run.toml"), {}))
-    collection = "--collection nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+    collection = "--collection agent-distillation-hf/html-pages-qwen35-6b0a9ecdd7662dde54c152f8"
     for job in [*pipeline.sft_jobs(run, "R"), *pipeline.merge_jobs(run, "R"), *pipeline.grpo_jobs(run, "R")]:
         assert collection in job.command and "--collection-note" in job.command

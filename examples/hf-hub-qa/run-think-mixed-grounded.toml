@@ -12,18 +12,18 @@ name = "cursor-qwen35-4b-think-cfx-a-mixed-grounded-hf-hub-qa-v2-pi-160"
 stages = ["sft", "eval"]
 
 [repos]
-traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's 600 accepted factoid traces
-replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
+traces = "agent-distillation-hf/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's 600 accepted factoid traces
+replay = "agent-distillation-hf/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"  # pragma: allowlist secret
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"
 raw_logs = false
 
 [sft]
 args = [
-  "--traces-repo", "nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-grounded-glm-53-pi-160-traces",
+  "--traces-repo", "agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-open-ended-grounded-glm-53-pi-160-traces",
   "--max-tool-calls", "12",
 ]
 timeout = "210m"

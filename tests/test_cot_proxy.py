@@ -269,18 +269,18 @@ def test_parsed_reasoning_is_not_a_leak():
 
 def test_pipeline_builds_annotate_replay_and_recipe_sft_jobs():
     run = pipeline.make_run(load_run(SMOKE, {"sft.replay": True, "sft.summaries": True, "student": "qwen3.5-4b-think",
-                                              "repos": {"replay": "nielsr/qwen35-4b-replay"},
+                                              "repos": {"replay": "org/qwen35-4b-replay"},
                                               "sft.args": ["--think-target", "empty"]}))  # fmt: skip
     (job,) = pipeline.sft_jobs(run, "R")
     args = shlex.split(next(line for line in job.command.splitlines() if "agent_distill.stages.sft" in line))
-    assert args[args.index("--replay-repo") + 1] == "nielsr/qwen35-4b-replay"
+    assert args[args.index("--replay-repo") + 1] == "org/qwen35-4b-replay"
     assert args[args.index("--summaries-repo") + 1].endswith("-smoke-summaries")
     assert args.index("--summaries-repo") < args.index("--think-target")  # the run's own args come last
     (ann,) = pipeline.annotate_jobs(run, "R")
     assert "agent_distill.stages.annotate" in ann.command and "Qwen/Qwen3-4B-Instruct-2507" in ann.command
     assert "vllm==0.33.0" in ann.command and ann.flavor == "h200"
     (rep,) = pipeline.replay_jobs(run, "R")
-    assert "--output-repo nielsr/qwen35-4b-replay" in rep.command and "--size 1000 --heldout 100" in rep.command
+    assert "--output-repo org/qwen35-4b-replay" in rep.command and "--size 1000 --heldout 100" in rep.command
     assert "--student qwen3.5-4b-think" in rep.command
     for built in (job, ann, rep):
         assert "HF_TOKEN" not in built.command
@@ -424,10 +424,10 @@ def test_the_thinking_student_trains_with_the_cross_format_recipe_by_default():
     assert (args.think_target, args.strip_visible_text, args.epochs, args.learning_rate, args.lora_rank) == (
         "empty", True, 8.0, 3e-5, 16)  # fmt: skip
     run = pipeline.make_run(load_run(SMOKE, {"student": "qwen3.5-4b-think",
-                                              "repos": {"replay": "nielsr/qwen35-4b-replay"}}))  # fmt: skip
+                                              "repos": {"replay": "org/qwen35-4b-replay"}}))  # fmt: skip
     assert pipeline.sft_replay(run)
     command = sft_job_args(run)
-    assert command[command.index("--replay-repo") + 1] == "nielsr/qwen35-4b-replay"
+    assert command[command.index("--replay-repo") + 1] == "org/qwen35-4b-replay"
 
 
 def test_a_run_can_opt_out_of_the_recipe():

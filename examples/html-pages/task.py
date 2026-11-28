@@ -35,7 +35,9 @@ def setup(row: dict[str, Any], workspace: Path) -> None:
 
 task = Task(
     name="html-pages",
-    dataset=DatasetSpec(repo="nielsr/html-concepts", splits={"train": "train", "eval": ["test", "validation"]}),
+    dataset=DatasetSpec(
+        repo="agent-distillation-hf/html-concepts", splits={"train": "train", "eval": ["test", "validation"]}
+    ),
     system_prompt=HERE / "system_prompt.txt",
     prompt=user_prompt,
     answer=FileAnswer("index.html"),

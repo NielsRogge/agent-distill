@@ -1,4 +1,4 @@
-"""Judged open-ended evaluation for the MCP twin (`nielsr/hf-hub-questions`, 51 seed questions).
+"""Judged open-ended evaluation for the MCP twin (`agent-distillation-hf/hf-hub-questions`, 51 seed questions).
 
 Uses the exact same anonymous 3-tool HF MCP setup as `examples/hf-hub-qa-mcp/task.py` (`hub_repo_search`,
 `hub_repo_details`, `hf_fs`; no shell or CLI access) and scores with `judged_rubrics.py` (parity with CLI `judged.py`).
@@ -13,7 +13,7 @@ from .task import HERE, HF_MCP, user_prompt
 
 task = Task(
     name="hf-hub-qa-mcp-judged",
-    dataset=DatasetSpec(repo="nielsr/hf-hub-questions", splits={"train": "seed", "eval": ["seed"]}),
+    dataset=DatasetSpec(repo="agent-distillation-hf/hf-hub-questions", splits={"train": "seed", "eval": ["seed"]}),
     system_prompt=HERE / "system_prompt.txt",
     prompt=user_prompt,
     answer=TextAnswer(),

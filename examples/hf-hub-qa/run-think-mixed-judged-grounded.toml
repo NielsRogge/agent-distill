@@ -1,5 +1,5 @@
 # Follow-up 1: prompt-level grounding ablation on the existing mixed Recipe (a) adapter
-# (`nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora`).
+# (`agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora`).
 # Identical to `run-think-mixed-judged.toml` except `task = "judged_grounded.py"` (`system_prompt_grounded.txt`).
 #
 #   distill run examples/hf-hub-qa/run-think-mixed-judged-grounded.toml --dry-run
@@ -11,9 +11,9 @@ name = "cursor-qwen35-4b-think-cfx-a-mixed-grounded-prompt-judged-pi-160"
 stages = ["eval"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"  # pragma: allowlist secret
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"
 raw_logs = false
 
 [eval]
@@ -24,7 +24,7 @@ timeout = 600
 max_tool_calls = 20
 
 [eval.models]
-sft = "Qwen/Qwen3.5-4B+nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora"
+sft = "Qwen/Qwen3.5-4B+agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora"
 
 [budget]
 traces_usd = 0

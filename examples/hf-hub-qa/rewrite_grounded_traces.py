@@ -8,9 +8,9 @@ with `open_ended.py`'s rubrics (`judged_rubrics.py` + `gemini-4-hydrogen`), and 
 
 Usage:
     env -u UV_PRERELEASE uv run --extra hub python examples/hf-hub-qa/rewrite_grounded_traces.py \\
-        --source-repo nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces \\
-        --output-repo nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-grounded-glm-53-pi-160-traces \\
-        --bill-to <org> --collection nielsr/agent-distillation-6b0445568a39b1d979c52e31
+        --source-repo agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces \\
+        --output-repo agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-open-ended-grounded-glm-53-pi-160-traces \\
+        --bill-to <org> --collection agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08
 """
 
 from __future__ import annotations
@@ -150,7 +150,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--source-repo", required=True)
     parser.add_argument("--output-repo", required=True)
-    parser.add_argument("--questions-repo", default="nielsr/hf-hub-questions-train")
+    parser.add_argument("--questions-repo", default="agent-distillation-hf/hf-hub-questions-train")
     parser.add_argument("--model", default="zai-org/GLM-5.3")
     parser.add_argument("--bill-to", default="huggingface")  # pragma: allowlist secret
     parser.add_argument("--collection", default="")

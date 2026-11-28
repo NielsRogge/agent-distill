@@ -1,4 +1,4 @@
-# Follow-up 3: on-policy GRPO directly on `open_ended.py` (`nielsr/hf-hub-questions-train`, 240 disjoint open-ended
+# Follow-up 3: on-policy GRPO directly on `open_ended.py` (`agent-distillation-hf/hf-hub-questions-train`, 240 disjoint open-ended
 # questions) starting from the mixed Recipe (a) SFT checkpoint (`run-think-mixed.toml`), scored live by
 # `judged_rubrics.py` (`grounded`, `reference`, `gemini-4-hydrogen` quality judge).
 #
@@ -11,13 +11,13 @@ name = "cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-pi-160"
 stages = ["merge", "probe", "grpo", "grpo-merge"]
 
 [repos]
-traces = "nielsr/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces"
-lora = "nielsr/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora"
+traces = "agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces"
+lora = "agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora"
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"  # pragma: allowlist secret
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"
 raw_logs = false
 
 [probe]

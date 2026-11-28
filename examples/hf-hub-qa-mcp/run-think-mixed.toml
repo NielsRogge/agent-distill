@@ -11,18 +11,18 @@ name = "cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-mcp-v2-pi-160"
 stages = ["sft", "eval"]
 
 [repos]
-traces = "nielsr/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-traces"  # 599 MCP factoid traces
-replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"
+traces = "agent-distillation-hf/qwen35-4b-hf-hub-qa-mcp-v2-glm-53-pi-160-traces"  # 599 MCP factoid traces
+replay = "agent-distillation-hf/qwen35-4b-think-replay-openr1-oasst"
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"  # pragma: allowlist secret
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"
 raw_logs = false
 
 [sft]
 args = [
-  "--traces-repo", "nielsr/cursor-qwen35-4b-think-hf-hub-qa-mcp-open-ended-glm-53-pi-160-traces",
+  "--traces-repo", "agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-mcp-open-ended-glm-53-pi-160-traces",
   "--max-tool-calls", "12",
 ]
 timeout = "210m"

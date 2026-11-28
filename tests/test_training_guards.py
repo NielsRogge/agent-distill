@@ -175,7 +175,7 @@ def test_smoke_evaluates_its_own_models_under_its_own_name(monkeypatch):
         "sft": f"Qwen/Qwen3.5-9B+{run.repo('lora')}",
         "grpo": f"{run.repo('sft-merged')}+{run.repo('grpo-lora')}",
     }
-    assert all(repo.startswith("nielsr/qwen35-9b-paper-urls-parity-opencode-124-smoke-") for repo, *_ in
+    assert all(repo.startswith("agent-distillation-hf/qwen35-9b-paper-urls-parity-opencode-124-smoke-") for repo, *_ in
                pipeline.artifacts(run))  # fmt: skip
     assert pipeline.smoke_name(load_run(SMOKE_TOML)) == load_run(SMOKE_TOML).name  # already a smoke name
 

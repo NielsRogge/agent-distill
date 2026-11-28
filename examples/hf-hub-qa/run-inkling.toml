@@ -15,10 +15,10 @@ stages = ["eval"]
 profiles = ["../inkling-2-mini"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
-raw_logs = false  # nielsr's private storage is full: raw harness logs stay in the jobs
+collection = "agent-distillation-hf/hub-qa-inkling-2-mini-6b0a9ec95a43b05307ad5884"  # Hub QA · Inkling-2-Mini (family)
+raw_logs = false  # raw harness logs stay in the jobs (set while nielsr's private storage was full)
 
 [eval]
 splits = ["test"]

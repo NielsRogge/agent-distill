@@ -1,4 +1,4 @@
-# Follow-up 3 factual eval: evaluates the open-ended GRPO checkpoint on all 377 test rows of `nielsr/hf-hub-facts-v2`
+# Follow-up 3 factual eval: evaluates the open-ended GRPO checkpoint on all 377 test rows of `agent-distillation-hf/hf-hub-facts-v2`
 # to verify whether on-policy open-ended GRPO preserves factual accuracy.
 #
 #   distill run examples/hf-hub-qa/run-think-mixed-grpo-eval-facts.toml --dry-run
@@ -10,9 +10,9 @@ name = "cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-facts-pi-160"
 stages = ["eval"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"  # pragma: allowlist secret
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"
 raw_logs = false
 
 [eval]
@@ -23,7 +23,7 @@ timeout = 300
 max_tool_calls = 15
 
 [eval.models]
-grpo = "nielsr/cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-pi-160-grpo-merged"
+grpo = "agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-pi-160-grpo-merged"
 
 [budget]
 traces_usd = 0

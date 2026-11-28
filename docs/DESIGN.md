@@ -96,9 +96,9 @@ judge = "gemini-4-hydrogen"        # only when the task has judge rubrics
 stages = ["traces", "sft", "merge", "probe", "grpo", "eval", "publish"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"            # X-HF-Bill-To for Inference Providers, --namespace for Jobs
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
 
 [budget]                           # see §8
 traces_usd = 150
@@ -487,7 +487,7 @@ previous turn's reasoning).
 With `student = "qwen3.5-4b-think"` a run gets recipe (a): the profile's `[sft]` passes `--think-target empty
 --strip-visible-text` and sets `replay = true` (the paper's hyperparameters are then the defaults). Replay needs a
 pool: list the `replay` stage, or point `[repos] replay` to a shared one (for Qwen3.5-4B,
-`nielsr/qwen35-4b-think-replay-openr1-oasst`). CoT-proxies are added with the `annotate` stage and `[sft] summaries =
+`agent-distillation-hf/qwen35-4b-think-replay-openr1-oasst`). CoT-proxies are added with the `annotate` stage and `[sft] summaries =
 true`. A run opts out with `[sft] replay = false` and `args = ["--think-target", "native", "--no-strip-visible-text"]`.
 
 **Code staging.** Before jobs are launched:
@@ -508,7 +508,7 @@ instead.
 
 - `[hub]` holds `namespace`, `bill_to` and an optional `collection` (the examples use the agent-distillation collection). Every repo the tool creates is added to
   the collection with a note naming its role (teacher traces, SFT adapter, GRPO adapter, evaluation, …).
-  Nothing is hardcoded to `nielsr` or `huggingface`; the examples set those values.
+  Nothing is hardcoded to `agent-distillation-hf`, `nielsr` or `huggingface`; the examples set those values.
 - **Visibility:**
   - Models are public.
   - Datasets are created private and made public only by `publish`, after a credential scan of every text
@@ -596,7 +596,7 @@ typography experiments and product pages. Output is visual, but **training is te
 - **Evaluation concepts.** Held-out concepts form validation and test.
 - **Headline evaluation: the "100 HTML files" protocol.** One run produces 100 files under the original
   rules, published as a gallery that sits next to the Fable 5.2 and Opus 5.5 galleries.
-- **Storage.** A private dataset `nielsr/html-concepts`, made public after review.
+- **Storage.** A private dataset `agent-distillation-hf/html-concepts`, made public after review.
 
 ### Episode
 

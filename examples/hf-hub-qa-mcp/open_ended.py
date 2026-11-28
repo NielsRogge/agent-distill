@@ -1,4 +1,4 @@
-"""Open-ended training task for the MCP twin (240 disjoint questions in `nielsr/hf-hub-questions-train`).
+"""Open-ended training task for the MCP twin (240 disjoint questions in `agent-distillation-hf/hf-hub-questions-train`).
 
 Uses the exact same anonymous 3-tool HF MCP setup as `examples/hf-hub-qa-mcp/task.py` and `judged_rubrics.py`,
 so accepted MCP open-ended traces mix directly with the 599 MCP factoid traces in SFT.
@@ -13,7 +13,7 @@ from .task import HERE, HF_MCP, user_prompt
 
 task = Task(
     name="hf-hub-qa-mcp-open-ended",
-    dataset=DatasetSpec(repo="nielsr/hf-hub-questions-train", splits={"train": "train", "eval": []}),
+    dataset=DatasetSpec(repo="agent-distillation-hf/hf-hub-questions-train", splits={"train": "train", "eval": []}),
     system_prompt=HERE / "system_prompt.txt",
     prompt=user_prompt,
     answer=TextAnswer(),

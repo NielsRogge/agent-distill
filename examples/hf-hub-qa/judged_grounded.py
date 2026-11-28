@@ -1,8 +1,8 @@
 """Follow-up 1 ablation: `judged.py` with an explicit strict-grounding instruction (`system_prompt_grounded.txt`).
 
-Everything else (dataset `nielsr/hf-hub-questions`, tools, `hf-cli` skill, pinned `hf` CLI 2.4.0, limits, and
-`judged_rubrics.py`) is identical to `judged.py` so this isolates how many 4B confabulation/grounding failures are
-fixable purely at inference time vs. baked into SFT weights.
+Everything else (dataset `agent-distillation-hf/hf-hub-questions`, tools, `hf-cli` skill, pinned `hf` CLI 2.4.0,
+limits, and `judged_rubrics.py`) is identical to `judged.py` so this isolates how many 4B confabulation/grounding
+failures are fixable purely at inference time vs. baked into SFT weights.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ _GROUNDED_PROMPT = _BASE_PROMPT.replace(
 
 task = Task(
     name="hf-hub-qa-judged-grounded",
-    dataset=DatasetSpec(repo="nielsr/hf-hub-questions", splits={"train": "seed", "eval": ["seed"]}),
+    dataset=DatasetSpec(repo="agent-distillation-hf/hf-hub-questions", splits={"train": "seed", "eval": ["seed"]}),
     system_prompt=_GROUNDED_PROMPT,
     prompt=user_prompt,
     answer=TextAnswer(),

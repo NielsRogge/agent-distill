@@ -22,7 +22,7 @@ from typing import Any
 
 from agent_distill.records import mcnemar_exact
 
-NS = "nielsr"
+NS = "agent-distillation-hf"
 # Base models evaluated out of the box (eval-only runs: examples/hf-hub-qa*/run-inkling*.toml, run-lfm3*.toml).
 MODELS = {
     name: {task: (f"{run}-{'hf-hub-qa-mcp' if task == 'mcp' else 'hf-hub-qa'}-v2-glm-53-pi-160-eval",
