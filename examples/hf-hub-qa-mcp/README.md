@@ -251,6 +251,125 @@ uv run distill run examples/hf-hub-qa/run-lfm3.toml --dry-run              # and
 uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task mcp --model lfm3-1.7b   # or lfm3-1.7b-nothink, --task cli
 ```
 
+### LFM3-1.7B recipe (a)
+
+`run-lfm3-think.toml`, here and in [`hf-hub-qa`](../hf-hub-qa/run-lfm3-think.toml), trains LFM3-1.7B with recipe (a)
+on the same accepted GLM-5.3 traces as the Qwen3.5-4B recipe-(a) runs: 599 MCP and 600 CLI, read only, with no new
+teacher calls. Each run then evaluates the adapter on all 377 test questions with the base runs' settings.
+
+**Recipe.** The [`lfm3-1.7b`](../../agent_distill/profiles/students/lfm3-1.7b.toml) profile's `[sft]` uses:
+- an empty, unsupervised `<think></think>` before every target;
+- the teacher's prose stripped around tool calls;
+- KL replay;
+- 8 passes at lr 3e-5;
+- LoRA r16, with no dropout.
+
+**LoRA targets.** The adapter covers every linear layer of the hybrid:
+- attention q/k/v/o;
+- the short-convolution blocks' `in_proj` and `out_proj`;
+- the SwiGLU `w1`/`w2`/`w3`.
+
+It leaves out the depthwise conv kernels and the 16-output attention gate. Trainable parameters: 16.1M, 0.92% of the
+model.
+
+**Training stack.** SFT runs on one L4 with transformers 5.23.0, the first release with LFM3. Each update took about
+85–96 s, for 282/283 updates (6.3 h MCP, 6.9 h CLI).
+
+**Pinned revision.** The profile pins the checkpoint's `revision`. SFT, the replay pool and evaluation serving of the
+base all load that commit.
+
+**Serving.** vLLM 0.34 serves the adapter on the pinned base (`Lfm3ForCausalLM` implements `SupportsLoRA`), so there is
+no merge stage.
+
+**Replay pool.** The pool comes from LFM3-1.7B itself, thinking on, on the same OpenR1-Math/OpenAssistant prompt mix as
+the Qwen pool: 1,000 samples plus 100 held out, 3.08M tokens, 607 of 1,100 finished within 4,096 tokens. It is
+published as [agent-distillation-hf/lfm3-17b-replay-openr1-oasst](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-replay-openr1-oasst).
+
+**Held-out drift** (KL(p_init ‖ p_θ) on the 100 held-out replay samples), in nats/token:
+
+| Task | LFM3-1.7B | Qwen3.5-4B recipe (a) |
+|---|---:|---:|
+| MCP | 1.9e-3 | 1.6e-3 |
+| CLI | 2.3e-3 | 2.1e-3 |
+
+**Parity before training.** [`tests/test_lfm3.py`](../../tests/test_lfm3.py) renders the published base-LFM3 episodes
+through the SFT path, with SFT's tool list and LFM3's tokenizer and template. The checks:
+- On all 3,727 comparable turns, the rendering reproduces exactly the prompt token count vLLM reported.
+- Tool calls render as the Qwen3-Coder XML that the `qwen3_coder` parser reads back into the same calls.
+- The supervised span starts right after `<think></think>`.
+
+**MCP server version.** The HF MCP server moved to 0.5.1 during these runs. The base LFM3 and Inkling runs had seen
+0.5.0, and the Qwen runs 0.4.39. The tool list the model sees did not change: only one error code was added to
+`hf_fs`'s `outputSchema`. However, 0.5.1 rejects numbers inside `hf_fs`'s `args` array.
+
+So the MCP run evaluates the base again on 0.5.1, next to the adapter (`[eval] allow_mcp_drift`; records keep both tool
+digests and the live server version). The base moved from 322 to 318 (30 vs. 34 discordant rows, p = 0.71). Trained
+vs. base on 0.5.1 is the primary MCP comparison; comparisons with older runs are on other server versions.
+
+Eval datasets: [MCP](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-mcp-v2-glm-53-pi-160-eval)
+(`episodes/sft` and the 0.5.1 base in `episodes/base`) and
+[CLI](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-v2-glm-53-pi-160-eval). Adapters:
+[MCP](https://huggingface.co/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-mcp-v2-glm-53-pi-160-lora) and
+[CLI](https://huggingface.co/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-v2-glm-53-pi-160-lora).
+
+Numbers use the first record per row, with exact McNemar tests. The Qwen thinking base and recipe (a) CLI baselines
+cover 150 rows.
+
+| LFM3-1.7B recipe (a) vs. | MCP: LFM3 (a) / other (only (a), only other, p) | CLI: LFM3 (a) / other (only (a), only other, p) |
+|---|---|---|
+| LFM3-1.7B base, thinking (MCP on 0.5.1) | **356** / 318 of 377 (51, 13, p = 1.9e-06) | **366** / 330 of 377 (43, 7, p = 2.1e-07) |
+| Qwen3.5-4B base, thinking | **356** / 336 of 377 (36, 16, p = 0.0078) | **142** / 130 of 150 (18, 6, p = 0.023) |
+| Qwen3.5-4B recipe (a) | 356 / **370** of 377 (3, 17, p = 0.0026) | 142 / 145 of 150 (3, 6, p = 0.51) |
+| Inkling-2-Mini 8k | 356 / 363 of 377 (11, 18, p = 0.26) | 366 / 363 of 377 (11, 8, p = 0.65) |
+| GLM-5.3 teacher | 356 / 363 of 377 (12, 19, p = 0.28) | 366 / **375** of 377 (2, 11, p = 0.022) |
+
+| Template (n) | MCP base (0.5.1) | MCP (a) | CLI base | CLI (a) |
+|---|---:|---:|---:|---:|
+| `base_params` (81) | 57 | 79 | 77 | 81 |
+| `paper_title` (69) | 67 | 68 | 68 | 69 |
+| `paper_first_author` (67) | 61 | 64 | 63 | 64 |
+| `params_sum` (52) | 38 | 49 | 48 | 50 |
+| `gguf_count` (37) | 26 | 28 | 18 | 36 |
+| `base_pipeline` (36) | 36 | 35 | 32 | 32 |
+| `safetensors_count` (20) | 20 | 19 | 10 | 20 |
+| `base_license` (15) | 13 | 14 | 14 | 14 |
+
+- **Pass rate:** 94.4% on MCP (+38 rows over the base) and 97.1% on the CLI (+36). The 1.7B student is level with
+  Inkling-2-Mini and with the teacher on MCP. It sits level with Qwen recipe (a) on the CLI, but 14 rows below it on
+  MCP. On the CLI it is 9 rows below the teacher.
+- **It fixes the two weaknesses the base run found:**
+  - **Call count:** MCP drops from 7.9 to 2.65 tool calls per episode, close to the teacher's 3.2. Call-limit failures
+    go from 29 to 0. Median wall time falls from 64 s to 14 s.
+  - **The skill:** the CLI agent now reads it in 299/377 episodes (79%, from 10%, against 77% for Inkling). `hf`
+    errors fall from 2.19 to 0.38 per episode. `gguf_count` rises from 18 to 36/37 and `safetensors_count` from 10 to
+    20/20.
+  - **Invented tools:** calls to tools that don't exist fall to zero on both tasks, from 32 MCP and 43 CLI episodes.
+- **Remaining failures:**
+  - MCP: 18 wrong facts, 2 ungrounded and the drifted GGUF row. The wrong facts are mostly the parameter templates
+    (`base_params` 79/81, `params_sum` 49/52) and `gguf_count` (28/37).
+  - CLI: 8 wrong facts (3 with the skill unread), 1 ungrounded, 1 call limit and the drifted row.
+- **Parsing:** clean on both tasks. No unparsed tool calls, no think tags or reasoning leaks in answers. Every turn
+  reasons, with a median of 58 (MCP) and 55 (CLI) words per turn, down from 133 and 43.
+- **Cost:** SFT about $5.05 (MCP) and $5.52 (CLI) on one L4; each eval about $0.60. The whole recipe-(a) study cost
+  $17.69 of GPU:
+  - replay pool, smoke runs, the 0.5.1 base rerun, two SFTs and three adapter evals;
+  - both judged evals (in [`hf-hub-qa`](../hf-hub-qa/README.md)).
+
+  Judge spend stayed under the $5 per-job cap.
+
+**Open-ended questions.** The factual gains do not carry over to the 51 open-ended judged questions; see the
+[`hf-hub-qa` README](../hf-hub-qa/README.md). Base LFM3 scores 20/51 there, already below the thinking Qwen base's 31
+(p = 0.043), even though the two models tie on the factual CLI questions. After recipe (a) it falls to 12/51 (3 vs. 11
+discordant rows, p = 0.057). LFM3's 85–88% factual score overstates its general Hub ability, and the factoid traces
+narrow it further.
+
+```bash
+uv run distill run examples/hf-hub-qa-mcp/run-lfm3-think.toml --stages replay   # once: the shared LFM3 replay pool
+uv run distill run examples/hf-hub-qa-mcp/run-lfm3-think.toml --dry-run         # and ../hf-hub-qa/run-lfm3-think.toml
+uv run --with transformers==5.23.0 --with jinja2 pytest tests/test_lfm3.py      # parity with Pi + vLLM (needs the Hub)
+uv run --extra hub python examples/hf-hub-qa-mcp/analyze_inkling.py --task mcp --model lfm3-1.7b-recipe-a   # --task cli
+```
+
 ## CLI vs. MCP comparison
 
 Apples-to-apples comparison on the first **150 test questions** of `agent-distillation-hf/hf-hub-facts-v2` (GLM-5.3 → Qwen3.5-4B, thinking off, `pi@1.6.0`, shared verifier):

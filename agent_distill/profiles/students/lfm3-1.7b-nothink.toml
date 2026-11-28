@@ -6,6 +6,7 @@
 # penalty 1.1, 8,192 output tokens, one L4.
 name = "lfm3-1.7b-nothink"
 model = "LiquidAI/LFM3-1.7B"
+revision = "1da06bec6a819da10b54c67e5c90972b46d81871"  # reviewed remote code; every stage loads this commit
 
 [serve]
 vllm_version = "0.34.0"
@@ -16,4 +17,4 @@ tool_call_parser = "qwen3_coder"
 enforce_eager = false
 max_output_tokens = 8192
 generation_config = { temperature = 0.1, top_k = 50, repetition_penalty = 1.1 }
-vllm_extra_args = "--trust-remote-code --revision 1da06bec6a819da10b54c67e5c90972b46d81871 --default-chat-template-kwargs '{\"enable_thinking\": false}'"
+vllm_extra_args = "--trust-remote-code --default-chat-template-kwargs '{\"enable_thinking\": false}'"

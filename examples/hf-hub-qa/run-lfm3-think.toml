@@ -1,0 +1,40 @@
+# hf-hub-qa: LFM3-1.7B trained with the cross-format recipe (a) of the CoT-proxy paper (arXiv 2611.33148, variant without
+# CoT-proxies): an empty, unsupervised think block before every SFT target, the teacher's prose around tool calls
+# stripped, KL replay on LFM3-1.7B's own out-of-domain generations; thinking on at inference, with the `hf` CLI and its skill.
+# The `lfm3-1.7b` profile carries the recipe and the LoRA targets; the adapter is served on the base model (vLLM 0.34
+# serves LoRA on LFM3), so there is no merge stage. Results: ../hf-hub-qa-mcp/README.md (LFM3-1.7B recipe (a) section).
+#
+# The SFT reads run.toml's accepted GLM-5.3 traces (read only), the same 600 the Qwen3.5-4B recipe-(a) run used, and
+# the shared LFM3-1.7B replay pool. The pool was built once, by this example's MCP twin with `--stages replay`:
+#
+#   distill run examples/hf-hub-qa-mcp/run-lfm3-think.toml --stages replay   # once, for both tasks
+#   distill run examples/hf-hub-qa/run-lfm3-think.toml --dry-run
+task = "."
+teacher = "glm-5.3"
+student = "lfm3-1.7b"
+harness = "pi@1.6.0"
+name = "lfm3-17b-think-sft-hf-hub-qa-v2-glm-53-pi-160"
+stages = ["sft", "eval"]
+
+[repos]
+traces = "agent-distillation-hf/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's accepted traces
+replay = "agent-distillation-hf/lfm3-17b-replay-openr1-oasst"  # shared by every LFM3-1.7B (thinking) run
+
+[hub]
+namespace = "agent-distillation-hf"
+bill_to = "huggingface"
+collection = "agent-distillation-hf/hub-qa-lfm3-6b0a9eca04b0c6fbf2d136bd"  # Hub QA · LFM3
+raw_logs = false  # raw harness logs stay in the jobs
+
+[eval]
+splits = ["test"]
+limit = 377  # every v2 test question, as the base LFM3-1.7B runs (run-lfm3.toml)
+concurrency = 4  # anonymous Hub API rate limits
+timeout = 300
+max_tool_calls = 15
+variants = ["sft"]  # the adapter on the pinned base; the base itself: run-lfm3.toml
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 10  # per stage, worst case: SFT 10 h or the replay pool 2 h on one L4 ($0.80/h), eval 3 h

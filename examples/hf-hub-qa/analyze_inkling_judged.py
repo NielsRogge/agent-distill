@@ -1,10 +1,12 @@
-"""Analyse base Inkling-2-Mini on the 51 open-ended judged questions (`judged.py`) against the published records.
+"""Analyse a model (base Inkling-2-Mini by default, or LFM3-1.7B base / recipe (a)) on the 51 open-ended judged
+questions (`judged.py`) against the published records.
 
-First record per row everywhere. Paired comparisons are exact McNemar tests on the 51 shared rows. Also checks
-whether Inkling fails the questions the Qwen students fail (per-question difficulty = baselines that fail it).
-Prints a JSON report.
+First record per row everywhere. Paired comparisons are exact McNemar tests on the 51 shared rows, against the Qwen and
+teacher baselines and the other models of `MODELS` (those not yet published show as unavailable). Also checks whether
+the model fails the questions the Qwen students fail (per-question difficulty = baselines that fail it). Prints a JSON
+report.
 
-    uv run --extra hub python examples/hf-hub-qa/analyze_inkling_judged.py
+    uv run --extra hub python examples/hf-hub-qa/analyze_inkling_judged.py [--model lfm3-1.7b]
 """
 
 from __future__ import annotations
@@ -31,7 +33,11 @@ BASELINES = {
     # run-teacher-judged.toml: the same teacher re-run on the same day as Inkling, to measure Hub drift
     "teacher-rerun": ("hf-hub-qa-judged-rerun-glm-53-pi-160-eval", "episodes/teacher/seed.jsonl"),
 }
-INKLING = (f"inkling-2-mini-8k-{JUDGED}", BASE)
+MODELS = {
+    "inkling-2-mini-8k": (f"inkling-2-mini-8k-{JUDGED}", BASE),
+    "lfm3-1.7b": (f"lfm3-17b-{JUDGED}", BASE),  # run-lfm3-judged.toml
+    "lfm3-1.7b-recipe-a": (f"lfm3-17b-think-sft-{JUDGED}", SFT),  # run-lfm3-think-judged.toml
+}
 QUALITY_PASS = (7 - 1) / (10 - 1)  # judged_rubrics: PASS_SCORE 7 on the 1-10 scale
 REFERENCE_PASS = 2 / 3
 
@@ -120,17 +126,17 @@ def paired(a: dict[str, dict[str, Any]], b: dict[str, dict[str, Any]]) -> dict[s
     only_b = sum(bool(b[r].get("passed")) and not a[r].get("passed") for r in rows)
     return {
         "rows": len(rows),
-        "inkling": sum(bool(a[r].get("passed")) for r in rows),
+        "model": sum(bool(a[r].get("passed")) for r in rows),
         "other": sum(bool(b[r].get("passed")) for r in rows),
-        "inkling_only": only_a,
+        "model_only": only_a,
         "other_only": only_b,
         "mcnemar_exact_p": float(f"{mcnemar_exact(only_a, only_b):.2g}"),
     }
 
 
 def difficulty(inkling: dict[str, dict[str, Any]], others: dict[str, dict[str, dict[str, Any]]]) -> dict[str, Any]:
-    """Inkling's pass rate by how many of the Qwen students fail the question (the teacher runs are left out)."""
-    students = [name for name in others if not name.startswith("teacher")]
+    """The model's pass rate by how many of the Qwen students fail the question (the teacher runs are left out)."""
+    students = [name for name in others if name.startswith("qwen")]
     buckets: dict[int, list[int]] = collections.defaultdict(lambda: [0, 0])
     hard = []
     for row, record in inkling.items():
@@ -141,19 +147,19 @@ def difficulty(inkling: dict[str, dict[str, Any]], others: dict[str, dict[str, d
             hard.append(fails)
     return {
         "students": len(students),
-        "inkling_passed_by_student_failures": {str(k): f"{v[0]}/{v[1]}" for k, v in sorted(buckets.items())},
-        "inkling_failures_student_failures_mean": round(statistics.mean(hard), 2) if hard else None,
-        "teacher_also_failed_inkling_failures": sum(
+        "model_passed_by_student_failures": {str(k): f"{v[0]}/{v[1]}" for k, v in sorted(buckets.items())},
+        "model_failures_student_failures_mean": round(statistics.mean(hard), 2) if hard else None,
+        "teacher_also_failed_model_failures": sum(
             not others["teacher"][r].get("passed") for r, rec in inkling.items() if not rec.get("passed")
         ),
     }
 
 
 def drift(inkling: dict[str, dict[str, Any]], old: dict[str, dict[str, Any]], new: dict[str, dict[str, Any]]) -> dict:
-    """Inkling's wins over the pilot teacher records: does the same-day teacher re-run pass them too?"""
+    """The model's wins over the pilot teacher records: does the same-day teacher re-run pass them too?"""
     wins = sorted(r for r in inkling if inkling[r].get("passed") and r in old and not old[r].get("passed"))
     return {
-        "inkling_wins_over_pilot": len(wins),
+        "model_wins_over_pilot": len(wins),
         "teacher_rerun_passes_them": sum(bool(new.get(r, {}).get("passed")) for r in wins),
         "rows": {
             r: {
@@ -167,17 +173,26 @@ def drift(inkling: dict[str, dict[str, Any]], old: dict[str, dict[str, Any]], ne
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--inkling", default="", help="local episodes JSONL (default: the published eval dataset)")
+    parser.add_argument("--model", choices=sorted(MODELS), default="inkling-2-mini-8k")
+    parser.add_argument("--episodes", "--inkling", default="", help="local episodes JSONL (default: the published one)")
     args = parser.parse_args(argv)
 
     from datasets import load_dataset
 
     categories = {r["question_id"]: r["category"] for r in load_dataset(f"{NS}/hf-hub-questions", split="seed")}
-    inkling = first_records(load(args.inkling or INKLING))
+    inkling = first_records(load(args.episodes or MODELS[args.model]))
     others = {name: first_records(load(source)) for name, source in BASELINES.items()}
+    unavailable = []
+    for name, source in MODELS.items():
+        if name != args.model:
+            try:
+                others[name] = first_records(load(source))
+            except Exception:  # not published yet
+                unavailable.append(name)
     report: dict[str, Any] = {
-        "inkling-2-mini-8k": describe(inkling, categories),
-        "paired": {name: paired(inkling, other) for name, other in others.items()},
+        args.model: describe(inkling, categories),
+        "paired": {name: paired(inkling, other) for name, other in others.items()}
+        | dict.fromkeys(unavailable, "unavailable"),
         "difficulty": difficulty(inkling, others),
         "drift": {"teacher_rerun_vs_pilot": paired(others["teacher-rerun"], others["teacher"])}
         | drift(inkling, others["teacher"], others["teacher-rerun"]),

@@ -99,7 +99,8 @@ def main(argv: list[str] | None = None) -> None:
 
     from transformers import AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    revision = student.revision_of(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision, trust_remote_code=True)
     rendered = [
         tokenizer.apply_chat_template([{"role": "user", "content": prompt}], tokenize=False, add_generation_prompt=True)
         for _, prompt in prompts
@@ -113,7 +114,9 @@ def main(argv: list[str] | None = None) -> None:
     from vllm.inputs import TokensPrompt
 
     serve = student.serve
-    llm = LLM(model=model_id, max_model_len=max(len(ids) for ids in prompt_ids) + args.max_tokens + 16,
+    # Custom model code is trusted only at the profile's pinned revision (the reviewed code, as in evaluation serving).
+    llm = LLM(model=model_id, revision=revision, tokenizer_revision=revision, trust_remote_code=bool(revision),
+              max_model_len=max(len(ids) for ids in prompt_ids) + args.max_tokens + 16,
               gpu_memory_utilization=serve.gpu_memory_utilization, enforce_eager=serve.enforce_eager,
               seed=args.seed, **({"language_model_only": True} if serve.language_model_only else {}))  # fmt: skip
     params = SamplingParams(temperature=args.temperature, top_p=args.top_p, top_k=args.top_k,

@@ -151,6 +151,8 @@ Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactl
 | Recipe (a), mixed (`run-think-mixed-judged.toml`) | 29/51 (56.9%) | 6 | ~$2.2 GPU + <$1 judge |
 | Full-CoT SFT (`run-think-fullcot-judged.toml`) | 26/51 (51.0%) | 8 | <$1 judge |
 | Inkling-2-Mini base, 8,192 output tokens (`run-inkling-judged.toml`) | **49/51 (96.1%)** | 5 | ~$1.6 GPU + <$1 judge |
+| LFM3-1.7B base, thinking (`run-lfm3-judged.toml`) | 20/51 (39.2%) | 4 | $0.87 GPU + judge |
+| LFM3-1.7B recipe (a) (`run-lfm3-think-judged.toml`, the CLI adapter) | 12/51 (23.5%) | 4 | $0.40 GPU + judge |
 
 The teacher pilot's published records (`agent-distillation-hf/hf-hub-qa-pilot-glm-53-pi-160-eval`, one record per question) score 41/51, not the 43/51 reported for the pilot; paired against them, recipe (a) is 4 ahead / 12 behind (`p = 0.08`). Recipe (a) hit the 20-call limit 9 times, full-CoT 11 times. Evaluation: [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
@@ -197,6 +199,38 @@ The teacher pilot's published records (`agent-distillation-hf/hf-hub-qa-pilot-gl
 
 Evaluations: [`inkling-2-mini-8k-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/inkling-2-mini-8k-hf-hub-qa-judged-glm-53-pi-160-eval) and the teacher re-run [`hf-hub-qa-judged-rerun-glm-53-pi-160-eval`](https://huggingface.co/datasets/agent-distillation-hf/hf-hub-qa-judged-rerun-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
+**LFM3-1.7B** (`run-lfm3-judged.toml` for the base with thinking on; `run-lfm3-think-judged.toml` for the recipe-(a) CLI
+adapter of [`run-lfm3-think.toml`](run-lfm3-think.toml)) uses the same settings: 600 s, 20 tool calls and the Gemini
+judge. The question is whether LFM3's factual score (85–88% base, 97.1% after recipe (a); see the
+[MCP README](../hf-hub-qa-mcp/README.md)) reflects its general Hub ability. Paired on the 51 questions:
+
+| vs. | LFM3 base (20/51): only LFM3 / only other, p | LFM3 recipe (a) (12/51): only (a) / only other, p |
+| --- | --- | --- |
+| LFM3-1.7B base | - | 3 / 11, p = 0.057 |
+| Qwen3.5-4B base, thinking (31) | 7 / 18, p = 0.043 | 3 / 22, p = 0.00016 |
+| Qwen3.5-4B recipe (a) (33) | 3 / 16, p = 0.0044 | 1 / 22, p = 5.7e-06 |
+| Inkling-2-Mini 8k (49) | 0 / 29, p = 3.7e-09 | 0 / 37, p = 1.5e-11 |
+| GLM-5.3 teacher, same-day re-run (43) | 3 / 26, p = 1.5e-05 | 2 / 33, p = 3.7e-08 |
+
+- **The factual score overstates LFM3's general Hub ability.** On the factual CLI questions the base ties the thinking
+  Qwen base (132 vs. 130 of 150, p = 0.86). On open-ended questions it is significantly below it (20 vs. 31,
+  p = 0.043) and far below Inkling and the teacher. After recipe (a) the gap widens: +36 factual rows, but 12/51 here,
+  8 fewer than the base (not significant at 51 questions, p = 0.057). Qwen recipe (a) gained on both kinds of question.
+- **Its failures are answer quality, not budget:**
+  - Base: 12 answers miss on the judge's correctness, 9 fail the grounded gate and 5 miss the references. There is
+    only 1 call-limit failure and 1 output-limit failure.
+  - Recipe (a): 17 correctness misses, 14 grounded and 7 reference misses, 1 call limit.
+  - The adapter does not get terser. It writes a median of 232 words (base 274), makes 4 calls and reads the skill
+    more often (42 vs. 21 episodes). But it answers the wrong reading of the question more often: it sorts "trending"
+    by downloads, takes "decision models" for a Hub tag, and lists IDs it never saw. Factoid-lookup SFT seems to push
+    it toward listing and enumerating.
+- **It fails easy questions too.** By how many of the 5 Qwen students fail a question, the base passes 7/10 at zero
+  failures, 6/9 at one and 3/11 at two; the adapter passes 5/10, 4/9 and 1/11. Discovery questions are 0/8 for both.
+- **For training LFM3 beyond factoid lookups,** the mixed factual + open-ended traces of `run-think-mixed.toml` (above)
+  are the obvious next run. They kept Qwen's factual accuracy, though they did not lift its judged score (29/51).
+
+Evaluations: [`lfm3-17b-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-hf-hub-qa-judged-glm-53-pi-160-eval) and [`lfm3-17b-think-sft-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+
 ## Running it
 
 ```bash
@@ -215,6 +249,10 @@ uv run distill run examples/hf-hub-qa/run-inkling.toml --dry-run
 # Base LFM3-1.7B, thinking on / off, all 377 test rows, one L4 (see the MCP README's LFM3-1.7B section)
 uv run distill run examples/hf-hub-qa/run-lfm3.toml --dry-run
 uv run distill run examples/hf-hub-qa/run-lfm3-nothink.toml --dry-run
+# LFM3-1.7B recipe (a) (SFT on one L4, adapter eval on 377 rows), and both LFM3 models on the 51 judged questions
+uv run distill run examples/hf-hub-qa/run-lfm3-think.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-lfm3-judged.toml --dry-run      # and run-lfm3-think-judged.toml
+uv run --extra hub python examples/hf-hub-qa/analyze_inkling_judged.py --model lfm3-1.7b   # or lfm3-1.7b-recipe-a
 
 # Curated full-CoT SFT experiment (1,025 zero-error traces)
 uv run distill run examples/hf-hub-qa/run-think-fullcot.toml --dry-run
