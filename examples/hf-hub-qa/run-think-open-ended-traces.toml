@@ -1,5 +1,5 @@
 # Collect accepted GLM-5.3 traces on the 240 open-ended Hub training questions (`open_ended.py`,
-# `nielsr/hf-hub-questions-train`), strictly disjoint from the 51 judged eval questions (`judged.py`).
+# `agent-distillation-hf/hf-hub-questions-train`), strictly disjoint from the 51 judged eval questions (`judged.py`).
 # Combined with the 600 factoid traces in `run-think-mixed.toml` to teach open-ended Hub search & synthesis
 # alongside factual lookup.
 #
@@ -12,9 +12,9 @@ name = "cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160"
 stages = ["traces"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"  # pragma: allowlist secret
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/hugging-face-hub-qa-6b0a9ec0b0d291cc23d3e865"  # Hugging Face Hub QA (teacher-only run)
 raw_logs = false
 
 [traces]

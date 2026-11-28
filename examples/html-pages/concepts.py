@@ -2,7 +2,7 @@
 
     uv run python examples/html-pages/concepts.py --per-category 20 --bill-to huggingface --output pilot.jsonl
     uv run python examples/html-pages/concepts.py --per-category 420 --bill-to huggingface \
-        --output concepts.jsonl --push nielsr/html-concepts
+        --output concepts.jsonl --push agent-distillation-hf/html-concepts
 
 The teacher (an OpenAI-compatible model on HF Inference Providers, billed to `--bill-to`) writes concepts in batches
 per category under the "100 HTML files" rules (stunning, never repetitive, full creative mode). Each batch sees a

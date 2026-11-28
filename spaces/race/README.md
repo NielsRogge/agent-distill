@@ -28,10 +28,10 @@ The first instance pits GLM-5.3 against Qwen3.5-4B recipe (a) (`qwen3.5-4b-think
 
 | Race | Run config | Adapter |
 |---|---|---|
-| `cli` | `examples/hf-hub-qa/run-think.toml` | `nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160-lora` |
-| `mcp` | `examples/hf-hub-qa-mcp/run-think.toml` | `nielsr/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora` |
+| `cli` | `examples/hf-hub-qa/run-think.toml` | `agent-distillation-hf/qwen35-4b-think-cfx-a-hf-hub-qa-v2-glm-53-pi-160-lora` |
+| `mcp` | `examples/hf-hub-qa-mcp/run-think.toml` | `agent-distillation-hf/qwen35-4b-think-cfx-a-hf-hub-qa-mcp-v2-glm-53-pi-160-lora` |
 
-Questions are the races' test rows of `nielsr/hf-hub-facts-v2` (the first 150 for the CLI, all 377 for MCP, as in
+Questions are the races' test rows of `agent-distillation-hf/hf-hub-facts-v2` (the first 150 for the CLI, all 377 for MCP, as in
 the published evaluations), graded live with the deterministic rubrics (`fact_correct`, `grounded` and the gates).
 A typed question runs both agents in the same way, but no grade is shown, since there is no gold answer.
 

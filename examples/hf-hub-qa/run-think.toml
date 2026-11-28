@@ -19,14 +19,14 @@ name = "qwen35-4b-think-sft-hf-hub-qa-v2-glm-53-pi-160"
 stages = ["sft", "eval"]
 
 [repos]
-traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's accepted traces
-replay = "nielsr/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
+traces = "agent-distillation-hf/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's accepted traces
+replay = "agent-distillation-hf/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
-raw_logs = false  # nielsr's private storage is full: raw harness logs stay in the jobs
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"  # Hub QA · Qwen3.5 (family)
+raw_logs = false  # raw harness logs stay in the jobs (set while nielsr's private storage was full)
 
 [sft]
 timeout = "10h"  # 8 passes of the KL-replay loop took 1 h 27 min on one H200

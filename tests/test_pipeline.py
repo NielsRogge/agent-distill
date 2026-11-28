@@ -90,7 +90,7 @@ def test_eval_jobs_dry_run():
     assert "--harness opencode@1.2.4" in command and "--model nielsr/qwen35-9b-url-agent-grpo-merged-kimi" in command
     assert "--label grpo" in command and "vllm==0.33.0" in command
     assert "code/REV/" in command and "uv tool install -q 'huggingface-hub>=1.13'" in command  # task job_setup
-    assert "--output-repo nielsr/qwen35-9b-paper-urls-parity-opencode-124-eval" in command
+    assert "--output-repo agent-distillation-hf/qwen35-9b-paper-urls-parity-opencode-124-eval" in command
     assert "HF_TOKEN" not in command  # the token is a job secret, never in the command
 
 

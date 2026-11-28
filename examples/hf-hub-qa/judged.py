@@ -1,7 +1,8 @@
 """The judged hf-hub-qa questions: open-ended questions about the Hub (questions.py), answered with the `hf` CLI.
 
-The secondary evaluation of both twins: the same agent setup as task.py, on `nielsr/hf-hub-questions`, scored by
-grounding, a live reference where one exists, and a judge (judged_rubrics.py). Run it with `task = "judged.py"`.
+The secondary evaluation of both twins: the same agent setup as task.py, on
+`agent-distillation-hf/hf-hub-questions`, scored by grounding, a live reference where one exists, and a judge
+(judged_rubrics.py). Run it with `task = "judged.py"`.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from .task import COMMANDS, HERE, JOB_SETUP, user_prompt
 
 task = Task(
     name="hf-hub-qa-judged",
-    dataset=DatasetSpec(repo="nielsr/hf-hub-questions", splits={"train": "seed", "eval": ["seed"]}),
+    dataset=DatasetSpec(repo="agent-distillation-hf/hf-hub-questions", splits={"train": "seed", "eval": ["seed"]}),
     system_prompt=HERE / "system_prompt.txt",
     prompt=user_prompt,
     answer=TextAnswer(),

@@ -185,7 +185,7 @@ def test_job_setup_installs_the_shell_tools_every_image_needs():
 
 
 def test_facts_task_shape():
-    assert FACTS.dataset.repo == "nielsr/hf-hub-facts-v2" and FACTS.version == "2"
+    assert FACTS.dataset.repo == "agent-distillation-hf/hf-hub-facts-v2" and FACTS.version == "2"
     assert FACTS.dataset.splits["eval"] == ["test", "validation"]
     assert FACTS.limits.max_tool_calls == 15 and FACTS.limits.timeout == 300  # the MCP twin's limits
     assert FACTS.judge == "" and FACTS.skills == TASK.skills and FACTS.job_setup == TASK.job_setup

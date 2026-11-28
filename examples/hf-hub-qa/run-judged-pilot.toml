@@ -11,9 +11,9 @@ name = "hf-hub-qa-pilot-glm-53-pi-160"  # the first pilot ran Kimi-K3.1-Pro (-ki
 stages = ["eval"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/hugging-face-hub-qa-6b0a9ec0b0d291cc23d3e865"  # Hugging Face Hub QA (teacher-only run)
 
 [eval]
 splits = ["seed"]

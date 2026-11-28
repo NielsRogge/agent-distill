@@ -11,7 +11,7 @@ Each example is a self-contained distillation task with its own `task.py`, `rubr
 
 ## CLI vs. MCP (`hf-hub-qa` vs. `hf-hub-qa-mcp`)
 
-The two Hub Q&A examples share the exact same dataset (`nielsr/hf-hub-facts-v2`), teacher (**GLM-5.3**), student (**Qwen3.5-4B**), harness (`pi@1.6.0`), and verifier, isolating the effect of the tool interface:
+The two Hub Q&A examples share the exact same dataset (`agent-distillation-hf/hf-hub-facts-v2`), teacher (**GLM-5.3**), student (**Qwen3.5-4B**), harness (`pi@1.6.0`), and verifier, isolating the effect of the tool interface:
 
 - **Untrained small models strongly prefer constrained MCP tools over a shell:** with thinking off on the first 150 test questions, base Qwen3.5-4B scores **73.3%** via MCP vs. **47.3%** via CLI (where it ignores the skill and writes brittle `curl`/Python scrapers).
 - **SFT closes the gap:** action-only SFT teaches the CLI model to read the skill and use `hf`, bringing both non-thinking students to ~80% (78.0% CLI vs. 80.0% MCP).

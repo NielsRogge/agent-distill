@@ -30,7 +30,7 @@ Always bill Hugging Face services to the `huggingface` org, never to a personal 
 - **Jobs:** pass `--namespace huggingface` to `hf jobs run` / `hf jobs uv run` (the pipeline does this from `[hub] bill_to`).
 - **Inference Endpoints:** create and manage them in the `huggingface` namespace (`--namespace huggingface`).
 
-The library itself must not hardcode `huggingface` or `nielsr`: they belong in the examples' `run.toml` files.
+The library itself must not hardcode `huggingface`, `agent-distillation-hf` or `nielsr`: they belong in the examples' `run.toml` files.
 
 ## Credentials
 
@@ -43,8 +43,13 @@ The library itself must not hardcode `huggingface` or `nielsr`: they belong in t
 
 ## Hub artifacts
 
-- Every artifact a run publishes on the Hugging Face Hub (models, adapters, datasets, trace and evaluation datasets, and Spaces) must be added to the run's collection (`[hub] collection` in its `run.toml`), and that collection must be public. The examples use the agent-distillation collection: https://huggingface.co/collections/nielsr/agent-distillation-6b0445568a39b1d979c52e31 (public; url-extraction's own artifacts stay in its collection). Ask the user before creating another collection, and create it public.
-- Add it when the repo is created, with a one-line note saying what it is (teacher, student, stage, harness).
+- Every artifact a run publishes on the Hugging Face Hub (models, adapters, datasets, trace and evaluation datasets, and Spaces) must be added to the run's collection (`[hub] collection` in its `run.toml`), and that collection must be public. The collections form a tree, all public:
+  - The index, [Agent distillation](https://huggingface.co/collections/agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633), holds one collection per use case: [Hugging Face Hub QA](https://huggingface.co/collections/agent-distillation-hf/hugging-face-hub-qa-6b0a9ec0b0d291cc23d3e865) (`hf-hub-qa` and `hf-hub-qa-mcp`), [URL extraction](https://huggingface.co/collections/agent-distillation-hf/url-extraction-6b0a9eccda28faaa08678ddb) (`paper-urls`) and [HTML pages](https://huggingface.co/collections/agent-distillation-hf/html-pages-6b0a9ecdb57c79b078ad4480) (`html-pages`).
+  - Each use-case collection holds the use case's shared artifacts (question datasets, teacher traces and evaluations, replay pools, Spaces) and one collection per student model family, e.g. "Hub QA · Qwen3.5", "Hub QA · Inkling-2-Mini", "Hub QA · LFM3".
+  - A run that trains or evaluates a student uses its family collection; a teacher-only run (traces or teacher evaluations only) uses the use-case collection. A new use case or student family gets a new public collection (ask the user first), added to its parent (`add_collection_item(..., item_type="collection")`).
+  - url-extraction's own artifacts stay in its collection on `nielsr`.
+- agent-distill's artifacts live in the `agent-distillation-hf` org (moved from `nielsr` on 2026-11-27; the old URLs redirect), except the private race Space, which stays on `nielsr` because the free org has no quota for private Spaces. Ask the user before creating another collection, and create it public.
+- Add each repo to its collection when the repo is created, with a one-line note saying what it is (teacher, student, stage, harness).
 - Visibility: models and datasets are public. Spaces, code snapshots (`<run>-code` repos or buckets holding job code), raw harness logs (`<run>-raw` datasets) and this GitHub repository stay private.
 - Write every commit as if this repository were public (it will be, once licensed): never commit credentials, `.env` files, agent settings (`.claude/settings.local.json`), raw episode or trace data, or the contents of private or internal datasets. Data lives on the Hub; refer to private resources by name only. Scan the diff for credential patterns before pushing; a credential that reaches git history must be revoked, because the history keeps it.
 - Before making a dataset public, scan it for credentials; `distill publish` does the scan and refuses on a hit.
@@ -62,8 +67,8 @@ Example:
 from huggingface_hub import HfApi
 
 HfApi().add_collection_item(
-    "nielsr/agent-distillation-6b0445568a39b1d979c52e31",
-    item_id="nielsr/<repo>", item_type="model",  # or "dataset" / "space"
+    "agent-distillation-hf/hugging-face-hub-qa-6b0a9ec0b0d291cc23d3e865",  # the run's family or use-case collection
+    item_id="agent-distillation-hf/<repo>", item_type="model",  # or "dataset" / "space"
     note="Qwen3.5-9B GRPO adapter, opencode@1.2.4 (from SFT on Kimi-K3.1-Pro traces)", exists_ok=True,
 )
 ```

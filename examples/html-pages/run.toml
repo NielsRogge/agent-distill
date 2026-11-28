@@ -16,9 +16,9 @@ stages = ["traces", "sft", "merge", "eval", "probe"]
 profiles = ["profiles"]
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+collection = "agent-distillation-hf/html-pages-qwen35-6b0a9ecdd7662dde54c152f8"  # HTML pages · Qwen3.5 (family)
 
 [traces]
 split = "train"

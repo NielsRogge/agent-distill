@@ -12,9 +12,9 @@ A run is a `run.toml`:
     harness = "opencode@1.2.4"
 
     [hub]
-    namespace = "nielsr"
+    namespace = "my-org"
     bill_to = "huggingface"
-    collection = "nielsr/..."
+    collection = "my-org/..."
 
     [eval]
     splits = ["test"]
