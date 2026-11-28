@@ -16,7 +16,7 @@
 # Training: `[sft]` carries the cross-format recipe (a) of qwen3.5-4b-think (CoT-proxy paper, variant without
 # CoT-proxies): an empty, unsupervised `<think></think>` before every training target (the pinned template renders
 # exactly that on history turns), the teacher's prose around tool calls stripped, and KL replay on LFM3-1.7B's own
-# out-of-domain generations (shared pool nielsr/lfm3-17b-replay-openr1-oasst); thinking stays on at inference. The
+# out-of-domain generations (shared pool agent-distillation-hf/lfm3-17b-replay-openr1-oasst); thinking stays on at inference. The
 # trained LoRA adapter is served on the base model by vLLM 0.34 (Lfm3ForCausalLM implements SupportsLoRA), so no
 # merge stage. `[grpo]` keeps the Qwen defaults and is untested for LFM3.
 name = "lfm3-1.7b"

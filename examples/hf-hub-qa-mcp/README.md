@@ -283,7 +283,7 @@ no merge stage.
 
 **Replay pool.** The pool comes from LFM3-1.7B itself, thinking on, on the same OpenR1-Math/OpenAssistant prompt mix as
 the Qwen pool: 1,000 samples plus 100 held out, 3.08M tokens, 607 of 1,100 finished within 4,096 tokens. It is
-published as [nielsr/lfm3-17b-replay-openr1-oasst](https://huggingface.co/datasets/nielsr/lfm3-17b-replay-openr1-oasst).
+published as [agent-distillation-hf/lfm3-17b-replay-openr1-oasst](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-replay-openr1-oasst).
 
 **Held-out drift** (KL(p_init ‖ p_θ) on the 100 held-out replay samples), in nats/token:
 
@@ -306,11 +306,11 @@ So the MCP run evaluates the base again on 0.5.1, next to the adapter (`[eval] a
 digests and the live server version). The base moved from 322 to 318 (30 vs. 34 discordant rows, p = 0.71). Trained
 vs. base on 0.5.1 is the primary MCP comparison; comparisons with older runs are on other server versions.
 
-Eval datasets: [MCP](https://huggingface.co/datasets/nielsr/lfm3-17b-think-sft-hf-hub-qa-mcp-v2-glm-53-pi-160-eval)
+Eval datasets: [MCP](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-mcp-v2-glm-53-pi-160-eval)
 (`episodes/sft` and the 0.5.1 base in `episodes/base`) and
-[CLI](https://huggingface.co/datasets/nielsr/lfm3-17b-think-sft-hf-hub-qa-v2-glm-53-pi-160-eval). Adapters:
-[MCP](https://huggingface.co/nielsr/lfm3-17b-think-sft-hf-hub-qa-mcp-v2-glm-53-pi-160-lora) and
-[CLI](https://huggingface.co/nielsr/lfm3-17b-think-sft-hf-hub-qa-v2-glm-53-pi-160-lora).
+[CLI](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-v2-glm-53-pi-160-eval). Adapters:
+[MCP](https://huggingface.co/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-mcp-v2-glm-53-pi-160-lora) and
+[CLI](https://huggingface.co/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-v2-glm-53-pi-160-lora).
 
 Numbers use the first record per row, with exact McNemar tests. The Qwen thinking base and recipe (a) CLI baselines
 cover 150 rows.

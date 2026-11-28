@@ -27,8 +27,8 @@ from agent_distill.task import load_task
 
 STUDENT = load_profile("students", "lfm3-1.7b")
 TASKS = {
-    "hf-hub-qa-mcp": "nielsr/lfm3-17b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval",
-    "hf-hub-qa": "nielsr/lfm3-17b-hf-hub-qa-v2-glm-53-pi-160-eval",
+    "hf-hub-qa-mcp": "agent-distillation-hf/lfm3-17b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval",
+    "hf-hub-qa": "agent-distillation-hf/lfm3-17b-hf-hub-qa-v2-glm-53-pi-160-eval",
 }
 ROWS = 120  # episodes per task (of 377): enough turns, a few seconds of rendering
 
@@ -176,7 +176,7 @@ def test_revision_applies_to_the_base_model_only():
     assert base[base.index("--revision") + 1] == STUDENT.revision
     assert base[base.index("--tokenizer-revision") + 1] == STUDENT.revision
     assert base[base.index("--max-lora-rank") + 1] == "16" and "--trust-remote-code" in base
-    assert "--revision" not in vllm_command(STUDENT, "nielsr/some-merged-model", "")
+    assert "--revision" not in vllm_command(STUDENT, "agent-distillation-hf/some-merged-model", "")
     assert STUDENT.revision_of(STUDENT.model) == STUDENT.revision and STUDENT.revision_of("other/model") is None
     qwen = load_profile("students", "qwen3.5-4b-think")
     assert qwen.revision_of(qwen.model) is None and "--revision" not in vllm_command(qwen, qwen.model, "")
@@ -186,12 +186,12 @@ def test_revision_applies_to_the_base_model_only():
 def test_recipe_a_run_configs_build_sft_on_l4_and_adapter_eval(task):
     run = make_run(load_run(Path("examples") / task / "run-lfm3-think.toml"))
     assert run.config.student == "lfm3-1.7b" and run.config.eval.limit == 377
-    assert run.repo("replay") == "nielsr/lfm3-17b-replay-openr1-oasst"
-    assert run.repo("traces") == f"nielsr/qwen35-4b-{task}-v2-glm-53-pi-160-traces"
+    assert run.repo("replay") == "agent-distillation-hf/lfm3-17b-replay-openr1-oasst"
+    assert run.repo("traces") == f"agent-distillation-hf/qwen35-4b-{task}-v2-glm-53-pi-160-traces"
     built = {stage: jobs[-1] for stage in ("replay", "sft", "eval") for jobs in pipeline.stage_waves(stage, run, "REV")}
     assert built["sft"].flavor == "l4x1" and "transformers==5.23.0" in built["sft"].command
-    assert "--replay-repo nielsr/lfm3-17b-replay-openr1-oasst" in built["sft"].command
-    assert "--output-repo nielsr/lfm3-17b-replay-openr1-oasst" in built["replay"].command
+    assert "--replay-repo agent-distillation-hf/lfm3-17b-replay-openr1-oasst" in built["sft"].command
+    assert "--output-repo agent-distillation-hf/lfm3-17b-replay-openr1-oasst" in built["replay"].command
     command = built["eval"].command  # the adapter served on the pinned base (no merge stage)
     assert "--model LiquidAI/LFM3-1.7B " in command and f"--adapter {run.repo('lora')} " in command
 

@@ -229,7 +229,7 @@ judge. The question is whether LFM3's factual score (85–88% base, 97.1% after 
 - **For training LFM3 beyond factoid lookups,** the mixed factual + open-ended traces of `run-think-mixed.toml` (above)
   are the obvious next run. They kept Qwen's factual accuracy, though they did not lift its judged score (29/51).
 
-Evaluations: [`lfm3-17b-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/lfm3-17b-hf-hub-qa-judged-glm-53-pi-160-eval) and [`lfm3-17b-think-sft-…-judged-…-eval`](https://huggingface.co/datasets/nielsr/lfm3-17b-think-sft-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
+Evaluations: [`lfm3-17b-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-hf-hub-qa-judged-glm-53-pi-160-eval) and [`lfm3-17b-think-sft-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
 ## Running it
 

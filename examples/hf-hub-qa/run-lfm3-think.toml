@@ -17,14 +17,14 @@ name = "lfm3-17b-think-sft-hf-hub-qa-v2-glm-53-pi-160"
 stages = ["sft", "eval"]
 
 [repos]
-traces = "nielsr/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's accepted traces
-replay = "nielsr/lfm3-17b-replay-openr1-oasst"  # shared by every LFM3-1.7B (thinking) run
+traces = "agent-distillation-hf/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's accepted traces
+replay = "agent-distillation-hf/lfm3-17b-replay-openr1-oasst"  # shared by every LFM3-1.7B (thinking) run
 
 [hub]
-namespace = "nielsr"
+namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
-raw_logs = false  # nielsr's private storage is full: raw harness logs stay in the jobs
+collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
+raw_logs = false  # raw harness logs stay in the jobs
 
 [eval]
 splits = ["test"]
