@@ -1,0 +1,53 @@
+# Follow-up 3: on-policy GRPO directly on `open_ended.py` (`agent-distillation-hf/hf-hub-questions-train`, 240 disjoint open-ended
+# questions) starting from the mixed Recipe (a) SFT checkpoint (`run-think-mixed.toml`), scored live by
+# `judged_rubrics.py` (`grounded`, `reference`, `gemini-4-hydrogen` quality judge).
+#
+#   distill run examples/hf-hub-qa/run-think-mixed-grpo.toml --dry-run
+task = "open_ended.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-pi-160"
+stages = ["merge", "probe", "grpo", "grpo-merge"]
+
+[repos]
+traces = "agent-distillation-hf/cursor-qwen35-4b-think-hf-hub-qa-open-ended-glm-53-pi-160-traces"
+lora = "agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-hf-hub-qa-v2-glm-53-pi-160-lora"
+
+[hub]
+namespace = "agent-distillation-hf"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"
+raw_logs = false
+
+[probe]
+split = "train"
+sample = 240
+shards = 2
+k = 4
+
+[grpo]
+timeout = "3h"
+use_probe = true
+args = [
+  "--max-steps", "40",
+  "--num-generations", "8",
+  "--max-concurrent-rollouts", "16",
+  "--max-completion-length", "8192",
+  "--learning-rate", "5e-6",
+  "--save-steps", "20",
+  "--allow-small-pool",
+]
+
+[eval]
+splits = ["train"]
+limit = 240
+concurrency = 4
+timeout = 300
+max_tool_calls = 20
+variants = ["grpo"]
+
+[budget]
+traces_usd = 0
+judge_usd = 20
+gpu_usd = 50

@@ -1,0 +1,4 @@
+Strict grounding: state only facts, numbers, descriptions, and Hub repo/paper ids that appear directly in your tool
+outputs. Do not add background descriptions, parameter/token counts, lab names, or extra repo/paper ids from memory.
+If a listing returns only repo ids and metadata (such as likes, downloads, tags, or dates), report only those fields
+or inspect the repo's info/card first before describing what it does.

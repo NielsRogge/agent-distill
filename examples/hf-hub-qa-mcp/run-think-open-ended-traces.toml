@@ -1,0 +1,27 @@
+# Follow-up 4 (MCP twin): collect accepted GLM-5.3 open-ended traces on the 240 disjoint training questions
+# (`agent-distillation-hf/hf-hub-questions-train`) through the 3-tool HF MCP server (`examples/hf-hub-qa-mcp/open_ended.py`).
+#
+#   distill run examples/hf-hub-qa-mcp/run-think-open-ended-traces.toml --dry-run
+task = "open_ended.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-hf-hub-qa-mcp-open-ended-glm-53-pi-160"
+stages = ["traces"]
+
+[hub]
+namespace = "agent-distillation-hf"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"
+raw_logs = false
+
+[traces]
+split = "train"
+limit = 240
+attempts = 2
+shards = 4
+
+[budget]
+traces_usd = 35
+judge_usd = 8
+gpu_usd = 0

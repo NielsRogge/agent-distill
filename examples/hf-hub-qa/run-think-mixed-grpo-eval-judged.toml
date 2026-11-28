@@ -1,0 +1,32 @@
+# Follow-up 3 judged eval: evaluates the open-ended GRPO checkpoint on the 51 judged questions (`judged.py`,
+# original `system_prompt.txt`) for apples-to-apples comparison with Mixed SFT (29/51), Base think (31/51), and
+# Recipe (a)-600 (33/51).
+#
+#   distill run examples/hf-hub-qa/run-think-mixed-grpo-eval-judged.toml --dry-run
+task = "judged.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-judged-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "agent-distillation-hf"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+grpo = "agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-open-ended-grpo-pi-160-grpo-merged"
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 20
