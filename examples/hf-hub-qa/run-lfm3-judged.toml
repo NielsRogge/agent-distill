@@ -1,0 +1,31 @@
+# Base LFM3-1.7B (thinking on, the `lfm3-1.7b` profile: vLLM 0.34.0 on one L4, the card's sampling) on the 51
+# open-ended Hugging Face Hub questions (`judged.py`), scored by live Hub references and the Gemini judge. The same
+# settings as run-inkling-judged.toml (600 s, 20 tool calls, 4 concurrent episodes). Does LFM3's factual score
+# (85-88%, run-lfm3.toml) carry over to open-ended Hub questions? Results: README (LFM3-1.7B judged section).
+#
+#   distill run examples/hf-hub-qa/run-lfm3-judged.toml --dry-run
+task = "judged.py"
+teacher = "glm-5.3"  # names the run family; not evaluated here
+student = "lfm3-1.7b"
+harness = "pi@1.6.0"
+name = "lfm3-17b-hf-hub-qa-judged-glm-53-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "agent-distillation-hf"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "agent-distillation-hf/hub-qa-lfm3-6b0a9eca04b0c6fbf2d136bd"  # Hub QA · LFM3
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+variants = ["base"]
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 5

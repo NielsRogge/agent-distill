@@ -56,6 +56,8 @@ def vllm_command(
         "--max-model-len", str(serve.max_model_len), "--gpu-memory-utilization", str(serve.gpu_memory_utilization),
         "--enable-auto-tool-choice", "--tool-call-parser", serve.tool_call_parser,
     ]  # fmt: skip
+    if revision := student.revision_of(model):  # the base model at its pinned revision (adapters ride on it)
+        command += ["--revision", revision, "--tokenizer-revision", revision]
     if serve.enforce_eager:
         command.append("--enforce-eager")
     if serve.language_model_only:
