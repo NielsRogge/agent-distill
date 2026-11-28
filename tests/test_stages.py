@@ -371,13 +371,20 @@ def test_self_served_teacher_traces_main_starts_and_stops_vllm(tmp_path, monkeyp
 
     traces_stage.main(
         [
-            "--task", "examples/hf-hub-qa/open_ended.py",
-            "--harness", "pi@1.6.0",
-            "--teacher", "inkling-2-mini-8k",
-            "--profiles", "examples/inkling-2-mini",
-            "--output-dir", str(tmp_path / "out"),
-            "--judge", "",
-            "--vllm-binary", "/usr/bin/vllm",
+            "--task",
+            "examples/hf-hub-qa/open_ended.py",
+            "--harness",
+            "pi@1.6.0",
+            "--teacher",
+            "inkling-2-mini-8k",
+            "--profiles",
+            "examples/inkling-2-mini",
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--judge",
+            "",
+            "--vllm-binary",
+            "/usr/bin/vllm",
         ]
     )
     assert len(started) == 1 and len(waited) == 1 and len(stopped) == 1
@@ -397,4 +404,3 @@ def test_sft_flavor_override_in_run_config():
     assert "--max-tool-calls 12" in job.command
     assert "agent-distillation-hf/cursor-inkling-2-mini-8k-hf-hub-qa-open-ended-pi-160-traces" in job.command
     assert "agent-distillation-hf/lfm3-17b-replay-openr1-oasst" in job.command
-
