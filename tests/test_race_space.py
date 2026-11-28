@@ -38,7 +38,9 @@ def test_endpoint_serves_the_student_like_the_eval_stage() -> None:
     cfg = race_config.load()
     student = cfg.student()
     args = cfg.endpoint_args()
-    assert cfg.endpoint.serve == {"enforce_eager": False}  # the endpoint's only departure from the eval stage
+    # The endpoint's departures from the eval stage keep the sampling distribution: CUDA graphs, MTP speculation.
+    assert cfg.endpoint.serve["enforce_eager"] is False
+    assert '"method": "qwen3_5_mtp"' in cfg.endpoint.serve["vllm_extra_args"]
     served = dataclasses.replace(student, serve=dataclasses.replace(student.serve, **cfg.endpoint.serve))
     reference = vllm_command(served, student.model, "ADAPTER")[3:]
     assert "--enforce-eager" in vllm_command(student, student.model, "ADAPTER") and "--enforce-eager" not in args

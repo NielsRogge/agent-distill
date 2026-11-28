@@ -23,6 +23,7 @@ A run is a `run.toml`:
 from __future__ import annotations
 
 import dataclasses
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -178,6 +179,9 @@ class GRPOSettings:
 class Student:
     name: str
     model: str
+    # Hub revision of `model` (a commit sha). Set it for checkpoints with custom code (`trust_remote_code`): SFT, the
+    # replay pool and evaluation serving of the base model then load exactly the reviewed code and weights.
+    revision: str = ""
     notes: str = ""
     requires: list[str] = field(default_factory=list)
     serve: ServeSettings = field(default_factory=ServeSettings)
@@ -186,6 +190,10 @@ class Student:
     merge: MergeSettings = field(default_factory=MergeSettings)
     probe: ProbeSettings = field(default_factory=ProbeSettings)
     grpo: GRPOSettings = field(default_factory=GRPOSettings)
+
+    def revision_of(self, model: str) -> str | None:
+        """The pinned revision when `model` is this profile's base model (never for merged or other checkpoints)."""
+        return (self.revision or None) if model == self.model else None
 
     def hooks(self) -> dict[str, str]:
         """Profile field -> the `module[:function]` hook it names (DESIGN.md §2): the modules must be staged with
@@ -216,6 +224,9 @@ class HarnessProfile:
     @property
     def id(self) -> str:
         return f"{self.name}@{self.version}"
+
+
+RUN_NAME = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def slugify(name: str) -> str:
@@ -308,6 +319,10 @@ class EvalSettings:
     # OpenCode: a bash call naming a missing `workdir` fails with an error the model sees (instead of hanging until
     # the episode times out). Off only for parity runs that must match the reference harness exactly.
     workdir_guard: bool = True
+    # Run against an MCP server whose live tool list no longer matches the task's snapshot (sets
+    # AGENT_DISTILL_ALLOW_MCP_DRIFT=1 in the eval jobs; each record keeps both digests and the live server version).
+    # For a drift the model cannot see (e.g. an `outputSchema` change); refresh the snapshot otherwise.
+    allow_mcp_drift: bool = False
 
 
 @dataclass
@@ -410,4 +425,9 @@ def load_run(path: str | Path, overrides: dict[str, Any] | None = None) -> RunCo
             target = target.setdefault(key, {})
         target[leaf] = value
     data.setdefault("base_dir", str(path.resolve().parent))
+    name = data.get("name")
+    if name and not RUN_NAME.fullmatch(str(name)):
+        # The name becomes HF Jobs labels, which allow only these characters: without this check `distill run` stages
+        # the job code (a `<name>-code` repo) and only then has every job refused. Default names are slugified.
+        raise ValueError(f"{path}: name {name!r} may contain only letters, digits, '-' and '_' (HF Jobs labels)")
     return _build(RunConfig, data, str(path))

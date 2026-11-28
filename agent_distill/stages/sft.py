@@ -512,7 +512,7 @@ def main(argv: list[str] | None = None) -> None:
 
     from transformers import AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, revision=student.revision_of(model_id), trust_remote_code=True)
     tokenizer.pad_token = tokenizer.pad_token or tokenizer.eos_token
     render = render_trajectory_examples if args.full_trajectory else render_examples
     examples = render(trajectories, tokenizer, tools, args.think_target)
@@ -673,7 +673,9 @@ def train_kl_replay(
         resolve(student.sft.train_patch).enable(chunk_size=args.attention_chunk_size)
     model_class = getattr(transformers, student.sft.model_class or "AutoModelForCausalLM")
     device = "cuda" if torch.cuda.is_available() else "cpu"  # CPU only for local smoke tests of the loop
-    model = model_class.from_pretrained(model_id, dtype=dtype, trust_remote_code=True).to(device)
+    model = model_class.from_pretrained(
+        model_id, revision=student.revision_of(model_id), dtype=dtype, trust_remote_code=True
+    ).to(device)
     for config in (model.config, getattr(model.config, "text_config", None)):
         if config is not None:
             config.use_cache = False
@@ -796,7 +798,8 @@ def train(args: argparse.Namespace, student: Any, model_id: str, tokenizer: Any,
         )
     dtype = torch.float16 if args.fp16 else torch.bfloat16
     model: Any = model_id
-    model_init_kwargs: dict[str, Any] | None = {"torch_dtype": dtype, "trust_remote_code": True}
+    model_init_kwargs: dict[str, Any] | None = {"torch_dtype": dtype, "trust_remote_code": True,
+                                                "revision": student.revision_of(model_id)}  # fmt: skip
     if student.sft.model_class:
         if quantization is not None:
             raise ValueError("a profile model_class loads full-precision weights; pass --no-4bit")
@@ -806,7 +809,9 @@ def train(args: argparse.Namespace, student: Any, model_id: str, tokenizer: Any,
             from agent_distill.hooks import resolve
 
             resolve(student.sft.train_patch).enable(chunk_size=args.attention_chunk_size)
-        model = getattr(transformers, student.sft.model_class).from_pretrained(model_id, dtype=dtype)
+        model = getattr(transformers, student.sft.model_class).from_pretrained(
+            model_id, revision=student.revision_of(model_id), dtype=dtype
+        )
         for config in (model.config, getattr(model.config, "text_config", None)):
             if config is not None:
                 config.use_cache = False

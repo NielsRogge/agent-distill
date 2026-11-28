@@ -306,3 +306,52 @@ def test_traces_limit_is_split_across_shards(monkeypatch):
     assert sorted(row["paper_id"] for shard in picked for row in shard) == list(range(8))
     run = make_run(**{"traces.shards": 3})
     assert all("--limit 8" in job.command and "--shard" in job.command for job in pipeline.trace_jobs(run, "R"))
+
+
+@pytest.mark.parametrize("example", ["hf-hub-qa", "hf-hub-qa-mcp"])
+def test_inkling_hub_qa_evals_stage_the_hook_modules(example):
+    """run-inkling.toml finds the profile's hook modules in examples/inkling-2-mini and evaluates only the base model
+    with run-think.toml's settings, on the RTX PRO 6000 image."""
+    run = pipeline.make_run(load_run(Path(f"examples/{example}/run-inkling.toml")))
+    think = load_run(Path(f"examples/{example}/run-think.toml")).eval
+    staged = pipeline.requires_files(run)
+    assert sorted(staged) == ["inkling_adapter.py", "inkling_train_patch.py", "merge_adapter.py"]
+    pipeline.check_hooks(run, staged)
+    (job,) = pipeline.eval_jobs(run, "REV")
+    assert (job.image, job.flavor) == ("vllm/vllm-openai:inkling-2-mini", "rtx-pro-6000")
+    args = shlex.split(job.command.splitlines()[-2])
+    assert args[args.index("--model") + 1] == "thinkingmachines/Inkling-2-Mini"
+    assert args[args.index("--limit") + 1] == "377"
+    for flag, value in (("--concurrency", think.concurrency), ("--timeout", think.timeout),
+                        ("--max-tool-calls", think.max_tool_calls)):  # fmt: skip
+        assert float(args[args.index(flag) + 1]) == value
+
+
+@pytest.mark.parametrize(
+    ("config", "reference"),
+    [
+        ("examples/hf-hub-qa/run-inkling-8k.toml", "examples/hf-hub-qa/run-inkling.toml"),
+        ("examples/hf-hub-qa-mcp/run-inkling-8k.toml", "examples/hf-hub-qa-mcp/run-inkling.toml"),
+        ("examples/hf-hub-qa/run-inkling-judged.toml", "examples/hf-hub-qa/run-think-fullcot-judged.toml"),
+    ],
+)
+def test_inkling_8k_evals_use_the_project_profile(config, reference):
+    """The 8k runs serve Inkling-2-Mini with Qwen's thinking-profile output limit through a staged project profile
+    (the built-in keeps 4,096), with the eval settings of the run they are compared against."""
+    run = pipeline.make_run(load_run(Path(config)))
+    other = load_run(Path(reference)).eval
+    assert load_profile("students", "inkling-2-mini").serve.max_output_tokens == 4096
+    assert pipeline.student_profile(run).serve.max_output_tokens == 8192
+    staged = pipeline.profile_files(run)
+    assert (
+        staged["profiles/students/inkling-2-mini-8k.toml"].resolve().parent
+        == Path("examples/inkling-2-mini/students").resolve()
+    )
+    pipeline.check_hooks(run, pipeline.requires_files(run))
+    (job,) = pipeline.eval_jobs(run, "REV")
+    args = shlex.split(job.command.splitlines()[-2])
+    assert args[args.index("--student") + 1] == "inkling-2-mini-8k"
+    assert args[args.index("--model") + 1] == "thinkingmachines/Inkling-2-Mini"
+    for flag, value in (("--limit", other.limit), ("--concurrency", other.concurrency), ("--timeout", other.timeout),
+                        ("--max-tool-calls", other.max_tool_calls)):  # fmt: skip
+        assert float(args[args.index(flag) + 1]) == value

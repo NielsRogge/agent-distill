@@ -45,10 +45,25 @@ One managed Inference Endpoint serves both adapters as LoRA modules on the base 
 
 - `huggingface/qwen35-4b-think-hub-qa-race`
 - one NVIDIA L4 (aws us-east-1), $0.80/h while up
-- vLLM 0.33.0 (the profile's version), with the `eval` stage's serving arguments, except for one change:
-  `[endpoint] serve = { enforce_eager = false }` turns CUDA graphs on. Sampling is unchanged, and the student
-  decodes at 25.5 tok/s on the L4 instead of 13.9 (600-token completions, through the adapter).
+- vLLM 0.33.0 (the profile's version), with the `eval` stage's serving arguments plus two speed-ups that keep
+  the sampling distribution, set in `[endpoint] serve`:
+  - CUDA graphs (`enforce_eager = false`);
+  - speculative decoding with Qwen3.5's own MTP head (`--speculative-config {"method": "qwen3_5_mtp",
+    "num_speculative_tokens": 2}`). The adapter-carrying model verifies the drafts by rejection sampling.
+- prefix caching on (vLLM's default): 69% of prompt tokens hit the cache in agent episodes
 - at most one replica; scales to zero after 15 idle minutes
+
+Benchmark on the L4: student only, the first 5 test questions of each race (10 episodes per configuration), plus
+streamed 600-token completions through the adapter for generation speed:
+
+| Configuration | Mean episode | Median | Generation | Time to first token | Passed |
+|---|---|---|---|---|---|
+| eager (the `eval` stage's serving) | 52.2 s | 51.6 s | 13.7 tok/s | 0.66 s | 10/10 |
+| CUDA graphs | 37.6 s | 31.7 s | 25.2 tok/s | 0.53 s | 10/10 |
+| CUDA graphs + MTP (2 tokens), live | 18.9 s | 16.4 s | 44.6 tok/s | 0.54 s | 10/10 |
+
+The student samples at temperature 0.6, so episode lengths vary from run to run: the mean output was 631–773 tokens
+per episode across the three runs.
 
 The L4 is the smallest GPU with bf16 that fits a 4B model at the profile's 64k context (a T4 has no bf16).
 

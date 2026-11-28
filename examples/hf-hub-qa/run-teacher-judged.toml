@@ -1,0 +1,29 @@
+# GLM-5.3 teacher re-run on the 51 judged questions (judged.py), to measure Hub drift since the judged pilot
+# (run-judged-pilot.toml, published records 41/51) and to compare with base Inkling-2-Mini (run-inkling-judged.toml) on
+# the same day. The settings of run-inkling-judged.toml and the pilot: 600 s, 20 tool calls, 4 concurrent episodes.
+#
+#   distill run examples/hf-hub-qa/run-teacher-judged.toml --dry-run
+task = "judged.py"
+teacher = "glm-5.3"
+student = "qwen3.5-4b-nothink"  # unused by this run (teacher only)
+harness = "pi@1.6.0"
+name = "hf-hub-qa-judged-rerun-glm-53-pi-160"
+stages = ["eval"]
+
+[hub]
+namespace = "nielsr"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "nielsr/agent-distillation-6b0445568a39b1d979c52e31"
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+variants = ["teacher"]
+
+[budget]
+traces_usd = 7  # teacher spend cap (~$3 expected; the pilot spent $2.72)
+judge_usd = 1

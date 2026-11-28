@@ -1,0 +1,64 @@
+# LFM3-1.7B (LiquidAI/LFM3-1.7B, 1.73B dense hybrid: 13 gated short-convolution, 5 sliding-window and 6 global-attention
+# layers; 256K context), served as its model card and Liquid's vLLM guide recommend (docs.liquid.ai, Nov 2026):
+# - vLLM 0.34.0, the first release with native LFM3 support; `--trust-remote-code` for the checkpoint's config class
+#   (configuration_lfm3.py, a plain PreTrainedConfig). The revision is pinned, so the remote code and weights are the
+#   ones reviewed for this profile.
+# - Thinking on (the chat template's default, `enable_thinking=True`, which opens `<think>` in the generation prompt):
+#   Liquid's thinking guide names agentic tool use among the tasks it helps, and calls thinking off inconsistent. The
+#   `qwen3` reasoning parser moves the thought out of the visible content; Pi sends it back on later turns of the same
+#   task, and the template keeps every thought after the user's question (as for qwen3.5-4b-think).
+# - Tool calls are Qwen3-Coder XML (`<tool_call><function=...><parameter=...>`): the default `qwen3_coder` parser.
+# - The card's sampling for chat, tool use and agents: temperature 0.1, top-k 50, repetition penalty 1.1 (also the
+#   checkpoint's generation_config.json; stated here so the evaluation does not depend on vLLM reading it).
+# - 8,192 output tokens per turn, as qwen3.5-4b-think. 65,536 tokens of context (the library default) of the 256K.
+# - L4 (24 GB) is the smallest flavor that fits: the BF16 weights are 3.5 GB (T4 has no BF16).
+#
+# Training: `[sft]` carries the cross-format recipe (a) of qwen3.5-4b-think (CoT-proxy paper, variant without
+# CoT-proxies): an empty, unsupervised `<think></think>` before every training target (the pinned template renders
+# exactly that on history turns), the teacher's prose around tool calls stripped, and KL replay on LFM3-1.7B's own
+# out-of-domain generations (shared pool agent-distillation-hf/lfm3-17b-replay-openr1-oasst); thinking stays on at inference. The
+# trained LoRA adapter is served on the base model by vLLM 0.34 (Lfm3ForCausalLM implements SupportsLoRA), so no
+# merge stage. `[grpo]` keeps the Qwen defaults and is untested for LFM3.
+name = "lfm3-1.7b"
+model = "LiquidAI/LFM3-1.7B"
+revision = "1da06bec6a819da10b54c67e5c90972b46d81871"  # reviewed remote code; every stage loads this commit
+
+[serve]
+vllm_version = "0.34.0"
+flavor = "l4x1"
+timeout = "3h"
+reasoning_parser = "qwen3"
+tool_call_parser = "qwen3_coder"
+enforce_eager = false
+max_output_tokens = 8192
+generation_config = { temperature = 0.1, top_k = 50, repetition_penalty = 1.1 }
+vllm_extra_args = "--trust-remote-code"
+
+[lora]
+# r16 (the recipe's rank; vLLM's --max-lora-rank follows it). Every linear layer of the hybrid except two:
+# - attention (6 global + 5 sliding-window layers): q_proj, k_proj, v_proj, o_proj;
+# - gated short-convolution blocks (13 layers): in_proj (the B, C, x projections) and out_proj, the blocks' only
+#   dense weights;
+# - the SwiGLU MLP of every layer: w1, w3 (gate, up) and w2 (down).
+# Left out: the depthwise `conv.conv` kernels (Conv1d, kernel 7, groups = hidden size: 7 weights per channel, which
+# LoRA cannot factor usefully and vLLM does not map for adapters), and the attention output gate `self_attn.gate_proj`
+# (hidden -> 16 heads, smaller than the rank). Names are matched as module-name suffixes, so `gate_proj` must not be
+# listed (it would also miss the MLP, which LFM3 calls w1). vLLM packs q/k/v into qkv_proj and w1/w3 into w13 and
+# maps HF's `.conv.` to `.short_conv.` for adapters too (vllm/model_executor/models/lfm3.py, v0.34.0).
+rank = 16
+sft_target_modules = "q_proj,k_proj,v_proj,o_proj,in_proj,out_proj,w1,w2,w3"
+
+[sft]
+# transformers 5.23.0 is the first release with LFM3 (and the remote code at the pinned revision needs >= 5.15);
+# the SFT stage loads the checkpoint with trust_remote_code at `revision`, i.e. the reviewed Lfm3ForCausalLM. No
+# flash-linear-attention (no gated delta rule here); the short convolution uses its PyTorch path in training.
+deps = ["accelerate==1.14.0", "datasets>=4.0.0", "peft==0.20.0", "torch>=2.7.0", "transformers==5.23.0", "trl==1.9.2"]
+# One L4 (24 GB): 3.5 GB of bf16 weights, activations checkpointed per layer and logits only at supervised positions
+# (chunked KL), so a 32K-token trajectory fits. Measured in the smoke run before the full runs.
+flavor = "l4x1"
+timeout = "10h"
+# As qwen3.5-4b-think: the recipe's defaults (8 passes, lr 3e-5, LoRA r16, no dropout, 2 warmup updates) come from
+# stages.sft PAPER_DEFAULTS.
+args = ["--no-4bit", "--max-length", "32768", "--full-trajectory", "--save-steps", "50", "--think-target", "empty",
+        "--strip-visible-text"]
+replay = true
