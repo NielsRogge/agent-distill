@@ -1,0 +1,45 @@
+# hf-hub-qa (CLI): LFM3-1.7B trained with Recipe (a) of the CoT-proxy paper (`lfm3-1.7b` pinned revision and
+# profile settings: empty think target, stripped visible text, KL replay on LFM3's own replay pool) on the same
+# mixed pool as `run-think-mixed-inkling.toml`: 597 factoid GLM-5.3 traces + Inkling-2-Mini open-ended traces
+# (`--max-tool-calls 12`). Uses `l40sx1` for SFT so the ~800-trace 8-pass run finishes well within timeout (~3.5 h
+# vs ~10+ h on `l4x1`) at comparable cost; eval uses `l4x1` from `lfm3-1.7b.toml`.
+#
+#   distill run examples/hf-hub-qa/run-lfm3-think-mixed-inkling.toml --dry-run
+task = "."
+teacher = "inkling-2-mini-8k"
+student = "lfm3-1.7b"
+harness = "pi@1.6.0"
+name = "cursor-lfm3-17b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160"
+stages = ["sft", "eval"]
+profiles = ["../inkling-2-mini"]
+
+[repos]
+traces = "agent-distillation-hf/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's 600 accepted factoid traces
+replay = "agent-distillation-hf/lfm3-17b-replay-openr1-oasst"  # shared by every LFM3-1.7B (thinking) run
+
+[hub]
+namespace = "agent-distillation-hf"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "agent-distillation-hf/hub-qa-lfm3-6b0a9eca04b0c6fbf2d136bd"  # Hub QA · LFM3 (family)
+raw_logs = false
+
+[sft]
+args = [
+  "--traces-repo", "agent-distillation-hf/cursor-inkling-2-mini-8k-hf-hub-qa-open-ended-pi-160-traces",
+  "--max-tool-calls", "12",
+]
+flavor = "l40sx1"
+timeout = "6h"  # 8 passes over ~800 mixed traces on L40S (~3-3.5 h expected; ~$6)
+
+[eval]
+splits = ["test"]
+limit = 377  # all v2 test questions
+concurrency = 4  # anonymous Hub API rate limits
+timeout = 300
+max_tool_calls = 15
+variants = ["sft"]
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 12  # worst case: 6h on l40sx1 ($10.80) for SFT; 3h on l4x1 ($2.40) for eval

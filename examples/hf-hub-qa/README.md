@@ -180,10 +180,12 @@ Phase 2 reran non-thinking SFT on the 600 Phase 1 traces after #19 (tools exactl
 | Recipe (a) (`run-think.toml` adapter, same settings) | 33/51 (64.7%) | 8 | ~$3 GPU + <$1 judge |
 | Mixed Recipe (a) + strict-grounding prompt (`run-think-mixed-judged-grounded.toml`) | 32/51 (62.7%) | 5 | ~$2.5 GPU + <$1 judge |
 | Qwen3.5-4B Base (`think`) | 31/51 (60.8%) | 4 | ~$2.5 GPU + <$1 judge |
-| Recipe (a), mixed (`run-think-mixed-judged.toml`) | 29/51 (56.9%) | 6 | ~$2.2 GPU + <$1 judge |
+| Recipe (a), mixed GLM-5.3 (`run-think-mixed-judged.toml`) | 29/51 (56.9%) | 6 | ~$2.2 GPU + <$1 judge |
+| **Recipe (a), mixed Inkling-2-Mini (`run-think-mixed-inkling-judged.toml`)** | **28/51 (54.9%)** | **8** | **$2.52 GPU + <$1 judge** |
 | Full-CoT SFT (`run-think-fullcot-judged.toml`) | 26/51 (51.0%) | 8 | <$1 judge |
 | Inkling-2-Mini base, 8,192 output tokens (`run-inkling-judged.toml`) | **49/51 (96.1%)** | 5 | ~$1.6 GPU + <$1 judge |
 | LFM3-1.7B base, thinking (`run-lfm3-judged.toml`) | 20/51 (39.2%) | 4 | $0.87 GPU + judge |
+| **LFM3-1.7B recipe (a), mixed Inkling-2-Mini (`run-lfm3-think-mixed-inkling-judged.toml`)** | **20/51 (39.2%)** | **3** | **$0.38 GPU + <$1 judge** |
 | LFM3-1.7B recipe (a) (`run-lfm3-think-judged.toml`, the CLI adapter) | 12/51 (23.5%) | 4 | $0.40 GPU + judge |
 
 The teacher pilot's published records (`agent-distillation-hf/hf-hub-qa-pilot-glm-53-pi-160-eval`, one record per question) score 41/51, not the 43/51 reported for the pilot; paired against them, recipe (a) is 4 ahead / 12 behind (`p = 0.08`). Recipe (a) hit the 20-call limit 9 times, full-CoT 11 times. Evaluation: [`…-think-cfx-a-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/qwen35-4b-think-cfx-a-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
@@ -263,6 +265,102 @@ judge. The question is whether LFM3's factual score (85–88% base, 97.1% after 
 
 Evaluations: [`lfm3-17b-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-hf-hub-qa-judged-glm-53-pi-160-eval) and [`lfm3-17b-think-sft-…-judged-…-eval`](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-think-sft-hf-hub-qa-judged-glm-53-pi-160-eval). <!-- pragma: allowlist secret -->
 
+### Inkling-2-Mini as open-ended teacher (`run-inkling-open-ended-traces.toml`, `run-think-mixed-inkling.toml`, `run-lfm3-think-mixed-inkling.toml`)
+
+Untrained Inkling-2-Mini (8k profile) passes **49/51** on `judged.py` and avoids the call-limit, correctness, and unseen-ID misses that trip up Qwen3.5-4B and LFM3-1.7B. Because recipe (a) leaves the think block empty and strips prose around tool calls, a cross-family teacher's actions and final answers can drop straight into the SFT mix. To test whether Inkling-2-Mini's open-ended traces make better training data than GLM-5.3's (#30), we added self-served vLLM teacher support to `agent_distill.stages.traces` (`examples/inkling-2-mini/teachers/inkling-2-mini-8k.toml`), generated open-ended traces on the 240 disjoint training questions of `open_ended.py` (`timeout=600`, `max_tool_calls=20`, Gemini 4 Hydrogen judge, `pi@1.6.0`), curated to `<= 12` tool calls, and trained both **Qwen3.5-4B** (`run-think-mixed-inkling.toml`) and **LFM3-1.7B** (`run-lfm3-think-mixed-inkling.toml`) with recipe (a) on the exact same 597 factual GLM-5.3 traces plus Inkling's curated open-ended traces.
+
+#### 1. Trace generation & curation (Inkling-2-Mini vs. GLM-5.3)
+
+| Trace teacher (`open_ended.py`, 240 rows) | Accepted | Attempt-1 pass | Total episodes | Curated (`<= 12` calls) | Curated calls mean (med) | Curated answer words mean (med) | Median novel-token ratio ¹ | Curated `read_skill` | Curated `hf_errors` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Inkling-2-Mini (8k, self-served)** | **231/240 (96.2%)** | **215/240 (89.6%)** | **265** | **203/231 (87.9%)** | **5.64 (5)** | **271.2 (237)** | **0.519** | **196/203 (96.6%)** | **0.06** |
+| GLM-5.3 (#30, API) | 238/240 (99.2%) | 213/240 (88.8%) | 267 | 205/238 (86.1%) | 5.12 (4) | 268.2 (260) | 0.556 | 198/205 (96.6%) | 0.03 |
+| GLM-5.3 grounded rewrite (F2, #33) | — | — | — | 194/205 (94.6%) | 5.00 (4) | 216.8 (191.5) | 0.356 | 188/194 (96.9%) | 0.03 |
+
+¹ Fraction of `>= 4`-character alphanumeric tokens in the final answer that do not appear anywhere in the episode's tool outputs (proxy for parametric elaboration beyond tool results).
+
+- **Acceptance & failure modes:** Inkling accepted **231/240 (96.2%)** with a slightly higher attempt-1 pass rate than GLM-5.3 (`89.6%` vs `88.8%`), 0 reasoning leaks, and 0 cut-short episodes; 9 questions failed both attempts (vs. 2 for GLM-5.3). Across Inkling's 34 failed episodes (any reason; episodes can trigger more than one), **23** failed the strict `grounded` gate, **6** missed `answer_quality` on `correctness`, **6** hit the 20-call limit, and **1** missed `clarity` — matching GLM-5.3's 29 failed episodes (`grounded` 22, `correctness` 4, `call limit` 3, `read_only` 1).
+- **Training mix:** `<= 12` tool calls keeps **203** Inkling open-ended traces, giving an **800-trace** mixed pool (597 factual GLM-5.3 + 203 Inkling open-ended, 74.6% / 25.4%) vs. #30's 802 traces (597 + 205). Both students trained for 377 updates (8 passes, `lr=3e-5`, LoRA `r=16`, KL replay): Qwen3.5-4B held-out drift **`3.17e-3` nats/token** (vs. #30's `3.18e-3`); LFM3-1.7B held-out drift **`3.03e-3` nats/token** (run on `l40sx1` for SFT, `l4x1` for eval).
+
+#### 2. Benchmark results (first record per question)
+
+| Model | Open-ended (51) | Factual `test[:150]` | Factual full `test` (377) | Factual `fact_correct` | Open-ended calls mean (med) | Open-ended `read_skill` | Factual calls mean (med) | Factual `hf_errors` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Inkling-2-Mini base (8k) | **49/51 (96.1%)** | — | 363/377 (96.3%) | 363/376 (96.5%) | 6.73 (5) | 50/51 (98.0%) | 5.81 (5) | 0.24 |
+| GLM-5.3 teacher (same-day rerun / test) | 43/51 (84.3%) | 148/150 (98.7%) | 375/377 (99.5%) | 377/377 (100.0%) | 5.86 (5) | 49/51 (96.1%) | 4.27 (4) | 0.10 |
+| Qwen3.5-4B base, thinking | 31/51 (60.8%) | 130/150 (86.7%) | — | — | 6.86 (4) | 0/51 (0.0%) | 6.09 ¹ | 1.53 ¹ |
+| Qwen3.5-4B recipe (a) (600 factual) | 33/51 (64.7%) | 145/150 (96.7%) | — | — | 10.39 (8) | 50/51 (98.0%) | 4.45 ¹ | 0.23 ¹ |
+| Qwen3.5-4B mixed GLM-5.3 (#30) | 29/51 (56.9%) | 145/150 (96.7%) | 365/377 (96.8%) | 370/376 (98.4%) | 8.94 (6) | 51/51 (100.0%) | 4.64 (4) | 0.34 |
+| Qwen3.5-4B mixed grounded GLM-5.3 (F2, #33) | 36/51 (70.6%) | — | 366/377 (97.1%) | 372/376 (98.9%) | 9.82 (7) | 51/51 (100.0%) | 4.49 (4) | 0.33 |
+| **Qwen3.5-4B mixed Inkling-2-Mini** | **28/51 (54.9%)** | **144/150 (96.0%)** | **364/377 (96.6%)** | **367/376 (97.6%)** | **9.84 (8)** | **51/51 (100.0%)** | **5.26 (5)** | **0.58** |
+| LFM3-1.7B base, thinking | 20/51 (39.2%) | 132/150 (88.0%) | 330/377 (87.5%) | 331/376 (88.0%) | 6.12 (4) | 21/51 (41.2%) | 6.14 (5) | 2.19 |
+| LFM3-1.7B recipe (a) (600 factual, #36) | 12/51 (23.5%) | — | 366/377 (97.1%) | 367/376 (97.6%) | 6.12 (4) | 42/51 (82.4%) | 4.06 (3) | 0.38 |
+| **LFM3-1.7B mixed Inkling-2-Mini** | **20/51 (39.2%)** | **138/150 (92.0%)** | **352/377 (93.4%)** | **359/377 (95.2%)** | **5.98 (3)** | **48/51 (94.1%)** | **4.25 (3)** | **0.23** |
+
+¹ On `test[:150]`.
+
+#### 3. Exact paired McNemar tests (student only / other only, two-sided `p`)
+
+**Qwen3.5-4B mixed Inkling-2-Mini** (`28/51` open-ended, `364/377` factual, `144/150` on `test[:150]`):
+
+| Compared against | Open-ended (51): only student / only other, `p` | Factual: only student / only other, `p` (split) |
+| --- | --- | --- |
+| Qwen3.5-4B base, thinking | 9 / 12, `p = 0.66` (28 vs. 31) | **18 / 4, `p = 0.0043`** (144 vs. 130, `test[:150]`) |
+| Qwen3.5-4B recipe (a) | 7 / 12, `p = 0.36` (28 vs. 33) | 3 / 4, `p = 1.0` (144 vs. 145, `test[:150]`) |
+| Qwen3.5-4B mixed GLM-5.3 (#30) | 8 / 9, `p = 1.0` (28 vs. 29) | 9 / 10, `p = 1.0` (364 vs. 365, full 377) |
+| Qwen3.5-4B mixed grounded (F2, #33) | 3 / 11, `p = 0.057` (28 vs. 36) | 8 / 10, `p = 0.82` (364 vs. 366, full 377) |
+| Inkling-2-Mini base (8k) | **2 / 23, `p = 1.9e-5`** (28 vs. 49) | 11 / 10, `p = 1.0` (364 vs. 363, full 377) |
+| GLM-5.3 teacher (same-day rerun / test) | **5 / 20, `p = 0.0041`** (28 vs. 43) | **2 / 13, `p = 0.0074`** (364 vs. 375, full 377) |
+
+**LFM3-1.7B mixed Inkling-2-Mini** (`20/51` open-ended, `352/377` factual):
+
+| Compared against | Open-ended (51): only student / only other, `p` | Factual (full 377): only student / only other, `p` |
+| --- | --- | --- |
+| LFM3-1.7B base, thinking | 8 / 8, `p = 1.0` (20 vs. 20) | **42 / 20, `p = 0.0072`** (352 vs. 330) |
+| LFM3-1.7B recipe (a) (#36) | **10 / 2, `p = 0.039`** (20 vs. 12) | **6 / 20, `p = 0.0094`** (352 vs. 366) |
+| Inkling-2-Mini base (8k) | **0 / 29, `p = 3.7e-9`** (20 vs. 49) | 12 / 23, `p = 0.090` (352 vs. 363) |
+| GLM-5.3 teacher (same-day rerun / test) | **2 / 25, `p = 5.7e-6`** (20 vs. 43) | **1 / 24, `p = 1.6e-6`** (352 vs. 375) |
+
+#### 4. Open-ended (51) failure breakdown (any reason; episodes can fail multiple bars)
+
+| Model | Failed | Judge correctness | Grounded gate (`unseen/ids`) | Reference miss (`pass/n`) | Call limit (20) | Timeout (600 s) | Output limit | Calls mean (med) | Read skill |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Qwen3.5-4B mixed Inkling** | **23** | **14** | **3** (`4/484`) | **0** (`18/18`) | **8** | **0** | **0** | **9.84 (8)** | **51/51 (100%)** |
+| Qwen3.5-4B mixed GLM-5.3 (#30) | 22 | 12 | 6 (`8/571`) | 0 (`18/18`) | 6 | 0 | 0 | 8.94 (6) | 51/51 (100%) |
+| Qwen3.5-4B mixed grounded (F2) | 15 | 7 | 2 (`2/528`) | 1 (`18/19`) | 8 | 0 | 0 | 9.82 (7) | 51/51 (100%) |
+| Qwen3.5-4B recipe (a) | 18 | 8 | 1 (`1/433`) | 2 (`16/18`) | 8 | 0 | 0 | 10.39 (8) | 50/51 (98%) |
+| Qwen3.5-4B base, thinking | 20 | 12 ¹ | 1 (`1/374`) | 4 (`13/17`) | 5 | 0 | 0 | 6.86 (4) | 0/51 (0%) |
+| **LFM3-1.7B mixed Inkling** | **31** | **23** | **12** (`33/426`) | **2** (`16/18`) | **2** | **0** | **5** | **5.98 (3)** | **48/51 (94%)** |
+| LFM3-1.7B recipe (a) (#36) | 39 | 35 ² | 14 (`22/442`) | 7 (`11/18`) | 1 | 0 | 0 | 6.12 (4) | 42/51 (82%) |
+| LFM3-1.7B base, thinking | 31 | 21 ³ | 9 (`19/414`) | 6 (`13/19`) | 1 | 0 | 1 | 6.12 (4) | 21/51 (41%) |
+| Inkling-2-Mini base (8k) | 2 | 1 | 1 (`2/576`) | 0 (`19/19`) | 0 | 0 | 0 | 6.73 (5) | 50/51 (98%) |
+| GLM-5.3 teacher rerun | 8 | 3 | 5 (`5/653`) | 1 (`18/19`) | 0 | 0 | 0 | 5.86 (5) | 49/51 (96%) |
+
+¹ Plus 1 `relevance` quality miss. ² Plus 1 `relevance` quality miss. ³ Plus 2 `completeness` and 2 `relevance` quality misses. All runs had 0 reasoning leaks.
+
+#### 5. Interpretation
+
+- **The hypothesis is rejected for Qwen3.5-4B — swapping GLM-5.3 for Inkling-2-Mini did not close the open-ended gap.** On the direct apples-to-apples comparison (same 597 factual traces, same recipe (a), same replay pool, ~203 vs. 205 open-ended traces), Qwen3.5-4B mixed-Inkling scores **28/51 (54.9%)** vs. GLM-mixed's **29/51 (56.9%)** (`8/9`, `p = 1.0`), and still trails Inkling base (`49/51`, `p = 1.9e-5`) and the GLM-5.3 rerun (`43/51`, `p = 0.0041`) significantly. Its factual accuracy held completely: **364/377 (96.6%)** vs. GLM-mixed's `365/377` (`9/10`, `p = 1.0`), tying Inkling base (`363/377`, `p = 1.0`) and beating Qwen thinking base on `test[:150]` (`144` vs. `130`, `p = 0.0043`).
+- **Why Inkling's traces behaved like GLM-5.3's despite Inkling scoring 49/51 itself:** inspecting the curated trace pools reveals that Inkling-2-Mini's 203 open-ended traces have virtually the same surface elaboration as GLM-5.3's 205 traces — **271 words mean / 237 median** vs. **268 / 260**, and a median novel-token ratio (answer tokens absent from tool outputs) of **0.519** vs. **0.556**. Contrast F2's strictly tool-grounded rewrite (#33), which cut answer length to **217 / 191.5** words and novel-token ratio to **0.356**, lifting Qwen3.5-4B to **36/51** (`3/11`, `p = 0.057` vs. mixed-Inkling). Untrained Inkling-2-Mini passes 49/51 because *its own* parametric background knowledge is accurate, not because its final answers stick strictly to tool outputs. When a 4B student imitates that style under recipe (a), it still suffers **14** judge-correctness misses (vs. 12 on GLM-mixed and 7 on F2) and **8** call-limit hits (mirroring Inkling's slightly higher mean tool calls, `5.64` vs. `5.12`), even though unseen-ID grounding tightened (`3` vs. `6` failures, `4/484` vs. `8/571` unseen IDs) and live `reference` recall stayed `18/18 (100%)`.
+- **For LFM3-1.7B, the mixed pool significantly reversed the open-ended collapse of factoid-only SFT, but introduced a significant factual trade-off:**
+  - **Open-ended:** **20/51 (39.2%)** beats factoid-only LFM3 recipe (a) (`12/51`) by **+8 questions (`10/2`, `p = 0.039`, statistically significant even at `n = 51`)**, fully restoring base LFM3's score (`20/51`, `8/8`, `p = 1.0`), lifting `read_skill` to `94.1%` and `reference` recall to `16/18`, and cutting correctness misses from `35 → 23` and reference misses from `7 → 2`. However, 5 episodes hit the output token limit (vs. 0 on recipe (a) and 1 on base), and 12 still failed the grounded gate (`33/426` unseen IDs).
+  - **Factual:** **352/377 (93.4%)** remains significantly above LFM3 base (`330/377`, `42/20`, `p = 0.0072`) with `hf_errors` cut from `2.19 → 0.23`, **but drops significantly below factoid-only LFM3 recipe (a)** (`366/377`, `6/20`, `p = 0.0094`) due to more call-limit hits (`1 → 8`) and grounded misses (`1 → 7`), notably on `gguf_count` (`36 → 32`) and `base_params` (`81 → 78`).
+  - **Attribution:** because LFM3 has no GLM-mixed control, LFM3's +8 open-ended recovery is attributable to **mixing open-ended traces into the 1.7B training pool**, not to Inkling specifically as a teacher (given that Qwen's controlled Inkling vs. GLM-5.3 comparison was a dead heat, `p = 1.0`).
+- **Statistical power at `n = 51`:** at 51 questions, only large gaps (`>= 8–10` net discordant pairs) reach `p < 0.05`. The significant findings here are: (1) both new students remain far behind Inkling base (`p <= 1.9e-5`) and the GLM-5.3 rerun (`p <= 0.0041`); (2) LFM3 mixed-Inkling significantly recovers open-ended performance over LFM3 recipe (a) (`10/2`, `p = 0.039`); and (3) on factual `test` (`n = 377`), LFM3 mixed-Inkling beats base (`p = 0.0072`) while trailing factoid-only recipe (a) (`p = 0.0094`). Differences among Qwen base (`31`), recipe (a) (`33`), mixed-GLM (`29`), and mixed-Inkling (`28`) are all within noise (`p >= 0.36`); even F2's +8 lead over mixed-Inkling (`36` vs. `28`, `3/11`, `p = 0.057`) is borderline at `n = 51`.
+
+#### 6. Spend & published artifacts
+
+Total spend: **$35.07 GPU** (exact job runtime × HF Jobs rates) + **~$2.70 Gemini 4 Hydrogen judge** (~356 judged episodes across smokes, traces, and evals) ≈ **$37.80 total** (within the $60 cap; **$0** GLM-5.3 spend):
+
+- **Inkling open-ended traces (`rtx-pro-6000`, $2.75/h):** smoke 7.7 min ($0.35) + shard 0 61.5 min ($2.82) + shard 1 53.4 min ($2.45) = **$5.62 GPU** (+ ~$1.95 judge).
+- **Qwen3.5-4B mixed-Inkling (`h200`, $5.00/h):** SFT smoke 7.4 min ($0.62) + full SFT 133.3 min ($11.10) + eval smoke 5.0 min ($0.41) + 377-factual eval 92.5 min ($7.71) + 51-judged eval 30.2 min ($2.52) = **$22.37 GPU** (+ ~$0.35 judge).
+- **LFM3-1.7B mixed-Inkling (`l40sx1` $1.80/h SFT, `l4x1` $0.80/h eval):** SFT smoke 3.0 min ($0.09) + full SFT 198.0 min ($5.94) + eval smoke 5.6 min ($0.07) + 377-factual eval 44.4 min ($0.59) + 51-judged eval 28.9 min ($0.39) = **$7.08 GPU** (+ ~$0.38 judge).
+
+Published artifacts (all public, scanned with `distill publish`, sessions verified in Data Studio):
+- **Hub QA · Inkling-2-Mini:** open-ended traces [`cursor-inkling-2-mini-8k-hf-hub-qa-open-ended-pi-160-traces`](https://huggingface.co/datasets/agent-distillation-hf/cursor-inkling-2-mini-8k-hf-hub-qa-open-ended-pi-160-traces) <!-- pragma: allowlist secret -->
+- **Hub QA · Qwen3.5:** adapter [`cursor-qwen35-4b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160-lora`](https://huggingface.co/agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160-lora), factual eval [`cursor-qwen35-4b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160-eval`](https://huggingface.co/datasets/agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160-eval), judged eval [`cursor-qwen35-4b-think-cfx-a-mixed-inkling-hf-hub-qa-judged-pi-160-eval`](https://huggingface.co/datasets/agent-distillation-hf/cursor-qwen35-4b-think-cfx-a-mixed-inkling-hf-hub-qa-judged-pi-160-eval) <!-- pragma: allowlist secret -->
+- **Hub QA · LFM3:** adapter [`cursor-lfm3-17b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160-lora`](https://huggingface.co/agent-distillation-hf/cursor-lfm3-17b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160-lora), factual eval [`cursor-lfm3-17b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160-eval`](https://huggingface.co/datasets/agent-distillation-hf/cursor-lfm3-17b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160-eval), judged eval [`cursor-lfm3-17b-think-cfx-a-mixed-inkling-hf-hub-qa-judged-pi-160-eval`](https://huggingface.co/datasets/agent-distillation-hf/cursor-lfm3-17b-think-cfx-a-mixed-inkling-hf-hub-qa-judged-pi-160-eval) <!-- pragma: allowlist secret -->
+
 ## Running it
 
 ```bash
@@ -298,6 +396,15 @@ uv run --extra hub python examples/hf-hub-qa/open_ended_questions.py --check
 uv run distill run examples/hf-hub-qa/run-think-open-ended-traces.toml --dry-run
 uv run distill run examples/hf-hub-qa/run-think-mixed.toml --dry-run
 uv run distill run examples/hf-hub-qa/run-think-mixed-judged.toml --dry-run
+
+# Mixed factual + open-ended SFT with Inkling-2-Mini as self-served open-ended teacher
+uv run distill run examples/hf-hub-qa/run-inkling-open-ended-traces.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-think-mixed-inkling.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-think-mixed-inkling-judged.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-lfm3-think-mixed-inkling.toml --dry-run
+uv run distill run examples/hf-hub-qa/run-lfm3-think-mixed-inkling-judged.toml --dry-run
+uv run --extra hub python examples/hf-hub-qa/analyze_inkling_judged.py --model qwen3.5-4b-mixed-inkling
+uv run --extra hub python examples/hf-hub-qa/analyze_inkling_judged.py --model lfm3-1.7b-mixed-inkling
 
 # Follow-up 1: prompt-only strict-grounding ablation on the mixed SFT adapter
 uv run distill run examples/hf-hub-qa/run-think-mixed-judged-grounded.toml --dry-run

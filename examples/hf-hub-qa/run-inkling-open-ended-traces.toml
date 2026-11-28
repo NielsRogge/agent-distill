@@ -1,0 +1,32 @@
+# Collect accepted Inkling-2-Mini (8k profile, thinking on, self-served on RTX PRO 6000) traces on the 240
+# open-ended Hub training questions (`open_ended.py`, `agent-distillation-hf/hf-hub-questions-train`), strictly
+# disjoint from the 51 judged eval questions (`judged.py`). Same limits and rubrics (including Gemini 4 Hydrogen
+# judge) as `run-inkling-judged.toml` and `run-think-open-ended-traces.toml`.
+#
+#   distill run examples/hf-hub-qa/run-inkling-open-ended-traces.toml --dry-run
+task = "open_ended.py"
+teacher = "inkling-2-mini-8k"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-inkling-2-mini-8k-hf-hub-qa-open-ended-pi-160"
+stages = ["traces"]
+profiles = ["../inkling-2-mini"]
+
+[hub]
+namespace = "agent-distillation-hf"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "agent-distillation-hf/hub-qa-inkling-2-mini-6b0a9ec95a43b05307ad5884"  # Hub QA · Inkling-2-Mini (family)
+raw_logs = false
+
+[traces]
+split = "train"
+limit = 240
+attempts = 2
+shards = 2  # 120 questions per shard on RTX PRO 6000 (~1.1 h/shard expected)
+concurrency = 4
+timeout = "3h"
+
+[budget]
+traces_usd = 0
+judge_usd = 5   # ~260 Gemini 4 Hydrogen calls (~$2 expected; $2.50/shard cap)
+gpu_usd = 18    # worst case 2 x 3h x $2.75 = $16.50; expected ~$6.20

@@ -1,0 +1,46 @@
+# hf-hub-qa (CLI): mixed factual + Inkling-2-Mini open-ended SFT with Recipe (a) of the CoT-proxy paper
+# (`qwen3.5-4b-think`: empty think target, stripped visible text around tool calls, KL replay; thinking on at
+# inference). Mirrors `run-think-mixed.toml` exactly, replacing GLM-5.3's open-ended traces with Inkling-2-Mini's
+# curated open-ended traces (`--max-tool-calls 12`) alongside the same 597 factual GLM-5.3 traces.
+#
+# Evaluated on all 377 test questions of `agent-distillation-hf/hf-hub-facts-v2`; evaluated on the 51 judged
+# questions in `run-think-mixed-inkling-judged.toml`.
+#
+#   distill run examples/hf-hub-qa/run-think-mixed-inkling.toml --dry-run
+task = "."
+teacher = "inkling-2-mini-8k"
+student = "qwen3.5-4b-think"
+harness = "pi@1.6.0"
+name = "cursor-qwen35-4b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160"
+stages = ["sft", "eval"]
+profiles = ["../inkling-2-mini"]
+
+[repos]
+traces = "agent-distillation-hf/qwen35-4b-hf-hub-qa-v2-glm-53-pi-160-traces"  # run.toml's 600 accepted factoid traces
+replay = "agent-distillation-hf/qwen35-4b-think-replay-openr1-oasst"  # shared by every Qwen3.5-4B (thinking) run
+
+[hub]
+namespace = "agent-distillation-hf"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"  # Hub QA · Qwen3.5 (family)
+raw_logs = false
+
+[sft]
+args = [
+  "--traces-repo", "agent-distillation-hf/cursor-inkling-2-mini-8k-hf-hub-qa-open-ended-pi-160-traces",
+  "--max-tool-calls", "12",
+]
+timeout = "210m"  # 8 passes over ~800 mixed traces: ~2 h on one H200
+
+[eval]
+splits = ["test"]
+limit = 377  # all v2 test questions
+concurrency = 4  # anonymous Hub API rate limits
+timeout = 300
+max_tool_calls = 15
+variants = ["sft"]
+
+[budget]
+traces_usd = 0
+judge_usd = 0
+gpu_usd = 20  # per stage, worst case on one H200; expected ~$10.5 SFT + ~$7.5 eval

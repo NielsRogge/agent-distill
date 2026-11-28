@@ -1,0 +1,33 @@
+# The 51 open-ended judged questions (`judged.py`) for `run-lfm3-think-mixed-inkling.toml`'s adapter: LFM3-1.7B
+# Recipe (a) + KL replay trained on 597 factoid GLM-5.3 traces + Inkling-2-Mini open-ended traces (`<= 12` calls).
+# Same settings as `run-lfm3-think-judged.toml` and `run-inkling-judged.toml` (600 s, 20 tool calls, 4 concurrent).
+#
+#   distill run examples/hf-hub-qa/run-lfm3-think-mixed-inkling-judged.toml --dry-run
+task = "judged.py"
+teacher = "inkling-2-mini-8k"
+student = "lfm3-1.7b"
+harness = "pi@1.6.0"
+name = "cursor-lfm3-17b-think-cfx-a-mixed-inkling-hf-hub-qa-judged-pi-160"
+stages = ["eval"]
+profiles = ["../inkling-2-mini"]
+
+[hub]
+namespace = "agent-distillation-hf"
+bill_to = "huggingface"  # pragma: allowlist secret
+collection = "agent-distillation-hf/hub-qa-lfm3-6b0a9eca04b0c6fbf2d136bd"  # Hub QA · LFM3 (family)
+raw_logs = false
+
+[eval]
+splits = ["seed"]
+limit = 51
+concurrency = 4
+timeout = 600
+max_tool_calls = 20
+
+[eval.models]
+sft = "LiquidAI/LFM3-1.7B+agent-distillation-hf/cursor-lfm3-17b-think-cfx-a-mixed-inkling-hf-hub-qa-v2-pi-160-lora"
+
+[budget]
+traces_usd = 0
+judge_usd = 5
+gpu_usd = 5  # worst case: 3h on l4x1 ($2.40); expected ~$0.40

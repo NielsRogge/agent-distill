@@ -37,6 +37,14 @@ MODELS = {
     "inkling-2-mini-8k": (f"inkling-2-mini-8k-{JUDGED}", BASE),
     "lfm3-1.7b": (f"lfm3-17b-{JUDGED}", BASE),  # run-lfm3-judged.toml
     "lfm3-1.7b-recipe-a": (f"lfm3-17b-think-sft-{JUDGED}", SFT),  # run-lfm3-think-judged.toml
+    "qwen3.5-4b-mixed-inkling": (
+        "cursor-qwen35-4b-think-cfx-a-mixed-inkling-hf-hub-qa-judged-pi-160-eval",
+        SFT,
+    ),  # run-think-mixed-inkling-judged.toml
+    "lfm3-1.7b-mixed-inkling": (
+        "cursor-lfm3-17b-think-cfx-a-mixed-inkling-hf-hub-qa-judged-pi-160-eval",
+        SFT,
+    ),  # run-lfm3-think-mixed-inkling-judged.toml
 }
 QUALITY_PASS = (7 - 1) / (10 - 1)  # judged_rubrics: PASS_SCORE 7 on the 1-10 scale
 REFERENCE_PASS = 2 / 3
@@ -113,7 +121,9 @@ def describe(records: dict[str, dict[str, Any]], categories: dict[str, str]) -> 
         "per_category": {k: f"{v[0]}/{v[1]}" for k, v in sorted(per_category.items(), key=lambda kv: -kv[1][1])},
         "failures_primary": dict(primary.most_common()),
         "failures_any": dict(every.most_common()),
+        "tool_calls_mean": round(statistics.mean(r.get("tool_calls") or 0 for r in values), 2),
         "tool_calls_median": statistics.median(r.get("tool_calls") or 0 for r in values),
+        "read_skill": sum(1 for r in values if (r.get("scores") or {}).get("read_skill", 0) >= 1),
         "wall_seconds_mean": round(statistics.mean(r.get("elapsed_seconds") or 0 for r in values), 1),
         "think_words_per_turn_median": statistics.median(words) if words else 0,
         "reasoning_leaks": sum(bool((r.get("metadata") or {}).get("reasoning_leak")) for r in values),
