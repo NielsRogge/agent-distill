@@ -22,17 +22,28 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import shlex
+import subprocess
 from pathlib import Path
 from typing import Any
 
 from agent_distill.config import load_profile
-from agent_distill.harnesses.base import default_cache, load_harness, teacher_endpoint
+from agent_distill.harnesses.base import Endpoint, default_cache, load_harness, teacher_endpoint
 from agent_distill.reasoning import LeakGuard
 from agent_distill.records import RecordWriter, raw_root_for, read_jsonl, summarize_records
 from agent_distill.rubrics import ErrorBudget
 from agent_distill.rubrics.judge import make_judge_runner
 from agent_distill.stages.common import Plan, progress, resume_from_hub, run_episodes, shard
-from agent_distill.stages.eval import checkpoint, publish, refuse_public, select_rows
+from agent_distill.stages.eval import (
+    VLLM_PORT,
+    checkpoint,
+    publish,
+    refuse_public,
+    select_rows,
+    stop_process,
+    vllm_command,
+    wait_for_vllm,
+)
 from agent_distill.task import Limits, load_task
 
 
@@ -80,6 +91,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Stop once more than this share of episodes (after 20) leaked reasoning (</think>) into "
                              "their visible content; negative: never stop, only warn and count")  # fmt: skip
     parser.add_argument("--cache", type=Path, default=None, help="Binary cache (default: the per-user cache)")
+    parser.add_argument("--vllm-binary", default="vllm", help="vLLM binary for self-served teacher profiles ([serve])")
+    parser.add_argument("--no-serve", action="store_true",
+                        help="Use an already running vLLM on port 8000 for a self-served teacher profile")  # fmt: skip
     return parser.parse_args(argv)
 
 
@@ -133,13 +147,35 @@ def main(argv: list[str] | None = None) -> None:
         ),
         extra={"split": args.split, "teacher": teacher.name},
     )
-    endpoint = teacher_endpoint(teacher, profile, args.bill_to)
-    print(
-        f"{len(rows)} rows of {task.dataset.repo}:{args.split}; teacher {teacher.routed_model}; harness "
-        f"{profile.id}; billed to {args.bill_to or 'the token owner'}",
-        flush=True,
-    )
+    server = None
+    if teacher.serve is not None:
+        serve = teacher.serve
+        endpoint = Endpoint(
+            f"http://127.0.0.1:{VLLM_PORT}/v1",
+            teacher.model,
+            name=args.label,
+            context=serve.max_model_len,
+            max_output_tokens=serve.max_output_tokens,
+        )
+        print(
+            f"{len(rows)} rows of {task.dataset.repo}:{args.split}; self-served teacher {teacher.model}; "
+            f"harness {profile.id}",
+            flush=True,
+        )
+        if not args.no_serve:
+            command = vllm_command(teacher, teacher.model, "", args.vllm_binary)
+            print(f"starting vLLM: {shlex.join(command)}", flush=True)
+            server = subprocess.Popen(command, start_new_session=True)
+    else:
+        endpoint = teacher_endpoint(teacher, profile, args.bill_to)
+        print(
+            f"{len(rows)} rows of {task.dataset.repo}:{args.split}; teacher {teacher.routed_model}; harness "
+            f"{profile.id}; billed to {args.bill_to or 'the token owner'}",
+            flush=True,
+        )
     try:
+        if server is not None:
+            wait_for_vllm(server)
         asyncio.run(
             run_episodes(
                 harness,
@@ -167,6 +203,8 @@ def main(argv: list[str] | None = None) -> None:
             )
         )
     finally:
+        if server is not None:
+            stop_process(server)
         finish(args, task, teacher, profile, rows, limits, writer, prefix, raw_dir, raw_repo)
 
 

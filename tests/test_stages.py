@@ -317,3 +317,84 @@ def test_an_episode_stage_refuses_to_start_without_the_tasks_commands(tmp_path):
         asyncio.run(run_episodes(harness, task, rows("1"), None, RecordWriter(tmp_path, "student/test"), plan,
                                  limits=Limits(), concurrency=1, cache=tmp_path))  # fmt: skip
     assert harness.runs == []  # no episode ran
+
+
+def test_self_served_teacher_profile_and_trace_jobs():
+    run = pipeline.make_run(load_run(Path("examples/hf-hub-qa/run-inkling-open-ended-traces.toml")))
+    teacher = load_profile("teachers", run.config.teacher, run.config.profile_paths)
+    assert teacher.serve is not None
+    assert teacher.serve.image == "vllm/vllm-openai:inkling-2-mini"
+    assert teacher.serve.flavor == "rtx-pro-6000"
+    assert teacher.serve.max_output_tokens == 8192
+    assert teacher.serve.reasoning_parser == "inkling" and teacher.serve.tool_call_parser == "inkling"
+    built = pipeline.trace_jobs(run, "REV")
+    assert len(built) == 2
+    for index, job in enumerate(built):
+        assert job.image == "vllm/vllm-openai:inkling-2-mini"
+        assert job.flavor == "rtx-pro-6000"
+        assert job.timeout == "3h"
+        assert "--teacher inkling-2-mini-8k" in job.command
+        assert '--vllm-binary "$(command -v vllm)"' in job.command
+        assert f"--shard {index}/2" in job.command
+        assert "--limit 240" in job.command and "--attempts 2" in job.command
+        assert "--concurrency 4" in job.command
+        assert "--budget-usd" not in job.command
+        assert "GEMINI_API_KEY" in job.secret_envs
+        assert "HF_TOKEN" not in job.command
+
+
+def test_self_served_teacher_traces_main_starts_and_stops_vllm(tmp_path, monkeypatch):
+    from agent_distill.stages import traces as traces_stage
+
+    started: list[list[str]] = []
+    waited: list[object] = []
+    stopped: list[object] = []
+    seen_endpoints: list[object] = []
+
+    class FakeProc:
+        pass
+
+    def fake_popen(cmd, start_new_session=False):
+        assert start_new_session is True
+        started.append(cmd)
+        return FakeProc()
+
+    async def fake_run_episodes(harness, task, rows, endpoint, writer, plan, **kwargs):
+        seen_endpoints.append(endpoint)
+
+    monkeypatch.setattr(traces_stage.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(traces_stage, "wait_for_vllm", lambda proc: waited.append(proc))
+    monkeypatch.setattr(traces_stage, "stop_process", lambda proc: stopped.append(proc))
+    monkeypatch.setattr(traces_stage, "run_episodes", fake_run_episodes)
+    monkeypatch.setattr(traces_stage, "trace_rows", lambda task, args: [{"question_id": "q1", "question": "hi"}])
+    monkeypatch.setattr(traces_stage, "make_judge_runner", lambda *a, **kw: None)
+
+    traces_stage.main(
+        [
+            "--task", "examples/hf-hub-qa/open_ended.py",
+            "--harness", "pi@1.6.0",
+            "--teacher", "inkling-2-mini-8k",
+            "--profiles", "examples/inkling-2-mini",
+            "--output-dir", str(tmp_path / "out"),
+            "--judge", "",
+            "--vllm-binary", "/usr/bin/vllm",
+        ]
+    )
+    assert len(started) == 1 and len(waited) == 1 and len(stopped) == 1
+    assert started[0][:4] == ["/usr/bin/vllm", "serve", "thinkingmachines/Inkling-2-Mini", "--host"]
+    assert "--reasoning-parser" in started[0] and "inkling" in started[0]
+    assert "--tool-call-parser" in started[0]
+    (ep,) = seen_endpoints
+    assert ep.base_url == "http://127.0.0.1:8000/v1"
+    assert ep.model == "thinkingmachines/Inkling-2-Mini"
+    assert ep.key_env is None and ep.max_output_tokens == 8192
+
+
+def test_sft_flavor_override_in_run_config():
+    run = pipeline.make_run(load_run(Path("examples/hf-hub-qa/run-lfm3-think-mixed-inkling.toml")))
+    (job,) = pipeline.sft_jobs(run, "REV")
+    assert job.flavor == "l40sx1" and job.timeout == "6h"
+    assert "--max-tool-calls 12" in job.command
+    assert "agent-distillation-hf/cursor-inkling-2-mini-8k-hf-hub-qa-open-ended-pi-160-traces" in job.command
+    assert "agent-distillation-hf/lfm3-17b-replay-openr1-oasst" in job.command
+

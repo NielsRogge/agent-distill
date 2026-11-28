@@ -29,7 +29,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-from agent_distill.config import Student, load_profile
+from agent_distill.config import Student, Teacher, load_profile
 from agent_distill.harnesses.base import Endpoint, default_cache, load_harness
 from agent_distill.reasoning import LeakGuard
 from agent_distill.records import RecordWriter, raw_root_for, read_jsonl, summarize_records
@@ -48,15 +48,22 @@ ADAPTER_NAME = "adapter"
 
 
 def vllm_command(
-    student: Student, model: str, adapter_path: str, vllm_binary: str = "vllm", *, temperature: float | None = None
+    profile: Student | Teacher,
+    model: str,
+    adapter_path: str,
+    vllm_binary: str = "vllm",
+    *,
+    temperature: float | None = None,
 ) -> list[str]:
-    serve = student.serve
+    serve = profile.serve
+    if serve is None:
+        raise ValueError(f"profile {profile.name!r} has no [serve] configuration")
     command = [
         shutil.which(vllm_binary) or vllm_binary, "serve", model, "--host", "127.0.0.1", "--port", str(VLLM_PORT),
         "--max-model-len", str(serve.max_model_len), "--gpu-memory-utilization", str(serve.gpu_memory_utilization),
         "--enable-auto-tool-choice", "--tool-call-parser", serve.tool_call_parser,
     ]  # fmt: skip
-    if revision := student.revision_of(model):  # the base model at its pinned revision (adapters ride on it)
+    if revision := profile.revision_of(model):  # the base model at its pinned revision (adapters ride on it)
         command += ["--revision", revision, "--tokenizer-revision", revision]
     if serve.enforce_eager:
         command.append("--enforce-eager")
@@ -65,7 +72,7 @@ def vllm_command(
     if serve.reasoning_parser:
         command += ["--reasoning-parser", serve.reasoning_parser]
     if adapter_path:
-        command += ["--enable-lora", "--max-lora-rank", str(student.lora.rank),
+        command += ["--enable-lora", "--max-lora-rank", str(profile.lora.rank),
                     "--lora-modules", f"{ADAPTER_NAME}={adapter_path}"]  # fmt: skip
     if temperature is not None:  # the probe samples like the GRPO rollouts; harnesses send no temperature of their own
         command += ["--override-generation-config", json.dumps({"temperature": temperature, "top_p": 1.0, "top_k": -1})]

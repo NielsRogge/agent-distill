@@ -27,7 +27,7 @@ import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args, get_type_hints
 
 BUILTIN_PROFILES = Path(__file__).resolve().parent / "profiles"
 QWEN35_TEXT_LORA_TARGETS = (
@@ -65,6 +65,7 @@ class Price:
 class Teacher:
     name: str
     model: str  # Hub id
+    revision: str = ""  # Hub commit sha for self-served checkpoints with custom code
     provider: str = ""  # Inference Providers pin ("" = automatic); also the `:provider` suffix of the model id
     opencode_model: str = ""  # OpenCode PROVIDER/MODEL (default: huggingface/<model>[:provider])
     opencode_model_entry: dict[str, Any] = field(default_factory=dict)
@@ -77,6 +78,8 @@ class Teacher:
     price: Price = field(default_factory=Price)
     notes: str = ""
     traces: TraceSettings = field(default_factory=TraceSettings)
+    # Optional vLLM serving config for a self-served open model used as teacher (otherwise HF Inference Providers).
+    serve: ServeSettings | None = None
 
     @property
     def routed_model(self) -> str:
@@ -85,6 +88,10 @@ class Teacher:
     @property
     def opencode_id(self) -> str:
         return self.opencode_model or f"huggingface/{self.routed_model}"
+
+    def revision_of(self, model: str) -> str | None:
+        """The pinned revision when `model` is this profile's base model."""
+        return (self.revision or None) if model == self.model else None
 
 
 @dataclass
@@ -233,16 +240,26 @@ def slugify(name: str) -> str:
     return "".join(char for char in name.lower().replace(".", "").replace("@", "-") if char.isalnum() or char == "-")
 
 
+def _dataclass_type(hint: Any) -> type | None:
+    if isinstance(hint, type) and dataclasses.is_dataclass(hint):
+        return hint
+    for arg in get_args(hint):
+        if isinstance(arg, type) and dataclasses.is_dataclass(arg):
+            return arg
+    return None
+
+
 def _build(cls: type, data: dict[str, Any], where: str) -> Any:
     fields = {f.name: f for f in dataclasses.fields(cls)}
     unknown = set(data) - set(fields)
     if unknown:
         raise ValueError(f"{where}: unknown keys {sorted(unknown)}")
+    hints = get_type_hints(cls)
     kwargs: dict[str, Any] = {}
     for key, value in data.items():
-        default = fields[key].default_factory() if fields[key].default_factory is not dataclasses.MISSING else None
-        if dataclasses.is_dataclass(default) and isinstance(value, dict):
-            kwargs[key] = _build(type(default), value, f"{where}.{key}")
+        target = _dataclass_type(hints.get(key))
+        if target is not None and isinstance(value, dict):
+            kwargs[key] = _build(target, value, f"{where}.{key}")
         else:
             kwargs[key] = value
     return cls(**kwargs)
@@ -332,11 +349,14 @@ class TracesRun:
     limit: int | None = None  # first N train rows after the task's train filter, in total over the shards (None: all)
     shards: int | None = None  # default: the teacher profile's
     attempts: int | None = None  # default: the teacher profile's
+    concurrency: int | None = None  # default: the teacher profile's
+    timeout: str = ""  # job timeout (default: the teacher profile's [serve] or [traces] timeout)
 
 
 @dataclass
 class SFTRun:
     args: list[str] = field(default_factory=list)  # appended after the student profile's [sft] args
+    flavor: str = ""  # default: the student profile's
     timeout: str = ""  # default: the student profile's
     # Cross-format recipe (stages.sft): KL replay on the `replay` dataset, CoT-proxies from the `summaries` dataset
     # (repos default to the run's own `<run>-replay` / `<run>-summaries`; `[repos]` can point to shared ones).

@@ -395,9 +395,19 @@ def eval_jobs(run: Run, rev: str) -> list[jobs.Job]:
     return built
 
 
-def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minutes: float) -> jobs.Job:
+def teacher_job(
+    run: Run, rev: str, stage: str, name: str, args: list[str], minutes: float, *, timeout: str = ""
+) -> jobs.Job:
     teacher = teacher_profile(run)
-    full = [*common_args(run), "--teacher", jobs.q(run.config.teacher), *args,
+    serve = teacher.serve
+    deps: list[str] = []
+    serve_args: list[str] = []
+    if serve is not None:
+        deps = list(serve.deps)
+        if serve.vllm != "image":
+            deps.append(f"vllm=={serve.vllm_version}")
+        serve_args = image_vllm(teacher)
+    full = [*common_args(run), "--teacher", jobs.q(run.config.teacher), *serve_args, *args,
             *output_args(run, "traces" if stage == "traces" else "eval"),
             *judge_args(run, bill_to=False)]  # fmt: skip
     if run.config.hub.bill_to:
@@ -405,16 +415,19 @@ def teacher_job(run: Run, rev: str, stage: str, name: str, args: list[str], minu
     command = "\n".join(
         [
             jobs.prelude(run.repo("code"), rev, run.task.job_setup, run.task.commands),
-            jobs.python_module("agent_distill.stages.traces", full),
+            jobs.python_module("agent_distill.stages.traces", full, deps=deps),
             f"echo {stage.upper()}_DONE",
         ]
     )
+    image = serve.image if serve is not None else UV_IMAGE
+    flavor = serve.flavor if serve is not None else teacher.traces.flavor
+    job_timeout = timeout or (serve.timeout if serve is not None else teacher.traces.timeout)
     return jobs.Job(
         stage,
         name[:90],
-        UV_IMAGE,
-        teacher.traces.flavor,
-        teacher.traces.timeout,
+        image,
+        flavor,
+        job_timeout,
         command,
         expected_minutes=minutes,
         secret_envs=judge_secrets(run),
@@ -450,7 +463,8 @@ def teacher_eval_job(run: Run, rev: str, split: str) -> jobs.Job:
     ]
     if run.config.budget.traces_usd:
         args += ["--budget-usd", str(run.config.budget.traces_usd)]
-    minutes = settings.limit * TRACE_MINUTES_PER_EPISODE / max(1, teacher.traces.baseline_concurrency)
+    startup = VLLM_STARTUP_MINUTES if teacher.serve is not None else 0
+    minutes = startup + settings.limit * TRACE_MINUTES_PER_EPISODE / max(1, teacher.traces.baseline_concurrency)
     return teacher_job(run, rev, "eval", f"{run.name}-eval-teacher-{slugify(split)}", args, minutes)
 
 
@@ -458,6 +472,7 @@ def trace_jobs(run: Run, rev: str) -> list[jobs.Job]:
     teacher = teacher_profile(run)
     settings = run.config.traces
     shards = settings.shards or teacher.traces.shards
+    concurrency = settings.concurrency or teacher.traces.concurrency
     budget = run.config.budget.traces_usd
     built = []
     for index in range(shards):
@@ -477,11 +492,16 @@ def trace_jobs(run: Run, rev: str) -> list[jobs.Job]:
             args += ["--limit", str(settings.limit)]
         if settings.attempts:
             args += ["--attempts", str(settings.attempts)]
+        if settings.concurrency:
+            args += ["--concurrency", str(settings.concurrency)]
         if budget:
             args += ["--budget-usd", f"{budget / shards:.4f}"]
         rows = (settings.limit or 1000) / shards
-        minutes = rows * TRACE_MINUTES_PER_EPISODE / max(1, teacher.traces.concurrency)
-        built.append(teacher_job(run, rev, "traces", f"{run.name}-traces-{index}", args, minutes))
+        startup = VLLM_STARTUP_MINUTES if teacher.serve is not None else 0
+        minutes = startup + rows * TRACE_MINUTES_PER_EPISODE / max(1, concurrency)
+        built.append(
+            teacher_job(run, rev, "traces", f"{run.name}-traces-{index}", args, minutes, timeout=settings.timeout)
+        )
     return built
 
 
@@ -578,7 +598,7 @@ def sft_jobs(run: Run, rev: str) -> list[jobs.Job]:
             "sft",
             f"{run.name}-sft"[:90],
             student.sft.image,
-            student.sft.flavor,
+            run.config.sft.flavor or student.sft.flavor,
             run.config.sft.timeout or student.sft.timeout,
             command,
             expected_minutes=jobs.timeout_minutes(run.config.sft.timeout or student.sft.timeout) / 2,

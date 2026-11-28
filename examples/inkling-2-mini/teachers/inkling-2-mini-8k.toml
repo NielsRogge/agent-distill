@@ -1,0 +1,23 @@
+# Self-served Inkling-2-Mini (8,192 output tokens, thinking on) as a trace-generating teacher.
+# Mirrors `students/inkling-2-mini-8k.toml`'s `[serve]` settings: Blackwell image on RTX PRO 6000,
+# `inkling` tool-call and reasoning parsers, no API key needed.
+name = "inkling-2-mini-8k"
+model = "thinkingmachines/Inkling-2-Mini"
+
+[traces]
+concurrency = 4
+attempts_per_row = 2
+episode_timeout = 600
+max_tool_calls = 20
+shards = 2
+
+[serve]
+image = "vllm/vllm-openai:inkling-2-mini"
+vllm = "image"
+flavor = "rtx-pro-6000"
+timeout = "3h"
+deps = ["torch"]
+tool_call_parser = "inkling"
+reasoning_parser = "inkling"
+enforce_eager = false
+max_output_tokens = 8192
