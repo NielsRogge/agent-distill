@@ -158,10 +158,10 @@ default and the card's choice for agentic use. [`lfm3-1.7b-nothink`](../../agent
 passes `enable_thinking: false`, a mode the card calls inconsistent.
 
 **Data and cost.** Eval datasets:
-- thinking on: [MCP](https://huggingface.co/datasets/nielsr/lfm3-17b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
-  [CLI](https://huggingface.co/datasets/nielsr/lfm3-17b-hf-hub-qa-v2-glm-53-pi-160-eval);
-- thinking off: [MCP](https://huggingface.co/datasets/nielsr/lfm3-17b-nothink-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
-  [CLI](https://huggingface.co/datasets/nielsr/lfm3-17b-nothink-hf-hub-qa-v2-glm-53-pi-160-eval).
+- thinking on: [MCP](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
+  [CLI](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-hf-hub-qa-v2-glm-53-pi-160-eval);
+- thinking off: [MCP](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-nothink-hf-hub-qa-mcp-v2-glm-53-pi-160-eval) and
+  [CLI](https://huggingface.co/datasets/agent-distillation-hf/lfm3-17b-nothink-hf-hub-qa-v2-glm-53-pi-160-eval).
 
 The jobs took 2.0 h (MCP think), 1.2 h (MCP nothink), 1.5 h (CLI think) and 0.9 h (CLI nothink), about $4.50 at
 $0.80/h. With the 5-question smoke runs, the total is about $5.50 of GPU.
