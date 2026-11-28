@@ -7,7 +7,7 @@ questions in `questions.py` (`agent-distillation-hf/hf-hub-questions`).
     uv run --extra hub python examples/hf-hub-qa/open_ended_questions.py --check
     uv run --extra hub python examples/hf-hub-qa/open_ended_questions.py \\
         --push agent-distillation-hf/hf-hub-questions-train \\
-        --collection agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633
+        --collection agent-distillation-hf/hugging-face-hub-qa-6b0a9ec0b0d291cc23d3e865
 """
 
 from __future__ import annotations

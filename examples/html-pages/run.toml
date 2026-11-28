@@ -18,7 +18,7 @@ profiles = ["profiles"]
 [hub]
 namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
+collection = "agent-distillation-hf/html-pages-qwen35-6b0a9ecdd7662dde54c152f8"  # HTML pages · Qwen3.5 (family)
 
 [traces]
 split = "train"

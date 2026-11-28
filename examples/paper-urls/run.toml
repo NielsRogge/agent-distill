@@ -14,7 +14,7 @@ stages = ["eval"]
 [hub]
 namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
+collection = "agent-distillation-hf/url-extraction-qwen35-6b0a9ecc13450a8df1855048"  # URL extraction · Qwen3.5 (family)
 
 [eval]
 workdir_guard = false   # parity: the reference harness had no guard (the url-eval- workspace prefix avoids the hang)

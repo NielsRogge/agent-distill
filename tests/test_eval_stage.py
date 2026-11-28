@@ -411,7 +411,7 @@ def test_eval_jobs_install_locked_requirements() -> None:
     assert lines[runtime + 1].startswith("/work/venv/bin/python -m agent_distill.stages.eval ")
     assert "--answer-retry" in job.command and "uv run" not in job.command
     assert f"--raw-repo {run.repo('eval-raw')}" in job.command
-    assert "--collection agent-distillation-hf/agent-distillation-" in job.command
+    assert "--collection agent-distillation-hf/url-extraction-qwen35-" in job.command
 
 
 def test_export_requirements_is_hash_pinned(tmp_path) -> None:

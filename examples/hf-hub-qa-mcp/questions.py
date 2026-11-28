@@ -24,7 +24,7 @@ since the snapshot) from a wrong answer.
 
     uv run python examples/hf-hub-qa-mcp/questions.py --out /tmp/facts           # build and validate, no upload
     uv run python examples/hf-hub-qa-mcp/questions.py --out /tmp/facts --push agent-distillation-hf/hf-hub-facts \\
-        --collection agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633  # private; scanned; then public
+        --collection agent-distillation-hf/hugging-face-hub-qa-6b0a9ec0b0d291cc23d3e865  # private; scanned; then public
 """
 
 from __future__ import annotations

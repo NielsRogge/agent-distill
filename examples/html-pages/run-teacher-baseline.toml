@@ -13,7 +13,7 @@ stages = ["eval"]
 [hub]
 namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
+collection = "agent-distillation-hf/html-pages-6b0a9ecdb57c79b078ad4480"  # HTML pages (teacher-only run)
 
 [eval]
 splits = ["validation"]

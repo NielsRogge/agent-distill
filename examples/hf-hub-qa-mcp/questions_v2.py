@@ -24,7 +24,7 @@ splits are disjoint by entity.
     uv run python examples/hf-hub-qa-mcp/questions_v2.py --out /tmp/facts-v2           # build and validate, no upload
     uv run python examples/hf-hub-qa-mcp/questions_v2.py --out /tmp/facts-v2 \\
         --push agent-distillation-hf/hf-hub-facts-v2 \\
-        --collection agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633
+        --collection agent-distillation-hf/hugging-face-hub-qa-6b0a9ec0b0d291cc23d3e865
 """
 
 from __future__ import annotations

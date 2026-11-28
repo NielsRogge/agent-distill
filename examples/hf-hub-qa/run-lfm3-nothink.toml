@@ -16,7 +16,7 @@ stages = ["eval"]
 [hub]
 namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
+collection = "agent-distillation-hf/hub-qa-lfm3-6b0a9eca04b0c6fbf2d136bd"  # Hub QA · LFM3 (family)
 raw_logs = false  # raw harness logs stay in the jobs (set while nielsr's private storage was full)
 
 [eval]

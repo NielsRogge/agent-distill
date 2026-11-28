@@ -16,7 +16,7 @@ stages = ["traces", "sft", "merge", "eval"]
 [hub]
 namespace = "agent-distillation-hf"
 bill_to = "huggingface"
-collection = "agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633"
+collection = "agent-distillation-hf/hub-qa-qwen35-6b0a9ec11b5ead9f4c863b08"  # Hub QA · Qwen3.5 (family)
 
 [traces]
 split = "train"

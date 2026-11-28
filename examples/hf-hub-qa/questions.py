@@ -15,7 +15,7 @@ a reference; "good models for X" questions have many right answers and are score
 check) only.
 
     uv run --extra hub python examples/hf-hub-qa/questions.py --push agent-distillation-hf/hf-hub-questions \\
-        --collection agent-distillation-hf/agent-distillation-6b09e6966000e7910fd46633   # (re)publish the dataset
+        --collection agent-distillation-hf/hugging-face-hub-qa-6b0a9ec0b0d291cc23d3e865   # (re)publish the dataset
 """
 
 from __future__ import annotations
